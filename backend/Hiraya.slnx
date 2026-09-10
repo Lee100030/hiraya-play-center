@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Hiraya.Api/Hiraya.Api.csproj" />
+  <Project Path="Hiraya.csproj" />
+  <Project Path="Hiraya.Data/Hiraya.Data.csproj" />
+  <Project Path="Hiraya.Shared/Hiraya.Shared.csproj" />
+  <Project Path="Hiraya.Tests/Hiraya.Tests.csproj" />
+</Solution>

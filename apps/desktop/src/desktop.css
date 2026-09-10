@@ -1,0 +1,22 @@
+body {
+  margin: 0;
+  font-family: var(--hlc-font-sans);
+  background: #f7f1e1;
+  color: #1a2e26;
+}
+.desk-shell { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+.desk-nav { background: #041009; color: #f7f1e1; padding: 1.25rem; }
+.desk-nav button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: #f4eed8;
+  border: 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.desk-nav button.active { background: rgba(212, 175, 55, 0.2); color: #e8c547; }
+.desk-main { padding: 1.5rem; }
+.desk-login { max-width: 420px; margin: 12vh auto; }

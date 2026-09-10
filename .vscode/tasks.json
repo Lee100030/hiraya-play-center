@@ -1,0 +1,55 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start website (Next.js)",
+      "type": "shell",
+      "command": "npm --prefix apps/web run dev",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "BROWSER": "none"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "next",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting\\.\\.\\.|ready|Local:",
+          "endsPattern": "Ready in|Local:"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Start API (Hiraya.Api)",
+      "type": "shell",
+      "command": "dotnet run --project backend/Hiraya.Api/Hiraya.Api.csproj --urls http://127.0.0.1:5188",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": "$msCompile",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Install JavaScript packages",
+      "type": "shell",
+      "command": "npx --yes pnpm@9.15.4 install",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always" }
+    }
+  ]
+}

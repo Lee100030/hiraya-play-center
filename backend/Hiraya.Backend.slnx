@@ -1,0 +1,7 @@
+<Project>
+  <ItemGroup>
+    <Project Include="Hiraya.Api\Hiraya.Api.csproj" />
+    <Project Include="Hiraya.Data\Hiraya.Data.csproj" />
+    <Project Include="Hiraya.Shared\Hiraya.Shared.csproj" />
+  </ItemGroup>
+</Project>

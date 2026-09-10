@@ -1,0 +1,10 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "npm.packageManager": "npm",
+  "npm.enableScriptExplorer": true,
+  "eslint.workingDirectories": [
+    { "mode": "auto" }
+  ]
+}

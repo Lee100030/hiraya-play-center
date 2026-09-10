@@ -1,0 +1,400 @@
+using System.Net.Http.Json;
+using Hiraya.Shared;
+using Hiraya.Shared.Models;
+using Hiraya.Shared.Security;
+using Hiraya.Shared.Services.Firebase;
+using Microsoft.Extensions.Options;
+
+namespace Hiraya.Shared.Services;
+
+public class StaffSaveRequest
+{
+    public string UserId { get; set; } = "";
+    public string ProfileId { get; set; } = "";
+    public string Fullname { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Password { get; set; } = "";
+    public string ConfirmPassword { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public string Role { get; set; } = UserRoles.Teacher;
+    public string EmployeeCode { get; set; } = "";
+    public string Position { get; set; } = "";
+    public string Specialty { get; set; } = "";
+    public string Bio { get; set; } = "";
+    public string Status { get; set; } = "active";
+}
+
+public class StaffService
+{
+    private readonly IHirayaRepository _repository;
+    private readonly IHttpClientFactory? _http;
+    private readonly HirayaApiOptions _api;
+    private readonly HirayaActorContext _actor;
+
+    public StaffService(IHirayaRepository repository)
+        : this(repository, null, null, null)
+    {
+    }
+
+    public StaffService(
+        IHirayaRepository repository,
+        IHttpClientFactory? http,
+        IOptions<HirayaApiOptions>? api,
+        HirayaActorContext? actor)
+    {
+        _repository = repository;
+        _http = http;
+        _api = api?.Value ?? new HirayaApiOptions();
+        _actor = actor ?? new HirayaActorContext();
+    }
+
+    private bool UseRemote => _http is not null && _api.UseRemoteStore;
+
+    public static void EnsureDefaultSpecialties(HirayaDatabase db)
+    {
+        foreach (var name in TeacherRoleCatalog.Defaults)
+        {
+            if (db.TeacherRoleOptions.Any(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            db.TeacherRoleOptions.Add(new TeacherRoleOption
+            {
+                RoleId = IdFactory.New("trole"),
+                Name = name
+            });
+        }
+    }
+
+    public async Task AddSpecialtyAsync(string name, HirayaUser actor)
+    {
+        if (!Navigation.CanManageStaff(actor.Role))
+            throw new UnauthorizedAccessException("You cannot manage teachers or staff.");
+        var trimmed = name.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            throw new InvalidOperationException("Enter a specialization name.");
+        if (await TryRemoteAsync(HttpMethod.Post, "api/staff/specialties", new StaffSpecialtyBody { Name = trimmed }))
+            return;
+
+        await _repository.MutateAsync(async db =>
+        {
+            ApplySpecialty(db, trimmed);
+            await Task.CompletedTask;
+        });
+    }
+
+    public async Task SaveAsync(StaffSaveRequest input, HirayaUser? actor = null)
+    {
+        if (!Navigation.CanManageStaff(actor?.Role))
+            throw new UnauthorizedAccessException("You cannot manage teachers or staff.");
+        var fullname = input.Fullname.Trim();
+        var email = EnsureLoginEmail(input.Email);
+        if (string.IsNullOrWhiteSpace(fullname))
+            throw new InvalidOperationException("Full name is required.");
+        if (!Navigation.IsEmployeeRole(input.Role))
+            throw new InvalidOperationException("Role must be Teacher or Staff.");
+        EnsurePassword(input, requireForNew: string.IsNullOrWhiteSpace(input.UserId));
+        if (await TryRemoteAsync(HttpMethod.Put, "api/staff", input))
+            return;
+
+        await _repository.MutateAsync(async db =>
+        {
+            ApplySave(db, input, actor);
+            await Task.CompletedTask;
+        });
+    }
+
+    public Task ArchiveAsync(string userId, HirayaUser? actor = null) =>
+        SetActiveAsync(userId, false, actor);
+
+    public Task RestoreAsync(string userId, HirayaUser? actor = null) =>
+        SetActiveAsync(userId, true, actor);
+
+    public async Task SetActiveAsync(string userId, bool active, HirayaUser? actor = null)
+    {
+        if (!Navigation.CanManageStaff(actor?.Role))
+            throw new UnauthorizedAccessException("You cannot manage teachers or staff.");
+        if (await TryRemoteAsync(HttpMethod.Post, "api/staff/active", new StaffActiveBody { UserId = userId, Active = active }))
+            return;
+
+        await _repository.MutateAsync(async db =>
+        {
+            if (active)
+                ApplyRestore(db, userId, actor);
+            else
+                ApplyArchive(db, userId, actor);
+            await Task.CompletedTask;
+        });
+    }
+
+    internal static string EnsureLoginEmail(string? email)
+    {
+        var value = (email ?? "").Trim();
+        var at = value.IndexOf('@');
+        if (at <= 0 || at != value.LastIndexOf('@') || at >= value.Length - 1 || value.Contains(' '))
+            throw new InvalidOperationException("Enter a sign-in email that includes @, for example teacher@hiraya.local.");
+        return value;
+    }
+
+    internal static string EnsurePassword(StaffSaveRequest input, bool requireForNew)
+    {
+        var password = (input.Password ?? "").Trim();
+        var confirm = (input.ConfirmPassword ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            if (requireForNew)
+                throw new InvalidOperationException($"Password is required and must be at least {PasswordRules.MinimumLength} characters.");
+            return "";
+        }
+
+        if (password.Length < PasswordRules.MinimumLength)
+            throw new InvalidOperationException($"Password must be at least {PasswordRules.MinimumLength} characters.");
+        if (!string.Equals(password, confirm, StringComparison.Ordinal))
+            throw new InvalidOperationException("Password and confirmation do not match.");
+        return password;
+    }
+
+    internal static void ApplySpecialty(HirayaDatabase db, string trimmed)
+    {
+        EnsureDefaultSpecialties(db);
+        if (!db.TeacherRoleOptions.Any(r => string.Equals(r.Name, trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            db.TeacherRoleOptions.Add(new TeacherRoleOption
+            {
+                RoleId = IdFactory.New("trole"),
+                Name = trimmed
+            });
+        }
+    }
+
+    internal static void ApplySave(HirayaDatabase db, StaffSaveRequest input, HirayaUser? actor)
+    {
+        var fullname = input.Fullname.Trim();
+        var email = EnsureLoginEmail(input.Email);
+        var role = input.Role;
+        var userId = string.IsNullOrWhiteSpace(input.UserId) ? IdFactory.New("usr") : input.UserId;
+        var profileId = string.IsNullOrWhiteSpace(input.ProfileId) ? IdFactory.New("tprof") : input.ProfileId;
+        var existing = db.Users.FirstOrDefault(u => u.UserId == userId);
+
+        if (db.Users.Any(u =>
+                u.UserId != userId &&
+                string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("That email is already used by another account.");
+
+        var password = EnsurePassword(input, requireForNew: existing is null);
+        string storedPassword;
+        if (!string.IsNullOrWhiteSpace(password))
+            storedPassword = PasswordHasher.Hash(password);
+        else if (!string.IsNullOrWhiteSpace(existing?.Password))
+            storedPassword = existing.Password!;
+        else if (!string.IsNullOrWhiteSpace(input.UserId) && existing is not null)
+            storedPassword = existing.Password ?? "";
+        else
+            throw new InvalidOperationException("Password is required for a new account.");
+
+        EnsureDefaultSpecialties(db);
+        var specialty = input.Specialty.Trim();
+        if (!string.IsNullOrWhiteSpace(specialty) &&
+            !db.TeacherRoleOptions.Any(r => string.Equals(r.Name, specialty, StringComparison.OrdinalIgnoreCase)))
+        {
+            db.TeacherRoleOptions.Add(new TeacherRoleOption
+            {
+                RoleId = IdFactory.New("trole"),
+                Name = specialty
+            });
+        }
+
+        var existingProfile = db.TeacherProfiles.FirstOrDefault(p => p.UserId == userId);
+        var status = string.IsNullOrWhiteSpace(input.Status) ? "active" : input.Status.Trim();
+
+        db.Users.RemoveAll(u => u.UserId == userId);
+        var saved = new HirayaUser
+        {
+            UserId = userId,
+            Fullname = fullname,
+            Email = email,
+            Password = storedPassword,
+            Role = role,
+            Status = status,
+            Phone = input.Phone.Trim(),
+            Username = existing?.Username ?? "",
+            FirstName = existing?.FirstName ?? "",
+            MiddleName = existing?.MiddleName ?? "",
+            LastName = existing?.LastName ?? "",
+            Address = existing?.Address ?? "",
+            Position = string.IsNullOrWhiteSpace(input.Position) ? existing?.Position ?? "" : input.Position.Trim(),
+            ProfileImagePath = existing?.ProfileImagePath ?? "",
+            CreatedAt = string.IsNullOrWhiteSpace(existing?.CreatedAt) ? DateTime.UtcNow.ToString("o") : existing!.CreatedAt,
+            LastLoginAt = existing?.LastLoginAt ?? "",
+            NotifyAttendance = existing?.NotifyAttendance ?? true,
+            NotifyPayments = existing?.NotifyPayments ?? true,
+            NotifySchedule = existing?.NotifySchedule ?? true,
+            NotifyProgress = existing?.NotifyProgress ?? true,
+            DateFormat = existing?.DateFormat ?? "MMM d, yyyy",
+            TimeFormat = existing?.TimeFormat ?? "HH:mm",
+            Theme = existing?.Theme ?? "system"
+        };
+        saved.SyncDisplayName();
+        if (string.IsNullOrWhiteSpace(saved.FirstName) && string.IsNullOrWhiteSpace(saved.LastName))
+            saved.Fullname = fullname;
+        db.Users.Add(saved);
+
+        db.TeacherProfiles.RemoveAll(p => p.ProfileId == profileId || p.UserId == userId);
+        db.TeacherProfiles.Add(new TeacherProfile
+        {
+            ProfileId = profileId,
+            UserId = userId,
+            EmployeeCode = string.IsNullOrWhiteSpace(input.EmployeeCode)
+                ? existingProfile?.EmployeeCode ?? userId.ToUpperInvariant()
+                : input.EmployeeCode.Trim(),
+            Position = input.Position.Trim(),
+            Specialty = specialty,
+            Phone = input.Phone.Trim(),
+            Bio = input.Bio.Trim(),
+            HireDate = existingProfile?.HireDate ?? DateTime.UtcNow.ToString("o"),
+            Status = status
+        });
+
+        AuditService.Append(db, actor, AuditModules.Staff,
+            string.IsNullOrWhiteSpace(input.UserId) ? "create" : "update",
+            "user", userId, $"Saved {fullname} ({role}).");
+    }
+
+    public async Task DeleteAsync(string userId, HirayaUser? actor = null)
+    {
+        if (!Navigation.CanManageStaff(actor?.Role))
+            throw new UnauthorizedAccessException("You cannot manage teachers or staff.");
+        if (await TryRemoteAsync(HttpMethod.Post, "api/staff/delete", new StaffUserIdBody { UserId = userId }))
+            return;
+
+        await _repository.MutateAsync(async db =>
+        {
+            ApplyDelete(db, userId, actor);
+            await Task.CompletedTask;
+        });
+    }
+
+    internal static void ApplyDelete(HirayaDatabase db, string userId, HirayaUser? actor)
+    {
+        var user = db.Users.FirstOrDefault(u => u.UserId == userId)
+                   ?? throw new InvalidOperationException("Account was not found.");
+        if (!Navigation.IsEmployeeRole(user.Role))
+            throw new InvalidOperationException("Only a teacher or staff account can be deleted here.");
+        if (actor is not null && string.Equals(actor.UserId, userId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("You cannot delete the account you are signed in with.");
+
+        var name = user.Fullname;
+        db.Users.RemoveAll(u => u.UserId == userId);
+        db.TeacherProfiles.RemoveAll(p => p.UserId == userId);
+        db.TeacherWorkShifts.RemoveAll(s => s.TeacherId == userId);
+        db.LeaveRequests.RemoveAll(l => l.TeacherId == userId);
+        db.TeacherDuties.RemoveAll(d => d.TeacherId == userId);
+        foreach (var cls in db.Classes.Where(c => c.TeacherId == userId))
+            cls.TeacherId = "";
+        foreach (var enrollment in db.Enrollments.Where(e => e.TeacherId == userId))
+            enrollment.TeacherId = "";
+        foreach (var schedule in db.Schedules.Where(s => s.TeacherId == userId))
+            schedule.TeacherId = "";
+        db.Alerts.RemoveAll(a => a.RecipientId == userId);
+        AuditService.Append(db, actor, AuditModules.Staff, "delete", "user", userId, $"Deleted {name}.");
+    }
+
+    internal static void ApplyArchive(HirayaDatabase db, string userId, HirayaUser? actor)
+    {
+        var user = db.Users.FirstOrDefault(u => u.UserId == userId);
+        if (user != null)
+            user.Status = AccountStatuses.Deactivated;
+        foreach (var profile in db.TeacherProfiles.Where(p => p.UserId == userId))
+            profile.Status = AccountStatuses.Deactivated;
+        AuditService.Append(db, actor, AuditModules.Staff, "deactivate", "user", userId, $"Deactivated {user?.Fullname ?? userId}.");
+    }
+
+    internal static void ApplyRestore(HirayaDatabase db, string userId, HirayaUser? actor)
+    {
+        var user = db.Users.FirstOrDefault(u => u.UserId == userId)
+                   ?? throw new InvalidOperationException("Account was not found.");
+        user.Status = AccountStatuses.Active;
+        foreach (var profile in db.TeacherProfiles.Where(p => p.UserId == userId))
+            profile.Status = AccountStatuses.Active;
+        AuditService.Append(db, actor, AuditModules.Staff, "activate", "user", userId, $"Activated {user.Fullname}.");
+    }
+
+    private async Task<bool> TryRemoteAsync(HttpMethod method, string path, object body)
+    {
+        if (!UseRemote)
+            return false;
+        if (string.IsNullOrWhiteSpace(_actor.SessionToken))
+            throw new InvalidOperationException("Your session expired. Sign in again while Hiraya.Api is running, then save.");
+
+        try
+        {
+            var client = _http!.CreateClient("hiraya-api");
+            using var request = new HttpRequestMessage(method, path)
+            {
+                Content = JsonContent.Create(body, options: JsonDefaults.Options)
+            };
+            _actor.ApplyTo(request);
+            using var response = await client.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _repository.InvalidateCache();
+                return true;
+            }
+
+            var code = (int)response.StatusCode;
+            if (code is 404 or 405)
+                return false;
+
+            var detail = await ReadErrorAsync(response);
+            if (code is 401)
+                throw new InvalidOperationException("Your session expired. Sign in again, then save.");
+            if (code is 403)
+                throw new InvalidOperationException(detail ?? "You are not allowed to save that change.");
+            throw new InvalidOperationException(detail ?? $"Could not save the teacher (Hiraya.Api returned {code}). Keep Hiraya.Api running and try again.");
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (HttpRequestException)
+        {
+            throw new InvalidOperationException("Could not reach Hiraya.Api. Start the Hiraya.Api project and try again.");
+        }
+        catch (TaskCanceledException)
+        {
+            throw new InvalidOperationException("Hiraya.Api did not respond in time. Keep it running on http://127.0.0.1:5188 and try again.");
+        }
+    }
+
+    private static async Task<string?> ReadErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var payload = await response.Content.ReadFromJsonAsync<ErrorBody>(JsonDefaults.Options);
+            return string.IsNullOrWhiteSpace(payload?.Error) ? null : payload.Error;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private sealed class ErrorBody
+    {
+        public string? Error { get; set; }
+    }
+}
+
+public sealed class StaffUserIdBody
+{
+    public string UserId { get; set; } = "";
+}
+
+public sealed class StaffSpecialtyBody
+{
+    public string Name { get; set; } = "";
+}
+
+public sealed class StaffActiveBody
+{
+    public string UserId { get; set; } = "";
+    public bool Active { get; set; }
+}

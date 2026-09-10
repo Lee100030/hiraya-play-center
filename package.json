@@ -1,0 +1,27 @@
+{
+  "name": "hiraya",
+  "private": true,
+  "version": "1.0.0",
+  "description": "HIRAYA Learning Center — web, mobile, and desktop clients over the existing ASP.NET API",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "start": "npm --prefix apps/web run dev",
+    "dev": "npm --prefix apps/web run dev",
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev:all": "npx --yes pnpm@9.15.4 exec turbo run dev --parallel",
+    "dev:mobile": "npx --yes pnpm@9.15.4 --filter @hiraya/mobile start",
+    "dev:desktop": "npx --yes pnpm@9.15.4 --filter @hiraya/desktop dev",
+    "build": "npx --yes pnpm@9.15.4 exec turbo run build",
+    "lint": "npx --yes pnpm@9.15.4 exec turbo run lint",
+    "typecheck": "npx --yes pnpm@9.15.4 exec turbo run typecheck",
+    "format": "npx --yes prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2"
+  }
+}

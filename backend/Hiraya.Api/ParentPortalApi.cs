@@ -1,0 +1,211 @@
+using Hiraya.Shared.Models;
+using Hiraya.Shared.Services;
+using Hiraya.Shared.Services.Firebase;
+using Hiraya.Shared.Security;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Hiraya.Api;
+
+public static class ParentPortalApi
+{
+    public static void Map(WebApplication app)
+    {
+        app.MapGet("/api/parent/profile", async (HttpRequest request, IHirayaRepository repo) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return Results.Unauthorized();
+            if (actor.Role != UserRoles.Parent)
+                return Forbidden();
+            return Results.Json(StoreSanitizer.PublicCopy(new HirayaDatabase { Users = [actor] }).Users[0], JsonDefaults.Options);
+        });
+
+        app.MapGet("/api/parent/children", async (HttpRequest request, IHirayaRepository repo) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return Results.Unauthorized();
+            if (actor.Role != UserRoles.Parent)
+                return Forbidden();
+            var db = await repo.LoadAsync();
+            var parentId = request.Query["parentId"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(parentId) &&
+                !string.Equals(parentId, actor.UserId, StringComparison.OrdinalIgnoreCase))
+                return Forbidden();
+            return Results.Json(FamilyPortal.VisibleStudents(db, actor), JsonDefaults.Options);
+        });
+
+        app.MapGet("/api/parent/children/{studentId}", async (string studentId, HttpRequest request, IHirayaRepository repo) =>
+            await ChildResourceAsync(request, repo, studentId, db =>
+            {
+                var student = db.Students.FirstOrDefault(s => s.StudentId == studentId);
+                return student is null ? Results.NotFound() : Results.Json(FamilyPortal.ForFamilyView(student), JsonDefaults.Options);
+            }));
+
+        app.MapGet("/api/parent/children/{studentId}/attendance", async (string studentId, HttpRequest request, IHirayaRepository repo) =>
+            await ChildResourceAsync(request, repo, studentId, db =>
+                Results.Json(db.Attendance.Where(a => a.StudentId == studentId && a.Kind != AttendanceKinds.Employee).ToList(), JsonDefaults.Options)));
+
+        app.MapGet("/api/parent/children/{studentId}/progress", async (string studentId, HttpRequest request, IHirayaRepository repo) =>
+            await ChildResourceAsync(request, repo, studentId, (db, actor) =>
+                Results.Json(ProgressService.Visible(db, actor).Where(r => r.StudentId == studentId).ToList(), JsonDefaults.Options)));
+
+        app.MapGet("/api/parent/children/{studentId}/schedule", async (string studentId, HttpRequest request, IHirayaRepository repo) =>
+            await ChildResourceAsync(request, repo, studentId, (db, actor) =>
+                Results.Json(FamilyPortal.FamilyCalendar(db, actor, studentId), JsonDefaults.Options)));
+
+        app.MapGet("/api/parent/children/{studentId}/payments", async (string studentId, HttpRequest request, IHirayaRepository repo) =>
+            await ChildResourceAsync(request, repo, studentId, (db, actor) =>
+                Results.Json(PaymentService.Visible(db, actor).Where(p => PaymentService.ResolveStudentId(db, p) == studentId).ToList(), JsonDefaults.Options)));
+
+        app.MapPost("/api/parent/children", () => Forbidden());
+        app.MapDelete("/api/parent/children/{studentId}", (string studentId) => Forbidden());
+
+        app.MapGet("/api/parents/{parentId}/children", async (string parentId, HttpRequest request, IHirayaRepository repo) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return Results.Unauthorized();
+            if (!Navigation.CanManageStudents(actor.Role))
+                return Forbidden();
+            var db = await repo.LoadAsync();
+            var parent = db.Users.FirstOrDefault(u => u.UserId == parentId && u.Role == UserRoles.Parent);
+            if (parent is null)
+                return Results.NotFound();
+            return Results.Json(FamilyPortal.VisibleStudents(db, parent), JsonDefaults.Options);
+        });
+
+        app.MapPost("/api/admin/parents", async (ParentCreateRequest body, HttpRequest request, IHirayaRepository repo, ParentAccountService parents) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return Results.Unauthorized();
+            try
+            {
+                var created = await parents.CreateAsync(body, actor);
+                return Results.Json(created, JsonDefaults.Options);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbidden();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
+        app.MapPost("/api/admin/parents/{parentId}/children", async (string parentId, AssignChildBody body, HttpRequest request, IHirayaRepository repo, ParentAccountService parents) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return Results.Unauthorized();
+            try
+            {
+                await parents.AssignChildAsync(parentId, body.StudentId, body.Relationship, actor);
+                return Results.NoContent();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbidden();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
+        app.MapDelete("/api/admin/parents/{parentId}/children/{studentId}", async (string parentId, string studentId, HttpRequest request, IHirayaRepository repo, ParentAccountService parents) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return Results.Unauthorized();
+            try
+            {
+                await parents.RemoveChildAsync(parentId, studentId, actor);
+                return Results.NoContent();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbidden();
+            }
+        });
+
+        app.MapPost("/api/auth/activate", async (HttpRequest request, ActivateBody body, ParentAccountService parents, PublicRequestThrottle throttle) =>
+        {
+            if (!throttle.Allow($"activate:{ClientHost(request)}", 10, TimeSpan.FromMinutes(15)))
+                return Results.Json(new { error = "Too many activation attempts. Please wait and try again." }, statusCode: StatusCodes.Status429TooManyRequests);
+            try
+            {
+                await parents.ActivateAsync(body.Token, body.Password, body.ConfirmPassword);
+                return Results.NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+    }
+
+    private static async Task<IResult> ChildResourceAsync(
+        HttpRequest request,
+        IHirayaRepository repo,
+        string studentId,
+        Func<HirayaDatabase, IResult> ok) =>
+        await ChildResourceAsync(request, repo, studentId, (db, _) => ok(db));
+
+    private static async Task<IResult> ChildResourceAsync(
+        HttpRequest request,
+        IHirayaRepository repo,
+        string studentId,
+        Func<HirayaDatabase, HirayaUser, IResult> ok)
+    {
+        var actor = await ActorAsync(request, repo);
+        if (actor is null)
+            return Results.Unauthorized();
+        if (actor.Role != UserRoles.Parent)
+            return Forbidden();
+        var db = await repo.LoadAsync();
+        if (!FamilyAccess.CanViewStudent(db, actor, studentId))
+            return Forbidden();
+        return ok(db, actor);
+    }
+
+    internal static async Task<HirayaUser?> ActorAsync(HttpRequest request, IHirayaRepository repo)
+    {
+        var tokens = request.HttpContext.RequestServices.GetService<SessionTokenOptions>();
+        var packed = request.Headers["X-Hiraya-Session"].FirstOrDefault();
+        var ticket = tokens is null ? null : SessionTokens.TryRead(packed, tokens.Secret);
+        if (ticket is null)
+            return null;
+        var gate = request.HttpContext.RequestServices.GetService<SessionGate>();
+        if (gate is not null && gate.IsRevoked(ticket.Jti))
+            return null;
+        var db = await repo.LoadAsync();
+        var user = db.Users.FirstOrDefault(u => u.UserId == ticket.UserId);
+        if (user is null || !AccountStatuses.AllowsPortalLogin(user.Status))
+            return null;
+        if (!string.Equals(ticket.Stamp, SessionTokens.PasswordStamp(user.Password), StringComparison.Ordinal))
+            return null;
+        return user;
+    }
+
+    private static IResult Forbidden() =>
+        Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+
+    internal static string ClientHost(HttpRequest request) =>
+        request.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    public sealed class AssignChildBody
+    {
+        public string StudentId { get; set; } = "";
+        public string Relationship { get; set; } = FamilyRelationships.Guardian;
+    }
+
+    public sealed class ActivateBody
+    {
+        public string Token { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string ConfirmPassword { get; set; } = "";
+    }
+}

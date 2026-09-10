@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run website",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm --prefix apps/web run dev",
+      "cwd": "${workspaceFolder}",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "Local:\\s+(https?://\\S+)",
+        "uriFormat": "%s"
+      }
+    },
+    {
+      "name": "Run API + website",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm --prefix apps/web run dev",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Start API (Hiraya.Api)"
+    }
+  ]
+}

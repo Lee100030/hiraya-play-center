@@ -1,0 +1,31 @@
+{
+  "name": "@hiraya/web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 3000",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1 --port 3000",
+    "lint": "echo ok",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hiraya/api": "workspace:*",
+    "@hiraya/config": "workspace:*",
+    "@hiraya/types": "workspace:*",
+    "@hiraya/ui": "workspace:*",
+    "@hiraya/utils": "workspace:*",
+    "@hiraya/validation": "workspace:*",
+    "next": "^15.1.6",
+    "ogl": "^1.0.11",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "typescript": "^5.7.2"
+  }
+}
