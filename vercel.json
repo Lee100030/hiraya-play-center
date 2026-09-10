@@ -2,5 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --frozen-lockfile",
-  "buildCommand": "corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm --filter @hiraya/web... build && rm -rf .next && cp -R apps/web/.next .next"
+  "buildCommand": "corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm --filter @hiraya/web run build && rm -rf .next && cp -R apps/web/.next .next"
 }
