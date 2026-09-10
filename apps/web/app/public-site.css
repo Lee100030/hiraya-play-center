@@ -13,6 +13,19 @@
   transition: transform 0.16s ease-out;
 }
 
+.dev-banner {
+  margin: 0;
+  z-index: 41;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #041009;
+  background: #d4af37;
+}
+
 .site-header {
   position: sticky;
   top: 0;

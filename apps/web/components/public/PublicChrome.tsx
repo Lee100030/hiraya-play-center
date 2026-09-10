@@ -57,6 +57,9 @@ export function PublicChrome({
     <EnrollmentProvider autoOpen={autoEnroll} initialProgram={enrollProgram}>
       <div className="public-frame">
         <AntigravityField />
+        <p className="dev-banner" role="status">
+          Website under Development
+        </p>
         <SiteHeader site={site} />
         {home ? (
           <>
