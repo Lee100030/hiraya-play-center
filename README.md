@@ -73,4 +73,4 @@ Seed logins from the existing backend (development):
 
 Do not put database passwords or `HIRAYA_SESSION_SECRET` in any frontend env file.
 
-See `docs/ARCHITECTURE.md` and `docs/MIGRATION.md`.
+See `docs/ARCHITECTURE.md` and `docs/MIGRATION.md`. 
