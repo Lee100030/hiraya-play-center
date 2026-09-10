@@ -4,12 +4,29 @@ This repository is the **React / Next.js / Expo / Electron** frontend for HIRAYA
 
 ## Apps
 
-| App | Path | Command |
-|-----|------|---------|
-| Website | `apps/web` | `pnpm dev:web` |
-| Mobile (Expo) | `apps/mobile` | `pnpm dev:mobile` |
-| Desktop (Electron) | `apps/desktop` | `pnpm dev:desktop` |
-| Backend (copied) | `backend/Hiraya.Api` | `dotnet run --project backend/Hiraya.Api` |
+| App | Folder | Where it runs |
+|-----|--------|----------------|
+| **Website** | `apps/web` | Vercel (Next.js). Root Directory must be `apps/web`. |
+| **Desktop app** | `apps/desktop` | Electron on Windows. Not deployed on Vercel. |
+| **Mobile** | `apps/mobile` | Expo / Android. Not deployed on Vercel. |
+| Backend | `backend/Hiraya.Api` | ASP.NET API + MySQL |
+
+### Vercel (website only)
+
+1. Import GitHub repo `Johnleelugnasin30/hiraya-play-center`.
+2. Set **Root Directory** to `apps/web`.
+3. Framework preset: **Next.js**.
+4. Do not choose `apps/desktop` or `apps/mobile`.
+
+Local commands:
+
+```bash
+npm start
+# or
+pnpm build:web
+pnpm build:desktop
+pnpm build:mobile
+```
 
 ## Prerequisites
 

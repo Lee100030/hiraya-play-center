@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "echo Mobile is the Expo app. Use Root Directory apps/web for the website. && exit 0"
+}

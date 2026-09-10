@@ -1,5 +1,6 @@
 {
   "name": "@hiraya/mobile",
+  "description": "HIRAYA mobile app (Expo) — not a Vercel website",
   "version": "1.0.0",
   "private": true,
   "main": "expo-router/entry",
