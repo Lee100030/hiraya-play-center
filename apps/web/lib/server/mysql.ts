@@ -148,7 +148,7 @@ export async function submitEnrollment(body: unknown) {
 
   const id = applicationId();
   const age = Number(input.studentAge || ageFromBirthdate(input.studentBirthdate) || 0);
-  const notes = formatEnrollmentNotes(input);
+  const notes = formatEnrollmentNotes({ ...input, studentAge: age });
   const submittedAt = new Date().toISOString();
 
   await withMysql(async (conn) => {
