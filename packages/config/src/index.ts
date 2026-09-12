@@ -10,7 +10,12 @@ export function resolveApiBaseUrl(explicit?: string): string {
         process.env.VITE_API_URL ||
         process.env.API_URL)) ||
     '';
-  return (fromEnv || 'http://127.0.0.1:5188').replace(/\/$/, '');
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  const hosted =
+    (typeof process !== 'undefined' && (process.env.VERCEL || process.env.NODE_ENV === 'production')) ||
+    (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
+  if (hosted) return '';
+  return 'http://127.0.0.1:5188';
 }
 
 export const brand = {

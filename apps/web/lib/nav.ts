@@ -69,6 +69,7 @@ export function appNav(role?: string | null): NavItem[] {
 
 export function homeHref(role?: string | null): string {
   if (isFamilyRole(role)) return '/portal/family';
-  if (isAdmin(role) || role === UserRoles.Staff || role === UserRoles.Teacher) return '/app';
+  if (isAdmin(role) || role === UserRoles.Staff) return '/admin';
+  if (role === UserRoles.Teacher) return '/app';
   return '/admin';
 }

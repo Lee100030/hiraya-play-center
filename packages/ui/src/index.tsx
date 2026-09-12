@@ -32,11 +32,25 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className="hlc-textarea" {...props} />;
 }
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({
+  label,
+  children,
+  error,
+  required,
+}: {
+  label: string;
+  children: ReactNode;
+  error?: string;
+  required?: boolean;
+}) {
   return (
     <label className="hlc-field">
-      <span className="hlc-label">{label}</span>
+      <span className="hlc-label">
+        {label}
+        {required ? ' *' : ''}
+      </span>
       {children}
+      {error ? <span className="hlc-field-error">{error}</span> : null}
     </label>
   );
 }

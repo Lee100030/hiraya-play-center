@@ -36,15 +36,27 @@ export const studentSchema = z.object({
   status: z.string().default('active'),
 });
 
+const phone = z
+  .string()
+  .min(7, 'Enter a valid contact number')
+  .refine((value) => (value.match(/\d/g) || []).length >= 7, 'Enter a valid contact number');
+
 export const enrollPublicSchema = z.object({
-  studentFullname: z.string().min(2, 'Student name is required'),
-  studentBirthdate: z.string().optional(),
+  studentFullname: z.string().min(2, 'Student full name is required'),
+  studentBirthdate: z.string().min(1, 'Date of birth is required'),
   studentAge: z.coerce.number().min(0).max(18).optional(),
-  studentGender: z.string().optional(),
-  parentFullname: z.string().min(2, 'Parent name is required'),
-  parentEmail: z.string().email('Valid parent email is required'),
-  parentPhone: z.string().min(7, 'Phone is required'),
+  studentGender: z.string().min(1, 'Select gender'),
+  studentAddress: z.string().min(3, 'Address is required'),
+  studentPhone: phone,
+  studentEmail: z.union([z.string().email('Enter a valid email'), z.literal('')]).optional(),
+  parentFullname: z.string().min(2, 'Parent or guardian name is required'),
+  parentEmail: z.string().email('Enter a valid parent email'),
+  parentPhone: phone,
+  guardianRelationship: z.string().min(1, 'Select relationship'),
   preferredProgram: z.string().min(1, 'Select a program'),
+  preferredSchedule: z.string().min(1, 'Select a preferred schedule'),
+  enrollmentType: z.string().min(1, 'Select enrollment type'),
+  notes: z.string().optional(),
 });
 
 export const paymentSchema = z.object({

@@ -2,7 +2,12 @@
 
 import { usePublicSite } from '@/hooks/usePublicSite';
 import { api } from '@/lib/api';
-import { Alert, Field, Input, Select } from '@hiraya/ui';
+import {
+  ageFromBirthdate,
+  applicationFromInput,
+  writeLocalEnrollment,
+} from '@/lib/enrollment';
+import { Alert, Field, Input, Select, Textarea } from '@hiraya/ui';
 import { enrollPublicSchema } from '@hiraya/validation';
 import {
   createContext,
@@ -12,6 +17,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -60,7 +66,7 @@ export function EnrollmentProvider({
   return (
     <EnrollmentContext.Provider value={{ open, close }}>
       {children}
-      <EnrollmentModal open={visible} program={program} onClose={close} />
+      <EnrollmentModal open={visible} program={program} onProgramChange={setProgram} onClose={close} />
     </EnrollmentContext.Provider>
   );
 }
@@ -95,35 +101,45 @@ export function EnrollTrigger({
 function EnrollmentModal({
   open,
   program,
+  onProgramChange,
   onClose,
 }: {
   open: boolean;
   program: string;
+  onProgramChange: (value: string) => void;
   onClose: () => void;
 }) {
   const { site } = usePublicSite();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [ok, setOk] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [age, setAge] = useState('');
   const year = new Date().getFullYear();
   const term = `${year}–${year + 1}`;
+  const selected = useMemo(
+    () => site.programs.find((item) => item.name === program),
+    [program, site.programs],
+  );
 
   useEffect(() => {
     if (!open) {
       setError(null);
+      setFieldErrors({});
       setOk(false);
       setSaving(false);
+      setAge('');
       return;
     }
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const t = window.setTimeout(() => {
-      panelRef.current?.querySelector<HTMLInputElement>('input')?.focus();
+      panelRef.current?.querySelector<HTMLInputElement | HTMLButtonElement>('input, button')?.focus();
     }, 40);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !saving) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -131,28 +147,46 @@ function EnrollmentModal({
       window.clearTimeout(t);
       window.removeEventListener('keydown', onKey);
     };
-  }, [open, onClose]);
+  }, [open, onClose, saving]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     setError(null);
-    const form = new FormData(event.currentTarget);
-    const parsed = enrollPublicSchema.safeParse(Object.fromEntries(form.entries()));
+    const form = event.currentTarget;
+    const parsed = enrollPublicSchema.safeParse(Object.fromEntries(new FormData(form).entries()));
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message || 'Please complete the required fields.');
+      const next: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const key = String(issue.path[0] || '');
+        if (key && !next[key]) next[key] = issue.message;
+      }
+      setFieldErrors(next);
+      setError('Please complete the required fields.');
       return;
     }
+    setFieldErrors({});
     setSaving(true);
+    const payload = {
+      ...parsed.data,
+      studentAge: parsed.data.studentAge ?? Number(ageFromBirthdate(parsed.data.studentBirthdate) || 0),
+      studentBirthdate: parsed.data.studentBirthdate,
+      studentGender: parsed.data.studentGender,
+      studentEmail: parsed.data.studentEmail || '',
+      notes: parsed.data.notes || '',
+    };
     try {
-      await api.applyEnrollment({
-        ...parsed.data,
-        studentAge: parsed.data.studentAge ?? 0,
-        studentBirthdate: parsed.data.studentBirthdate ?? '',
-        studentGender: parsed.data.studentGender ?? '',
-      });
+      await api.applyEnrollment(payload);
       setOk(true);
+      form.reset();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not submit');
+      writeLocalEnrollment(applicationFromInput(payload));
+      setOk(true);
+      setError(
+        err instanceof Error
+          ? `${err.message} The application was saved on this device so staff can still review it in /admin.`
+          : 'Saved locally for review.',
+      );
     } finally {
       setSaving(false);
     }
@@ -161,7 +195,13 @@ function EnrollmentModal({
   if (!open) return null;
 
   return (
-    <div className="enroll-overlay" role="presentation" onClick={onClose}>
+    <div
+      className="enroll-overlay"
+      role="presentation"
+      onClick={() => {
+        if (!saving) onClose();
+      }}
+    >
       <div
         className="enroll-modal"
         role="dialog"
@@ -179,51 +219,101 @@ function EnrollmentModal({
           <p className="enroll-modal-kicker">Admissions · School Year {term}</p>
           <h2 id={titleId}>Online Application</h2>
           <p className="enroll-modal-school">{site.centerName || 'HIRAYA Kids Learning Center'}</p>
+          {program ? <p className="enroll-modal-course">Applying for {program}</p> : null}
+          {selected?.description ? <p className="enroll-modal-course-copy">{selected.description}</p> : null}
         </header>
 
         {ok ? (
           <div className="enroll-modal-success">
-            <Alert kind="success">Your application was received. The admissions office will contact the parent or guardian on file.</Alert>
+            <Alert kind="success">
+              Your application was received. The admissions office will contact the parent or guardian on file.
+            </Alert>
+            {error ? <Alert>{error}</Alert> : null}
             <button type="button" className="enroll-modal-submit" onClick={onClose}>
               Close
             </button>
           </div>
+        ) : !program ? (
+          <div className="enroll-modal-form">
+            <p className="enroll-modal-section">Choose a program</p>
+            <p className="enroll-modal-note">Select a course to continue the application.</p>
+            <div className="enroll-program-list">
+              {site.programs.map((item) => (
+                <button
+                  key={item.programId || item.name}
+                  type="button"
+                  className="enroll-program-choice"
+                  onClick={() => onProgramChange(item.name)}
+                >
+                  <strong>{item.name}</strong>
+                  <span>{item.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         ) : (
-          <form className="enroll-modal-form" onSubmit={onSubmit}>
+          <form className="enroll-modal-form" onSubmit={onSubmit} noValidate>
             {error ? <Alert>{error}</Alert> : null}
 
             <p className="enroll-modal-section">Learner</p>
             <div className="enroll-modal-grid">
-              <Field label="Full legal name">
+              <Field label="Student full name" required error={fieldErrors.studentFullname}>
                 <Input name="studentFullname" autoComplete="name" required />
               </Field>
-              <Field label="Date of birth">
-                <Input name="studentBirthdate" type="date" />
+              <Field label="Date of birth" required error={fieldErrors.studentBirthdate}>
+                <Input
+                  name="studentBirthdate"
+                  type="date"
+                  required
+                  onChange={(event) => setAge(ageFromBirthdate(event.target.value))}
+                />
               </Field>
-              <Field label="Age">
-                <Input name="studentAge" type="number" min={0} max={18} />
+              <Field label="Age" error={fieldErrors.studentAge}>
+                <Input name="studentAge" type="number" min={0} max={18} value={age} readOnly />
               </Field>
-              <Field label="Sex">
-                <Select name="studentGender" defaultValue="">
+              <Field label="Gender" required error={fieldErrors.studentGender}>
+                <Select name="studentGender" defaultValue="" required>
                   <option value="">Select</option>
                   <option>Female</option>
                   <option>Male</option>
                 </Select>
               </Field>
+              <Field label="Address" required error={fieldErrors.studentAddress}>
+                <Input name="studentAddress" autoComplete="street-address" required />
+              </Field>
+              <Field label="Contact number" required error={fieldErrors.studentPhone}>
+                <Input name="studentPhone" inputMode="tel" required />
+              </Field>
+              <Field label="Email address" error={fieldErrors.studentEmail}>
+                <Input name="studentEmail" type="email" autoComplete="email" />
+              </Field>
             </div>
 
             <p className="enroll-modal-section">Parent / guardian</p>
             <div className="enroll-modal-grid">
-              <Field label="Full name">
+              <Field label="Parent or guardian full name" required error={fieldErrors.parentFullname}>
                 <Input name="parentFullname" required />
               </Field>
-              <Field label="Email">
-                <Input name="parentEmail" type="email" autoComplete="email" required />
-              </Field>
-              <Field label="Mobile number">
+              <Field label="Parent contact number" required error={fieldErrors.parentPhone}>
                 <Input name="parentPhone" inputMode="tel" required />
               </Field>
-              <Field label="Program applied for">
+              <Field label="Relationship to student" required error={fieldErrors.guardianRelationship}>
+                <Select name="guardianRelationship" defaultValue="" required>
+                  <option value="">Select</option>
+                  <option>Mother</option>
+                  <option>Father</option>
+                  <option>Guardian</option>
+                  <option>Other</option>
+                </Select>
+              </Field>
+              <Field label="Parent email" required error={fieldErrors.parentEmail}>
+                <Input name="parentEmail" type="email" autoComplete="email" required />
+              </Field>
+            </div>
+
+            <p className="enroll-modal-section">Enrollment</p>
+            <div className="enroll-modal-grid">
+              <Field label="Selected program" required error={fieldErrors.preferredProgram}>
                 {site.programs.length ? (
                   <Select name="preferredProgram" defaultValue={program} key={program} required>
                     <option value="">Select a program</option>
@@ -237,6 +327,25 @@ function EnrollmentModal({
                   <Input name="preferredProgram" required defaultValue={program} />
                 )}
               </Field>
+              <Field label="Preferred schedule" required error={fieldErrors.preferredSchedule}>
+                <Select name="preferredSchedule" defaultValue="" required>
+                  <option value="">Select</option>
+                  <option>Morning</option>
+                  <option>Afternoon</option>
+                  <option>Whole day</option>
+                </Select>
+              </Field>
+              <Field label="Enrollment type" required error={fieldErrors.enrollmentType}>
+                <Select name="enrollmentType" defaultValue="" required>
+                  <option value="">Select</option>
+                  <option>New student</option>
+                  <option>Returning student</option>
+                  <option>Transfer</option>
+                </Select>
+              </Field>
+              <Field label="Additional notes or concerns" error={fieldErrors.notes}>
+                <Textarea name="notes" rows={3} />
+              </Field>
             </div>
 
             <p className="enroll-modal-note">
@@ -245,7 +354,7 @@ function EnrollmentModal({
             </p>
 
             <div className="enroll-modal-actions">
-              <button type="button" className="enroll-modal-cancel" onClick={onClose}>
+              <button type="button" className="enroll-modal-cancel" onClick={onClose} disabled={saving}>
                 Cancel
               </button>
               <button type="submit" className="enroll-modal-submit" disabled={saving}>

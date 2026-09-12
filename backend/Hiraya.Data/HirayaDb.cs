@@ -32,9 +32,11 @@ public static class HirayaDb
                    ?? "Server=127.0.0.1;Database=hiraya_learning_center;User Id=sa;Password=;TrustServerCertificate=True";
         }
 
-        return Environment.GetEnvironmentVariable("HIRAYA_MYSQL")
-               ?? configuration?.GetConnectionString("Hiraya")
-               ?? "Server=127.0.0.1;Port=3306;Database=hiraya_learning_center;User=root;Password=";
+        var raw = Environment.GetEnvironmentVariable("HIRAYA_MYSQL")
+                  ?? Environment.GetEnvironmentVariable("DATABASE_URL")
+                  ?? configuration?.GetConnectionString("Hiraya")
+                  ?? "Server=127.0.0.1;Port=3306;Database=hiraya_learning_center;User=root;Password=";
+        return NormalizeMysqlConnection(raw, configuration);
     }
 
     public static string ApplyPassword(string connection, IConfiguration? configuration)
@@ -74,6 +76,46 @@ public static class HirayaDb
         }
 
         options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
+    }
+
+    public static string NormalizeMysqlConnection(string value, IConfiguration? configuration = null)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("mysql://", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("mysql2://", StringComparison.OrdinalIgnoreCase))
+        {
+            var uri = new Uri(trimmed.Replace("mysql2://", "mysql://", StringComparison.OrdinalIgnoreCase));
+            var userInfo = uri.UserInfo.Split(':', 2);
+            var user = Uri.UnescapeDataString(userInfo[0]);
+            var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+            var database = Uri.UnescapeDataString(uri.AbsolutePath.Trim('/'));
+            if (string.IsNullOrWhiteSpace(database))
+                database = "defaultdb";
+            var port = uri.Port > 0 ? uri.Port : 3306;
+            trimmed =
+                $"Server={uri.Host};Port={port};Database={database};User={user};Password={password};SslMode=Required;";
+        }
+
+        var local = trimmed.Contains("Server=127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                    || trimmed.Contains("Server=localhost", StringComparison.OrdinalIgnoreCase);
+        var ca = Environment.GetEnvironmentVariable("HIRAYA_MYSQL_CA")
+                 ?? configuration?["Hiraya:MysqlSslCa"];
+        if (!local && !string.IsNullOrWhiteSpace(ca))
+        {
+            if (trimmed.Contains("SslMode=", StringComparison.OrdinalIgnoreCase))
+                trimmed = System.Text.RegularExpressions.Regex.Replace(
+                    trimmed, @"SslMode=[^;]*", "SslMode=VerifyCA", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            else
+                trimmed = trimmed.TrimEnd(';') + ";SslMode=VerifyCA";
+            if (!trimmed.Contains("SslCa=", StringComparison.OrdinalIgnoreCase))
+                trimmed = trimmed.TrimEnd(';') + ";SslCa=" + ca;
+        }
+        else if (!local && !trimmed.Contains("SslMode=", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed.TrimEnd(';') + ";SslMode=Required;";
+        }
+
+        return trimmed;
     }
 
     private static string? NormalizeProvider(string? value)

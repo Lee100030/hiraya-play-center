@@ -1,0 +1,16 @@
+.git
+.github
+.vercel
+.vscode
+**/.next
+**/node_modules
+apps
+packages
+docs
+*.md
+.env
+.env.*
+!**/.dockerignore
+!Dockerfile
+backend/**/bin
+backend/**/obj

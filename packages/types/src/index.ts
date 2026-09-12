@@ -204,6 +204,7 @@ export interface EnrollmentApplication {
   submittedAt: string;
   status: string;
   studentNumber?: string | null;
+  notes?: string | null;
 }
 
 export interface AttendanceRecord {
@@ -526,6 +527,13 @@ export interface EnrollmentApplyInput {
   parentEmail: string;
   parentPhone: string;
   preferredProgram: string;
+  studentAddress?: string;
+  studentPhone?: string;
+  studentEmail?: string;
+  guardianRelationship?: string;
+  preferredSchedule?: string;
+  enrollmentType?: string;
+  notes?: string;
 }
 
 export const emptyStore = (): HirayaDatabase => ({

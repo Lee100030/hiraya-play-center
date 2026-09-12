@@ -17,6 +17,22 @@ This repository is the **React / Next.js / Expo / Electron** frontend for HIRAYA
 2. Set **Root Directory** to `apps/web`.
 3. Framework preset: **Next.js**.
 4. Do not choose `apps/desktop` or `apps/mobile`.
+5. Set the **server** env `HIRAYA_MYSQL` to the Aiven Service URI (not `NEXT_PUBLIC_…`). Public enrollment on the live site uses this. Do not set `NEXT_PUBLIC_API_URL` unless a hosted ASP.NET API exists.
+
+### DigitalOcean / Render (optional full API)
+
+The public site stays on Vercel. A full `Hiraya.Api` host is optional if `HIRAYA_MYSQL` is set on Vercel.
+
+1. Create an account at [cloud.digitalocean.com](https://cloud.digitalocean.com).
+2. **Create** → **Apps** → GitHub repo `Johnleelugnasin30/hiraya-play-center`, branch `main`.
+3. Set **Region** to **Singapore**.
+4. Resource type: **Dockerfile** (repo root `Dockerfile`). HTTP port `8080`.
+5. Add a **MySQL 8** database in the same app (Singapore). Attach it so `DATABASE_URL` / `HIRAYA_MYSQL` is injected.
+6. Set encrypted env `HIRAYA_SESSION_SECRET` to a long random string (not the local development secret).
+7. After the app URL is live (example `https://hiraya-api-xxxxx.ondigitalocean.app`), add Vercel env `NEXT_PUBLIC_API_URL` to that URL and redeploy the website.
+8. Change the seeded `admin` password immediately.
+
+App spec: `.do/app.yaml`. Health check: `/api/health`.
 
 Local commands:
 

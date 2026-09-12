@@ -279,6 +279,7 @@ public class EnrollmentApplication
     public string SubmittedAt { get; set; } = "";
     public string Status { get; set; } = "pending_review";
     public string? StudentNumber { get; set; }
+    public string Notes { get; set; } = "";
 }
 
 public class AttendanceRecord

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: hiraya-api
+    runtime: docker
+    region: singapore
+    plan: starter
+    healthCheckPath: /api/health
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: HIRAYA_PUBLIC_URL
+        value: https://www.hirayalearningcenter.app
+      - key: HIRAYA_CORS_ORIGINS
+        value: https://www.hirayalearningcenter.app,https://hirayalearningcenter.app,https://hiraya-play-center-web.vercel.app
+      - key: HIRAYA_MYSQL
+        sync: false
+      - key: HIRAYA_SESSION_SECRET
+        generateValue: true

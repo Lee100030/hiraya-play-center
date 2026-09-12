@@ -1,77 +1,50 @@
 'use client';
 
-import { AuthProvider, useAuth } from '@/components/AuthProvider';
-import { homeHref } from '@/lib/nav';
-import { Alert } from '@hiraya/ui';
-import { loginSchema } from '@hiraya/validation';
-import Image from 'next/image';
+import { useAuth } from '@/components/AuthProvider';
+import { useStore } from '@/components/StoreProvider';
+import { enrollmentStatusLabel } from '@/lib/enrollment';
+import { Card, Loading } from '@hiraya/ui';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { FormEvent, useEffect, useState } from 'react';
 
-function AdminLoginForm() {
-  const { login, user, ready } = useAuth();
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+export default function AdminDashboardPage() {
+  const { user } = useAuth();
+  const { store, loading, error } = useStore();
+  if (loading) return <Loading />;
 
-  useEffect(() => {
-    if (ready && user) router.replace(homeHref(user.role));
-  }, [ready, user, router]);
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    const form = new FormData(event.currentTarget);
-    const parsed = loginSchema.safeParse({
-      login: form.get('login'),
-      password: form.get('password'),
-    });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message || 'Check your details');
-      return;
-    }
-    setBusy(true);
-    try {
-      const session = await login(parsed.data.login, parsed.data.password);
-      router.replace(homeHref(session.user.role));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed');
-    } finally {
-      setBusy(false);
-    }
-  }
+  const apps = store.enrollmentApplications;
+  const pending = apps.filter((row) => row.status === 'pending_review' || row.status === 'pending').length;
+  const approved = apps.filter((row) => row.status === 'approved').length;
 
   return (
-    <main className="login-stage">
-      <form className="login-glass" onSubmit={onSubmit}>
-        <Image src="/images/hiraya-crest.png" alt="HIRAYA Learning Center crest" width={80} height={80} />
-        <h1>Sign in</h1>
-        <p>Staff, teachers, and families use this private entrance.</p>
-        {error ? <Alert>{error}</Alert> : null}
-        <label>
-          Username or email
-          <input name="login" autoComplete="username" required />
-        </label>
-        <label>
-          Password
-          <input name="password" type="password" autoComplete="current-password" required />
-        </label>
-        <button className="login-gradient" type="submit" disabled={busy}>
-          {busy ? 'Signing in…' : 'Continue'}
-        </button>
-        <p>
-          <Link href="/activate">Activate an invited account</Link>
-        </p>
-      </form>
-    </main>
-  );
-}
-
-export default function AdminLoginPage() {
-  return (
-    <AuthProvider>
-      <AdminLoginForm />
-    </AuthProvider>
+    <>
+      <h1>Dashboard</h1>
+      <p>{user?.fullname ? `Welcome back, ${user.fullname}.` : 'Welcome back.'}</p>
+      {error ? <p>{error}</p> : null}
+      <div className="grid-cards">
+        <Card title="Total enrollments">{apps.length}</Card>
+        <Card title="Pending enrollments">{pending}</Card>
+        <Card title="Approved enrollments">{approved}</Card>
+        <Card title="Total students">{store.students.length}</Card>
+      </div>
+      <section style={{ marginTop: 28 }}>
+        <div className="toolbar">
+          <h2>Latest applications</h2>
+          <Link href="/admin/enrollments">View all</Link>
+        </div>
+        {apps.slice(0, 5).length === 0 ? (
+          <p>No enrollment applications yet.</p>
+        ) : (
+          <ul className="admin-recent">
+            {apps.slice(0, 5).map((row) => (
+              <li key={row.applicationId}>
+                <strong>{row.studentFullname}</strong>
+                <span>{row.preferredProgram}</span>
+                <span>{enrollmentStatusLabel(row.status)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
   );
 }

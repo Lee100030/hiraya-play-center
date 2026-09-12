@@ -54,6 +54,14 @@ public sealed class PublicEnrollmentRequest
     public string ParentFullname { get; set; } = "";
     public string ParentEmail { get; set; } = "";
     public string ParentPhone { get; set; } = "";
+    public int StudentAge { get; set; }
+    public string StudentAddress { get; set; } = "";
+    public string StudentPhone { get; set; } = "";
+    public string StudentEmail { get; set; } = "";
+    public string GuardianRelationship { get; set; } = "";
+    public string PreferredSchedule { get; set; } = "";
+    public string EnrollmentType { get; set; } = "";
+    public string Notes { get; set; } = "";
 }
 
 public sealed class PublicEnrollmentResult

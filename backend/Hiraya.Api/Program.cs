@@ -10,9 +10,13 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 var dbProvider = HirayaDb.ResolveProvider(builder.Configuration);
 var connection = HirayaDb.ApplyPassword(HirayaDb.ResolveConnection(builder.Configuration, dbProvider), builder.Configuration);
+var listenPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(listenPort))
+    builder.WebHost.UseUrls($"http://0.0.0.0:{listenPort}");
 
 builder.Services.AddCors(options =>
 {
@@ -33,7 +37,10 @@ builder.Services.AddCors(options =>
             "http://127.0.0.1:5173",
             "http://localhost:5173",
             "http://127.0.0.1:8081",
-            "http://localhost:8081"
+            "http://localhost:8081",
+            "https://www.hirayalearningcenter.app",
+            "https://hirayalearningcenter.app",
+            "https://hiraya-play-center-web.vercel.app"
         };
         var publicUrl = Environment.GetEnvironmentVariable("HIRAYA_PUBLIC_URL")?.Trim().TrimEnd('/');
         if (!string.IsNullOrWhiteSpace(publicUrl))
@@ -262,7 +269,14 @@ app.MapPost("/api/public/enrollment", async (HttpRequest request, PublicEnrollme
             body.PreferredProgram,
             body.ParentFullname,
             body.ParentEmail,
-            body.ParentPhone);
+            body.ParentPhone,
+            body.StudentAddress,
+            body.StudentPhone,
+            body.StudentEmail,
+            body.GuardianRelationship,
+            body.PreferredSchedule,
+            body.EnrollmentType,
+            body.Notes);
         return Results.Json(new PublicEnrollmentResult { Submitted = true }, JsonDefaults.Options);
     }
     catch (InvalidOperationException ex)

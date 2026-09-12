@@ -455,6 +455,10 @@ namespace Hiraya.Data.Migrations
                         .HasMaxLength(191)
                         .HasColumnType("varchar(191)");
 
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.HasKey("ApplicationId");
 
                     b.ToTable("enrollment_applications", (string)null);

@@ -1,0 +1,27 @@
+name: hiraya-api
+region: sgp
+services:
+  - name: api
+    github:
+      repo: Johnleelugnasin30/hiraya-play-center
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 40
+      period_seconds: 15
+    envs:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: HIRAYA_MYSQL
+        type: SECRET
+      - key: HIRAYA_PUBLIC_URL
+        value: https://www.hirayalearningcenter.app
+      - key: HIRAYA_CORS_ORIGINS
+        value: https://www.hirayalearningcenter.app,https://hirayalearningcenter.app,https://hiraya-play-center-web.vercel.app
+      - key: HIRAYA_SESSION_SECRET
+        type: SECRET

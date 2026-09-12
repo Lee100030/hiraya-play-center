@@ -12,6 +12,9 @@ coverage
 .env.*.local
 !.env.example
 !.apps/**/.env.example
+appsettings.Local.json
+**/aiven-ca.pem
+*.pem
 *.user
 bin/
 obj/

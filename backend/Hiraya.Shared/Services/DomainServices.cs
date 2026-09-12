@@ -20,7 +20,14 @@ public class EnrollmentService
         string preferredProgram,
         string parentFullname,
         string parentEmail,
-        string parentPhone)
+        string parentPhone,
+        string? studentAddress = null,
+        string? studentPhone = null,
+        string? studentEmail = null,
+        string? guardianRelationship = null,
+        string? preferredSchedule = null,
+        string? enrollmentType = null,
+        string? notes = null)
     {
         if (string.IsNullOrWhiteSpace(studentFullname) || studentFullname.Trim().Length < 2)
             throw new InvalidOperationException("Please enter the child’s full name.");
@@ -64,7 +71,15 @@ public class EnrollmentService
                 ParentPhone = guardianPhone,
                 PreferredProgram = program,
                 SubmittedAt = DateTime.UtcNow.ToString("o"),
-                Status = "pending_review"
+                Status = "pending_review",
+                Notes = FormatApplicationNotes(
+                    studentAddress,
+                    studentPhone,
+                    studentEmail,
+                    guardianRelationship,
+                    preferredSchedule,
+                    enrollmentType,
+                    notes)
             });
 
             NotificationService.PushToUsers(
@@ -338,6 +353,33 @@ public class EnrollmentService
         if (parts.Length == 1)
             return (parts[0], "Family");
         return (string.Join(" ", parts[..^1]), parts[^1]);
+    }
+
+    private static string FormatApplicationNotes(
+        string? studentAddress,
+        string? studentPhone,
+        string? studentEmail,
+        string? guardianRelationship,
+        string? preferredSchedule,
+        string? enrollmentType,
+        string? notes)
+    {
+        var lines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(studentAddress))
+            lines.Add($"Address: {studentAddress.Trim()}");
+        if (!string.IsNullOrWhiteSpace(studentPhone))
+            lines.Add($"Student contact: {studentPhone.Trim()}");
+        if (!string.IsNullOrWhiteSpace(studentEmail))
+            lines.Add($"Student email: {studentEmail.Trim()}");
+        if (!string.IsNullOrWhiteSpace(guardianRelationship))
+            lines.Add($"Relationship: {guardianRelationship.Trim()}");
+        if (!string.IsNullOrWhiteSpace(preferredSchedule))
+            lines.Add($"Preferred schedule: {preferredSchedule.Trim()}");
+        if (!string.IsNullOrWhiteSpace(enrollmentType))
+            lines.Add($"Enrollment type: {enrollmentType.Trim()}");
+        if (!string.IsNullOrWhiteSpace(notes))
+            lines.Add(notes.Trim());
+        return string.Join("\n", lines);
     }
 }
 

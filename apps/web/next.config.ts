@@ -16,16 +16,7 @@ const nextConfig: NextConfig = {
     ],
   },
   async redirects() {
-    return [
-      { source: '/login', destination: '/admin', permanent: false },
-      { source: '/admin/dashboard', destination: '/app', permanent: false },
-      { source: '/admin/students', destination: '/app/students', permanent: false },
-      { source: '/admin/teachers', destination: '/app/staff', permanent: false },
-      { source: '/admin/enrollment', destination: '/app/enrollment', permanent: false },
-      { source: '/admin/payments', destination: '/app/payments', permanent: false },
-      { source: '/admin/attendance', destination: '/app/attendance', permanent: false },
-      { source: '/admin/programs', destination: '/app/programs', permanent: false },
-    ];
+    return [{ source: '/login', destination: '/admin', permanent: false }];
   },
 };
 

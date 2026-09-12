@@ -62,6 +62,7 @@ export class HirayaApi {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ login, password }),
+        signal: AbortSignal.timeout(15000),
     });
     const session = await this.parse<AuthSession>(res);
     await this.tokenStore.setToken?.(session.token);
@@ -112,7 +113,7 @@ export class HirayaApi {
   }
 
   async getPublicSite(): Promise<PublicSite> {
-    const res = await fetch(this.url('/api/public/site'));
+    const res = await fetch(this.url('/api/public/site'), { signal: AbortSignal.timeout(12000) });
     const data = await this.parse<PublicSite>(res);
     return {
       ...data,
@@ -126,6 +127,7 @@ export class HirayaApi {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+      signal: AbortSignal.timeout(20000),
     });
     return this.parse(res);
   }

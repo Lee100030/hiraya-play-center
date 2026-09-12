@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { emptyStore, type HirayaDatabase } from '@hiraya/types';
 import { api } from '@/lib/api';
 import { useAuth } from './AuthProvider';
+import { getToken } from '@/lib/session';
+import { isCloudToken, isDemoToken, readLocalStore, writeLocalStore } from '@/lib/enrollment';
 
 type StoreState = {
   store: HirayaDatabase;
@@ -26,8 +28,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
+      const token = getToken();
+      if (isDemoToken(token) && !isCloudToken(token)) {
+        setStore(readLocalStore());
+        return;
+      }
       setStore(await api.getStore());
     } catch (err) {
+      setStore(readLocalStore());
       setError(err instanceof Error ? err.message : 'Could not load center data');
     } finally {
       setLoading(false);
@@ -35,8 +43,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const save = useCallback(async (next: HirayaDatabase) => {
-    const saved = await api.putStore(next);
-    setStore(saved);
+    const token = getToken();
+    if (isDemoToken(token) && !isCloudToken(token)) {
+      writeLocalStore(next);
+      setStore(next);
+      return;
+    }
+    try {
+      const saved = await api.putStore(next);
+      setStore(saved);
+    } catch {
+      writeLocalStore(next);
+      setStore(next);
+    }
   }, []);
 
   useEffect(() => {
