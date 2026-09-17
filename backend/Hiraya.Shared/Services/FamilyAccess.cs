@@ -72,7 +72,7 @@ public static class FamilyAccess
     {
         if (string.IsNullOrWhiteSpace(studentId))
             return false;
-        if (UserRoles.IsAdmin(user.Role) || user.Role == UserRoles.Staff)
+        if (UserRoles.IsAdmin(user.Role))
             return db.Students.Any(s => s.StudentId == studentId);
         if (user.Role == UserRoles.Teacher)
             return AssignedStudentIdsForTeacher(db, user.UserId).Contains(studentId);

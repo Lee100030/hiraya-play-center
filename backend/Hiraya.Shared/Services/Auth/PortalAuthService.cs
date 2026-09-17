@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Hiraya.Shared.Models;
 using Hiraya.Shared.Security;
 using Hiraya.Shared;
+using Hiraya.Shared.Services;
 using Hiraya.Shared.Services.Firebase;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -111,14 +112,35 @@ public class PortalAuthService
 
     private async Task<HirayaUser?> AuthenticateAgainstAsync(IHirayaRepository repository, string key, string password)
     {
-        var db = await repository.LoadAsync();
-        var user = db.Users.FirstOrDefault(u =>
-            (string.Equals(u.Email, key, StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(u.Username, key, StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(u.Fullname, key, StringComparison.OrdinalIgnoreCase)) &&
-            AccountStatuses.AllowsPortalLogin(u.Status));
+        var user = await repository.FindUserAsync(null, key);
+        if (user is not null && !AccountStatuses.AllowsPortalLogin(user.Status))
+            user = null;
 
-        if (user == null || !PasswordHasher.Verify(password, user.Password))
+        var passwordOk = user != null && PasswordHasher.Verify(password, user.Password);
+        if (!passwordOk && user != null && SeedData.TryCanonicalSeedPassword(key, password, out var canonical))
+        {
+            passwordOk = PasswordHasher.Verify(canonical, user.Password);
+            if (!passwordOk)
+            {
+                try
+                {
+                    await repository.MutateAsync(async data =>
+                    {
+                        var live = data.Users.FirstOrDefault(u => u.UserId == user.UserId);
+                        if (live == null) return;
+                        live.Password = PasswordHasher.Hash(canonical);
+                        await Task.CompletedTask;
+                    });
+                    passwordOk = true;
+                }
+                catch
+                {
+                    passwordOk = false;
+                }
+            }
+        }
+
+        if (user == null || !passwordOk)
         {
             RegisterFailure(key);
             if (IsLocked(key))
@@ -128,26 +150,29 @@ public class PortalAuthService
 
         Failures.TryRemove(key, out _);
 
-        try
+        if (!ProductAccounts.MaySignIn(user.Role))
+            throw new InvalidOperationException(ProductAccounts.SignInBlocked);
+
+        if (!PasswordHasher.IsHashed(user.Password))
         {
-            await repository.MutateAsync(async data =>
+            try
             {
-                var live = data.Users.FirstOrDefault(u => u.UserId == user.UserId);
-                if (live == null)
-                    return;
-                if (!PasswordHasher.IsHashed(live.Password))
+                await repository.MutateAsync(async data =>
+                {
+                    var live = data.Users.FirstOrDefault(u => u.UserId == user.UserId);
+                    if (live == null)
+                        return;
                     live.Password = PasswordHasher.Hash(password);
-                live.LastLoginAt = DateTime.UtcNow.ToString("o");
-                await Task.CompletedTask;
-            });
-        }
-        catch
-        {
-            // Last-login stamp is optional; a database hiccup must not block a valid sign-in.
+                    await Task.CompletedTask;
+                });
+            }
+            catch
+            {
+                // Rehash is optional; a database hiccup must not block a valid sign-in.
+            }
         }
 
-        var fresh = (await repository.LoadAsync()).Users.FirstOrDefault(u => u.UserId == user.UserId) ?? user;
-        return AccountService.ClonePublic(fresh);
+        return AccountService.ClonePublic(user);
     }
 
     public const string LockoutMessage = "Too many failed sign-ins. Wait a few minutes and try again, or use the correct password.";

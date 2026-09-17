@@ -1,14 +1,18 @@
 'use client';
 
 import { AboutSection } from '@/components/public/AboutSection';
-import { AntigravityField } from '@/components/public/AntigravityField';
+import { CampusMoments } from '@/components/public/CampusMoments';
 import { ContactSection } from '@/components/public/ContactSection';
 import { EnrollmentCta } from '@/components/public/EnrollmentCta';
+import { EnrollmentPath } from '@/components/public/EnrollmentPath';
 import { EnrollmentProvider } from '@/components/public/enrollment';
 import { Hero } from '@/components/public/Hero';
 import { ProgramsSection } from '@/components/public/ProgramsSection';
+import { Reveal } from '@/components/public/Reveal';
 import { SiteFooter } from '@/components/public/SiteFooter';
 import { SiteHeader } from '@/components/public/SiteHeader';
+import { SocialProof } from '@/components/public/SocialProof';
+import { StickyEnroll } from '@/components/public/StickyEnroll';
 import { usePublicSite } from '@/hooks/usePublicSite';
 import { ReactNode, useEffect } from 'react';
 
@@ -23,7 +27,7 @@ export function PublicChrome({
   autoEnroll?: boolean;
   enrollProgram?: string;
 }) {
-  const { site } = usePublicSite();
+  const { site, loading } = usePublicSite();
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -56,23 +60,36 @@ export function PublicChrome({
   return (
     <EnrollmentProvider autoOpen={autoEnroll} initialProgram={enrollProgram}>
       <div className="public-frame">
-        <AntigravityField />
-        <p className="dev-banner" role="status">
-          Website under Development
-        </p>
+        {process.env.NEXT_PUBLIC_SHOW_DEV_BANNER === '1' ? (
+          <p className="dev-banner" role="status">
+            Website under Development
+          </p>
+        ) : null}
         <SiteHeader site={site} />
         {home ? (
           <>
             <Hero site={site} />
-            <AboutSection site={site} />
-            <ProgramsSection site={site} />
-            <EnrollmentCta message={site.welcomeMessage || site.description} />
-            <ContactSection site={site} />
+            <Reveal>
+              <AboutSection site={site} />
+            </Reveal>
+            <CampusMoments />
+            <Reveal>
+              <ProgramsSection site={site} loading={loading} />
+            </Reveal>
+            <SocialProof site={site} />
+            <EnrollmentPath />
+            <Reveal>
+              <EnrollmentCta message={site.welcomeMessage || site.description} />
+            </Reveal>
+            <Reveal>
+              <ContactSection site={site} />
+            </Reveal>
           </>
         ) : (
           <main className="public-page">{children}</main>
         )}
         <SiteFooter site={site} />
+        <StickyEnroll />
       </div>
     </EnrollmentProvider>
   );

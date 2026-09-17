@@ -73,7 +73,8 @@ public class AccountService
             user.FirstName = input.FirstName.Trim();
             user.MiddleName = input.MiddleName.Trim();
             user.LastName = input.LastName.Trim();
-            user.Username = username;
+            if (!string.IsNullOrWhiteSpace(username))
+                user.Username = username;
             user.Email = email;
             user.Phone = input.Phone.Trim();
             user.Address = input.Address.Trim();

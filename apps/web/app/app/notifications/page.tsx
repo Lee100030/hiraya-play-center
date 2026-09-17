@@ -19,7 +19,7 @@ export default function NotificationsPage() {
       ) : (
         items.map((item) => (
           <article key={item.alertId} className="hlc-card" style={{ marginBottom: 12 }}>
-            <strong>{item.title}</strong> <StatusBadge status={item.read ? 'read' : 'unread'} />
+            <strong>{item.title}</strong> <StatusBadge status={item.status || 'unread'} />
             <p>{item.message}</p>
             <small>{item.createdAt}</small>
           </article>

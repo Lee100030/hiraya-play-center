@@ -13,7 +13,7 @@ public static class UserRoles
         [SuperAdmin, Admin, Teacher, Staff, Parent, Student];
 
     public static bool IsAdmin(string? role) =>
-        role is SuperAdmin or Admin;
+        role is SuperAdmin;
 }
 
 public static class HirayaCollections
@@ -413,6 +413,7 @@ public class Schedule
     public string Room { get; set; } = "";
     public string Notes { get; set; } = "";
     public string Status { get; set; } = "confirmed";
+    public string ProgramId { get; set; } = "";
 }
 
 public static class ScheduleKinds
@@ -532,9 +533,12 @@ public static class NotificationKinds
     public const string Schedule = "schedule";
     public const string Announcement = "announcement";
     public const string LearningModule = "learning_module";
+    public const string Task = "task";
+    public const string Session = "session";
+    public const string Direct = "direct";
 
     public static readonly string[] All =
-        [System, Enrollment, Attendance, Progress, Payment, Schedule, Announcement, LearningModule];
+        [System, Enrollment, Attendance, Progress, Payment, Schedule, Announcement, LearningModule, Task, Session, Direct];
 
     public static string Label(string? kind) => kind switch
     {
@@ -545,6 +549,9 @@ public static class NotificationKinds
         Schedule => "Schedule",
         Announcement => "Announcement",
         LearningModule => "Learning module",
+        Task => "Task",
+        Session => "Session",
+        Direct => "Message",
         _ => "General"
     };
 }
@@ -586,6 +593,8 @@ public class SystemAlert
     public string Status { get; set; } = "active";
     public string CreatedAt { get; set; } = "";
     public bool Read { get; set; }
+    public string RelatedRecordId { get; set; } = "";
+    public string ReadAt { get; set; } = "";
 }
 
 public class NewsItem
@@ -597,6 +606,10 @@ public class NewsItem
     public bool IsPublished { get; set; } = true;
     public string Status { get; set; } = "published";
     public string CreatedBy { get; set; } = "";
+    public string Audience { get; set; } = NotificationAudiences.Everyone;
+    public string AudienceId { get; set; } = "";
+    public string Priority { get; set; } = "normal";
+    public string ExpiresAt { get; set; } = "";
 }
 
 public class TeacherRoleOption
@@ -651,6 +664,11 @@ public class HirayaDatabase
     public List<CenterHoliday> CenterHolidays { get; set; } = new();
     public List<TeacherDuty> TeacherDuties { get; set; } = new();
     public List<WebsiteGalleryItem> WebsiteGallery { get; set; } = new();
+    public List<StaffTask> StaffTasks { get; set; } = new();
+    public List<SessionPackage> SessionPackages { get; set; } = new();
+    public List<SessionHistoryEntry> SessionHistory { get; set; } = new();
+    public List<TeacherComment> TeacherComments { get; set; } = new();
+    public List<TeacherAdminNote> TeacherNotes { get; set; } = new();
     public CenterSettings Settings { get; set; } = new();
 }
 
@@ -832,7 +850,7 @@ public static class Navigation
     };
 
     public static bool IsFamilyRole(string? role) =>
-        role is UserRoles.Parent or UserRoles.Student;
+        role is UserRoles.Parent;
 
     public static bool CanAccessAdminPanel(string? role) => UserRoles.IsAdmin(role);
 
@@ -853,79 +871,79 @@ public static class Navigation
 
     public static bool CanAssignRole(string? actorRole, string? newRole)
     {
-        if (newRole == UserRoles.SuperAdmin)
-            return actorRole == UserRoles.SuperAdmin;
-        return CanManageUsers(actorRole);
+        if (actorRole != UserRoles.SuperAdmin)
+            return false;
+        return newRole is UserRoles.Teacher or UserRoles.Parent;
     }
 
     public static bool CanManageStudents(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin;
+        role is UserRoles.SuperAdmin;
 
     public static bool CanManageStaff(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin;
+        role is UserRoles.SuperAdmin;
 
     public static bool CanViewStaffDirectory(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Staff;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher;
 
     public static bool CanViewOperations(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Staff;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher;
 
     public static bool CanManageEnrollment(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin;
+        role is UserRoles.SuperAdmin;
 
     public static bool CanViewClasses(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Staff;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher;
 
     public static bool CanViewEnrollment(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Staff or UserRoles.Parent;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher or UserRoles.Parent;
 
     public static bool CanViewAttendance(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Staff or UserRoles.Parent or UserRoles.Student;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher or UserRoles.Parent;
 
     public static bool CanTakeAttendance(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Staff;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher;
 
     public static bool CanViewSchedule(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Staff or UserRoles.Parent or UserRoles.Student;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher or UserRoles.Parent;
 
     public static bool CanManageSchedule(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin;
+        role is UserRoles.SuperAdmin;
 
     public static bool CanViewProgress(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Staff or UserRoles.Parent or UserRoles.Student;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher or UserRoles.Parent;
 
     public static bool CanWriteProgress(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher;
 
     public static bool CanViewPayments(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Staff or UserRoles.Parent or UserRoles.Student;
+        role is UserRoles.SuperAdmin or UserRoles.Parent;
 
     public static bool CanManagePayments(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Staff;
+        role is UserRoles.SuperAdmin;
 
     public static bool CanViewNotifications(string? role) =>
         !string.IsNullOrWhiteSpace(role);
 
     public static bool CanSendNotifications(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Staff;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher;
 
     public static bool CanManageAnnouncements(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin;
+        role is UserRoles.SuperAdmin;
 
     public static bool CanViewReports(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Staff or UserRoles.Parent;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher or UserRoles.Parent;
 
     public static bool CanViewAudit(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin;
+        role is UserRoles.SuperAdmin;
 
     public static bool CanManageLearningModules(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin;
+        role is UserRoles.SuperAdmin;
 
     public static bool CanViewLearningModules(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Teacher or UserRoles.Parent or UserRoles.Student;
+        role is UserRoles.SuperAdmin or UserRoles.Teacher or UserRoles.Parent;
 
     public static bool IsEmployeeRole(string? role) =>
-        role is UserRoles.Teacher or UserRoles.Staff;
+        role is UserRoles.Teacher;
 }
 
 public static class StudentNames

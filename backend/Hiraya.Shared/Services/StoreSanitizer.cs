@@ -19,6 +19,7 @@ public static class StoreSanitizer
     public static HirayaDatabase VisibleTo(HirayaDatabase source, HirayaUser actor)
     {
         var copy = PublicCopy(source);
+        WorkflowOps.EnsureLists(copy);
         if (Navigation.IsFamilyRole(actor.Role))
             return ForFamily(copy, actor);
         if (actor.Role == UserRoles.Teacher)
@@ -31,7 +32,6 @@ public static class StoreSanitizer
     private static HirayaDatabase ForFamily(HirayaDatabase copy, HirayaUser actor)
     {
         var ids = FamilyAccess.AuthorizedStudentIds(copy, actor);
-        copy.Users = copy.Users.Where(u => u.UserId == actor.UserId).ToList();
         copy.Students = copy.Students.Where(s => ids.Contains(s.StudentId)).ToList();
         copy.ParentStudents = copy.ParentStudents.Where(l =>
             l.IsActive &&
@@ -43,6 +43,8 @@ public static class StoreSanitizer
         copy.StudentOps = copy.StudentOps.Where(o => ids.Contains(o.StudentId)).ToList();
         var classIds = copy.Enrollments.Select(e => e.ClassId).ToHashSet();
         copy.Classes = copy.Classes.Where(c => classIds.Contains(c.ClassId)).ToList();
+        var teacherIds = copy.Classes.Select(c => c.TeacherId).Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet();
+        copy.Users = copy.Users.Where(u => u.UserId == actor.UserId || teacherIds.Contains(u.UserId)).ToList();
         copy.Schedules = copy.Schedules.Where(s =>
             classIds.Contains(s.ClassId) || ids.Contains(s.StudentId)).ToList();
         copy.EnrollmentApplications = [];
@@ -55,6 +57,14 @@ public static class StoreSanitizer
         copy.LearningModuleVersions = [];
         copy.LearningModules = copy.LearningModules.Where(m => m.Status == LearningModuleStatuses.Published).ToList();
         copy.WebsiteGallery = [];
+        copy.StaffTasks = [];
+        copy.SessionPackages = copy.SessionPackages.Where(p => ids.Contains(p.StudentId)).ToList();
+        copy.SessionHistory = copy.SessionHistory.Where(h => ids.Contains(h.StudentId)).ToList();
+        copy.News = copy.News.Where(n => WorkflowOps.NewsVisibleTo(copy, n, actor)).ToList();
+        copy.TeacherComments = [];
+        copy.TeacherNotes = [];
+        copy.Alerts = copy.Alerts.Where(a =>
+            a.RecipientId == actor.UserId || a.RecipientId == "everyone").ToList();
         foreach (var student in copy.Students)
         {
             student.Notes = "";
@@ -88,7 +98,9 @@ public static class StoreSanitizer
         copy.StudentOps = [];
         copy.Classes = copy.Classes.Where(c => classIds.Contains(c.ClassId)).ToList();
         copy.Schedules = copy.Schedules.Where(s =>
-            classIds.Contains(s.ClassId) || ids.Contains(s.StudentId)).ToList();
+            s.TeacherId == actor.UserId ||
+            classIds.Contains(s.ClassId) ||
+            ids.Contains(s.StudentId)).ToList();
         copy.EnrollmentApplications = [];
         copy.AuditLogs = [];
         copy.AccountInvitations = [];
@@ -100,6 +112,18 @@ public static class StoreSanitizer
         copy.TeacherDuties = copy.TeacherDuties.Where(d => d.TeacherId == actor.UserId).ToList();
         copy.WebsiteGallery = [];
         copy.Alerts = copy.Alerts.Where(a => a.RecipientId == actor.UserId).ToList();
+        copy.StaffTasks = copy.StaffTasks.Where(t => WorkflowOps.TaskAssignedTo(t, actor.UserId)).ToList();
+        copy.SessionPackages = copy.SessionPackages.Where(p => ids.Contains(p.StudentId)).ToList();
+        copy.SessionHistory = copy.SessionHistory.Where(h => ids.Contains(h.StudentId)).ToList();
+        copy.News = copy.News.Where(n => WorkflowOps.NewsVisibleTo(copy, n, actor)).ToList();
+        copy.TeacherComments = copy.TeacherComments.Where(c =>
+            c.TeacherId == actor.UserId &&
+            c.Status != "archived" &&
+            (c.Visibility == "teacher" || c.CreatedBy == actor.UserId)).ToList();
+        copy.TeacherNotes = copy.TeacherNotes.Where(n =>
+            n.TeacherId == actor.UserId &&
+            n.Visibility == "teacher" &&
+            n.Status != "archived").ToList();
         return copy;
     }
 
@@ -117,6 +141,8 @@ public static class StoreSanitizer
         copy.Reports = copy.Reports.Where(r => r.Status == ProgressStatuses.Published).ToList();
         copy.Alerts = copy.Alerts.Where(a => a.RecipientId == actor.UserId).ToList();
         copy.WebsiteGallery = [];
+        copy.TeacherComments = [];
+        copy.TeacherNotes = [];
         return copy;
     }
 
@@ -124,8 +150,10 @@ public static class StoreSanitizer
     {
         if (actor is null)
             throw new UnauthorizedAccessException("Sign in is required to save center data.");
+        WorkflowOps.EnsureLists(current);
+        WorkflowOps.EnsureLists(incoming);
         if (Navigation.IsFamilyRole(actor.Role))
-            throw new UnauthorizedAccessException("Family accounts cannot update the center store.");
+            return MergeFamilyWrite(CloneKeepSecrets(current), incoming, actor);
         if (actor.Role == UserRoles.Teacher)
             return MergeTeacherWrite(CloneKeepSecrets(current), incoming, actor);
         if (actor.Role == UserRoles.Staff)
@@ -133,6 +161,7 @@ public static class StoreSanitizer
 
         FamilyAccess.EnsureLegacyLinks(current);
         FamilyAccess.EnsureLegacyLinks(incoming);
+        ProductAccounts.RequireParentOnEveryStudent(current, incoming);
 
         foreach (var user in incoming.Users)
         {
@@ -173,6 +202,24 @@ public static class StoreSanitizer
             }
         }
 
+        var previous = CloneKeepSecrets(current);
+        foreach (var package in incoming.SessionPackages)
+            WorkflowOps.RecalculatePackage(package);
+        var priorSchedules = previous.Schedules.ToDictionary(s => s.ScheduleId);
+        foreach (var schedule in incoming.Schedules.Where(s => s.Kind != ScheduleKinds.TeacherTask))
+        {
+            if (priorSchedules.TryGetValue(schedule.ScheduleId, out var prior) &&
+                prior.StartAt == schedule.StartAt &&
+                prior.EndAt == schedule.EndAt &&
+                prior.TeacherId == schedule.TeacherId &&
+                prior.Room == schedule.Room &&
+                prior.Status == schedule.Status)
+                continue;
+            var issues = ScheduleService.DetectConflicts(incoming, schedule);
+            if (issues.Count > 0)
+                throw new InvalidOperationException(string.Join(" ", issues));
+        }
+        WorkflowOps.AfterAdminSave(previous, incoming, actor);
         return incoming;
     }
 
@@ -187,6 +234,9 @@ public static class StoreSanitizer
     {
         FamilyAccess.EnsureLegacyLinks(current);
         FamilyAccess.EnsureLegacyLinks(incoming);
+        WorkflowOps.EnsureLists(current);
+        WorkflowOps.EnsureLists(incoming);
+        var previous = CloneKeepSecrets(current);
         var allowed = FamilyAccess.AssignedStudentIdsForTeacher(current, actor.UserId);
 
         current.Attendance = MergeAttendance(current.Attendance, incoming.Attendance, allowed, actor.UserId);
@@ -201,6 +251,29 @@ public static class StoreSanitizer
             .ToList();
         current.TeacherWorkShifts = current.TeacherWorkShifts.Where(s => s.TeacherId != actor.UserId)
             .Concat(incoming.TeacherWorkShifts.Where(s => s.TeacherId == actor.UserId))
+            .ToList();
+        current.Schedules = current.Schedules
+            .Where(s => !(s.Kind == ScheduleKinds.TeacherTask && s.TeacherId == actor.UserId))
+            .Concat(incoming.Schedules.Where(s =>
+                s.Kind == ScheduleKinds.TeacherTask && s.TeacherId == actor.UserId))
+            .ToList();
+        current.StaffTasks = current.StaffTasks
+            .Where(t => !WorkflowOps.TaskAssignedTo(t, actor.UserId))
+            .Concat(incoming.StaffTasks.Where(t => WorkflowOps.TaskAssignedTo(t, actor.UserId)))
+            .ToList();
+        WorkflowOps.AfterTeacherSave(previous, current, actor);
+        return current;
+    }
+
+    private static HirayaDatabase MergeFamilyWrite(HirayaDatabase current, HirayaDatabase incoming, HirayaUser actor)
+    {
+        current.Alerts = current.Alerts.Where(a => a.RecipientId != actor.UserId)
+            .Concat(incoming.Alerts.Where(a => a.RecipientId == actor.UserId).Select(a =>
+            {
+                if (a.Read && string.IsNullOrWhiteSpace(a.ReadAt))
+                    a.ReadAt = DateTime.UtcNow.ToString("o");
+                return a;
+            }))
             .ToList();
         return current;
     }

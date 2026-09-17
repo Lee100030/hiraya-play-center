@@ -8,7 +8,7 @@ export default function ContactPage() {
   const { site } = usePublicSite();
   return (
     <PublicChrome>
-      <ContactSection site={site} />
+      <ContactSection site={site} standalone />
     </PublicChrome>
   );
 }

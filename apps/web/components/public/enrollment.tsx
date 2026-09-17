@@ -2,11 +2,7 @@
 
 import { usePublicSite } from '@/hooks/usePublicSite';
 import { api } from '@/lib/api';
-import {
-  ageFromBirthdate,
-  applicationFromInput,
-  writeLocalEnrollment,
-} from '@/lib/enrollment';
+import { ageFromBirthdate } from '@/lib/enrollment';
 import { Alert, Field, Input, Select, Textarea } from '@hiraya/ui';
 import { enrollPublicSchema } from '@hiraya/validation';
 import {
@@ -76,18 +72,20 @@ export function EnrollTrigger({
   className,
   program = '',
   onClick,
+  magnetic = true,
 }: {
   children: ReactNode;
   className?: string;
   program?: string;
   onClick?: () => void;
+  magnetic?: boolean;
 }) {
   const { open } = useEnrollment();
   return (
     <button
       type="button"
       className={className}
-      data-magnetic
+      data-magnetic={magnetic ? '' : undefined}
       onClick={() => {
         onClick?.();
         open(program);
@@ -115,6 +113,7 @@ function EnrollmentModal({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [ok, setOk] = useState(false);
+  const [applicationId, setApplicationId] = useState('');
   const [saving, setSaving] = useState(false);
   const [age, setAge] = useState('');
   const year = new Date().getFullYear();
@@ -129,6 +128,7 @@ function EnrollmentModal({
       setError(null);
       setFieldErrors({});
       setOk(false);
+      setApplicationId('');
       setSaving(false);
       setAge('');
       return;
@@ -176,16 +176,15 @@ function EnrollmentModal({
       notes: parsed.data.notes || '',
     };
     try {
-      await api.applyEnrollment(payload);
+      const result = await api.applyEnrollment(payload);
+      setApplicationId(result.applicationId || '');
       setOk(true);
       form.reset();
     } catch (err) {
-      writeLocalEnrollment(applicationFromInput(payload));
-      setOk(true);
       setError(
         err instanceof Error
-          ? `${err.message} The application was saved on this device so staff can still review it in /admin.`
-          : 'Saved locally for review.',
+          ? err.message
+          : 'Could not submit enrollment to HIRAYA. Make sure the API is running.',
       );
     } finally {
       setSaving(false);
@@ -219,6 +218,11 @@ function EnrollmentModal({
           <p className="enroll-modal-kicker">Admissions · School Year {term}</p>
           <h2 id={titleId}>Online Application</h2>
           <p className="enroll-modal-school">{site.centerName || 'HIRAYA Kids Learning Center'}</p>
+          <ol className="enroll-progress" aria-label="Application steps">
+            <li className={program || ok ? 'done' : 'current'}>1 · Program</li>
+            <li className={ok ? 'done' : program ? 'current' : ''}>2 · Family details</li>
+            <li className={ok ? 'current' : ''}>3 · Received</li>
+          </ol>
           {program ? <p className="enroll-modal-course">Applying for {program}</p> : null}
           {selected?.description ? <p className="enroll-modal-course-copy">{selected.description}</p> : null}
         </header>
@@ -227,6 +231,7 @@ function EnrollmentModal({
           <div className="enroll-modal-success">
             <Alert kind="success">
               Your application was received. The admissions office will contact the parent or guardian on file.
+              {applicationId ? ` Reference number: ${applicationId}` : ''}
             </Alert>
             {error ? <Alert>{error}</Alert> : null}
             <button type="button" className="enroll-modal-submit" onClick={onClose}>
@@ -358,7 +363,7 @@ function EnrollmentModal({
                 Cancel
               </button>
               <button type="submit" className="enroll-modal-submit" disabled={saving}>
-                {saving ? 'Submitting…' : 'Submit application'}
+                {saving ? 'Sending application…' : 'Send application'}
               </button>
             </div>
           </form>

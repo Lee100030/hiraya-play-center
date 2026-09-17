@@ -16,6 +16,24 @@ public interface IHirayaRepository
     Task DeleteItemAsync(string collection, string id, CancellationToken ct = default);
     Task MutateAsync(Func<HirayaDatabase, Task> mutator, CancellationToken ct = default);
     void InvalidateCache() { }
+    Task<HirayaUser?> FindUserAsync(string? userId, string? login, CancellationToken ct = default)
+    {
+        return FindUserFromStoreAsync(this, userId, login, ct);
+    }
+
+    private static async Task<HirayaUser?> FindUserFromStoreAsync(
+        IHirayaRepository repo, string? userId, string? login, CancellationToken ct)
+    {
+        var db = await repo.LoadAsync(ct);
+        if (!string.IsNullOrWhiteSpace(userId))
+            return db.Users.FirstOrDefault(u => string.Equals(u.UserId, userId, StringComparison.OrdinalIgnoreCase));
+        var key = (login ?? "").Trim();
+        if (key.Length == 0) return null;
+        return db.Users.FirstOrDefault(u =>
+            string.Equals(u.Email, key, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(u.Username, key, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(u.Fullname, key, StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 public class HirayaRepository : IHirayaRepository

@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "HIRAYA Learning Center runtime",
+    "output": "hiraya-runtime.architecture.html",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Johnleelugnasin30/hiraya-play-center",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "e7dd1b42e3c62cba837fe999c9cdc7bd9f959fb7"
+    },
+    "views": [
+      {
+        "id": "request-path",
+        "label": "Primary request path",
+        "focus": ["families", "website", "next-proxy", "api", "mysql"],
+        "note": "Public and staff browsers hit Next.js, which proxies /api/* to Hiraya.Api and MySQL."
+      },
+      {
+        "id": "native-clients",
+        "label": "Desktop and mobile",
+        "focus": ["native", "api", "mysql"],
+        "note": "Electron and Expo call Hiraya.Api directly on :5188; they do not go through Next.js."
+      },
+      {
+        "id": "session-gate",
+        "label": "Session",
+        "focus": ["session", "api", "website", "native"],
+        "note": "All signed-in clients send X-Hiraya-Session. Same users and store document."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "families",
+      "type": "external",
+      "label": "People",
+      "sublabel": "Staff / parents",
+      "pos": [48, 312],
+      "size": [128, 64],
+      "sources": [{ "path": "README.md", "line": 7, "label": "Local first" }]
+    },
+    {
+      "id": "website",
+      "type": "frontend",
+      "label": "Website",
+      "sublabel": "Next.js :3000",
+      "pos": [248, 312],
+      "size": [140, 64],
+      "sources": [{ "path": "apps/web/app/layout.tsx", "label": "apps/web" }]
+    },
+    {
+      "id": "next-proxy",
+      "type": "backend",
+      "label": "Next /api/*",
+      "sublabel": "BFF proxy",
+      "pos": [460, 312],
+      "size": [140, 64],
+      "sources": [{ "path": "apps/web/app/api/store/route.ts", "label": "store API" }]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Hiraya.Api",
+      "sublabel": "ASP.NET :5188",
+      "pos": [672, 312],
+      "size": [148, 64],
+      "tag": "hub",
+      "sources": [{ "path": "backend/Hiraya.Api/Program.cs", "line": 12, "label": "API" }]
+    },
+    {
+      "id": "mysql",
+      "type": "database",
+      "label": "MySQL",
+      "sublabel": "hiraya_learning_center",
+      "pos": [896, 312],
+      "size": [168, 64],
+      "sources": [{ "path": "backend/Hiraya.Api/appsettings.Development.json", "line": 9, "label": "Hiraya" }]
+    },
+    {
+      "id": "native",
+      "type": "frontend",
+      "label": "Desktop + mobile",
+      "sublabel": "Electron :5173 / Expo",
+      "pos": [248, 488],
+      "size": [168, 64],
+      "sources": [
+        { "path": "apps/desktop/electron/main.cjs", "label": "Electron" },
+        { "path": "apps/mobile/src/auth.tsx", "label": "Expo" }
+      ]
+    },
+    {
+      "id": "session",
+      "type": "security",
+      "label": "Session",
+      "sublabel": "X-Hiraya-Session",
+      "pos": [672, 120],
+      "size": [148, 64],
+      "tag": "JWT-like token",
+      "sources": [{ "path": "backend/Hiraya.Api/Program.cs", "line": 91, "label": "session" }]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "This Windows workstation",
+      "wraps": ["website", "next-proxy", "api", "mysql", "native", "session"]
+    },
+    {
+      "kind": "security-group",
+      "label": "Central hub :5188 / :3306",
+      "wraps": ["api", "mysql"]
+    }
+  ],
+  "connections": [
+    { "id": "people-to-web", "from": "families", "to": "website", "label": "HTTPS :3000", "variant": "emphasis" },
+    { "id": "web-to-bff", "from": "website", "to": "next-proxy", "label": "/api/*" },
+    { "id": "bff-to-api", "from": "next-proxy", "to": "api", "label": "proxy :5188" },
+    { "id": "api-to-mysql", "from": "api", "to": "mysql", "label": "SQL :3306" },
+    { "id": "people-to-native", "from": "families", "to": "native", "label": "local / LAN", "variant": "dashed", "fromSide": "bottom", "toSide": "left" },
+    { "id": "native-to-api", "from": "native", "to": "api", "label": "HTTP :5188", "fromSide": "right", "toSide": "bottom" },
+    { "id": "session-to-api", "from": "session", "to": "api", "label": "verify token", "variant": "security", "fromSide": "bottom", "toSide": "top", "labelDy": 24 }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Clients",
+      "items": [
+        "Website is Next.js on :3000 (public site plus admin/app).",
+        "Desktop is Electron on Vite :5173 and stays local.",
+        "Mobile is Expo for teachers and parents only."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Hub",
+      "items": [
+        "Hiraya.Api on :5188 is the one store for logins, students, and enrollments.",
+        "Website reaches it through Next /api/*; desktop and mobile call it directly."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Identity",
+      "items": [
+        "Session header X-Hiraya-Session.",
+        "MySQL database hiraya_learning_center on XAMPP :3306."
+      ]
+    }
+  ]
+}

@@ -6,14 +6,14 @@ import type { PublicSite } from '@hiraya/types';
 import { useEffect, useState } from 'react';
 
 export function usePublicSite() {
-  const [site, setSite] = useState<PublicSite>(publicDefaults);
+  const [site, setSite] = useState<PublicSite>({ ...publicDefaults, programs: [] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api
       .getPublicSite()
       .then((data) => setSite(withPublicFallback(data)))
-      .catch(() => setSite(publicDefaults))
+      .catch(() => setSite({ ...publicDefaults, programs: [] }))
       .finally(() => setLoading(false));
   }, []);
 

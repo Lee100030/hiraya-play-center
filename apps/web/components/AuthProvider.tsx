@@ -11,14 +11,15 @@ import {
 } from 'react';
 import type { AuthSession, HirayaUser } from '@hiraya/types';
 import { api } from '@/lib/api';
-import { readSession, writeSession } from '@/lib/session';
-import { DEMO_SESSION_TOKEN, demoAdminUser, isDemoLogin } from '@/lib/enrollment';
+import { readSession, sessionPersists, writeSession } from '@/lib/session';
+import { resolveLoginPassword } from '@hiraya/utils';
 
 type AuthState = {
   user: HirayaUser | null;
   ready: boolean;
-  login: (login: string, password: string) => Promise<AuthSession>;
+  login: (login: string, password: string, remember?: boolean) => Promise<AuthSession>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<HirayaUser | null>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -28,40 +29,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const session = readSession();
     setUser(session?.user ?? null);
     setReady(true);
+    if (!session) return;
+    (async () => {
+      try {
+        const live = await api.me();
+        if (cancelled) return;
+        writeSession({ token: session.token, user: live }, sessionPersists());
+        setUser(live);
+      } catch {
+        if (cancelled) return;
+        writeSession(null);
+        setUser(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const login = useCallback(async (loginValue: string, password: string) => {
+  const login = useCallback(async (loginValue: string, password: string, remember = true) => {
     const withTimeout = async (run: () => Promise<AuthSession>) => {
       const timeout = new Promise<never>((_, reject) => {
-        window.setTimeout(() => reject(new Error('Sign-in timed out')), 15000);
+        window.setTimeout(() => reject(new Error('Sign-in timed out')), 8000);
       });
       return Promise.race([run(), timeout]);
     };
 
-    try {
-      const session = await withTimeout(() => api.login(loginValue, password));
-      writeSession(session);
-      setUser(session.user);
-      return session;
-    } catch (err) {
-      if (isDemoLogin(loginValue, password)) {
-        try {
-          const session = await withTimeout(() => api.login(loginValue, 'Admin123'));
-          writeSession(session);
-          setUser(session.user);
-          return session;
-        } catch {
-          const session = { token: DEMO_SESSION_TOKEN, user: demoAdminUser() };
-          writeSession(session);
-          setUser(session.user);
-          return session;
-        }
-      }
-      throw err;
-    }
+    const session = await withTimeout(() => api.login(loginValue, resolveLoginPassword(loginValue, password)));
+    writeSession(session, remember);
+    setUser(session.user);
+    return session;
   }, []);
 
   const logout = useCallback(async () => {
@@ -69,7 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, ready, login, logout }), [user, ready, login, logout]);
+  const refreshUser = useCallback(async () => {
+    const session = readSession();
+    if (!session) return null;
+    const live = await api.me();
+    writeSession({ token: session.token, user: live }, sessionPersists());
+    setUser(live);
+    return live;
+  }, []);
+
+  const value = useMemo(() => ({ user, ready, login, logout, refreshUser }), [user, ready, login, logout, refreshUser]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

@@ -1,174 +1,192 @@
 'use client';
 
+import { AdminModal } from '@/components/admin/AdminModal';
+import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
+import { AdminTable } from '@/components/admin/AdminTable';
 import { useStore } from '@/components/StoreProvider';
 import { enrollmentStatusLabel } from '@/lib/enrollment';
-import { Alert, Button, EmptyState, Input, Loading, Select, StatusBadge, Table } from '@hiraya/ui';
+import { api } from '@/lib/api';
+import { Alert, Button, EmptyState, Loading, StatusBadge, emptyCell } from '@hiraya/ui';
+import { formatDate } from '@hiraya/utils';
 import type { EnrollmentApplication } from '@hiraya/types';
 import { useMemo, useState } from 'react';
 
+const tabs = [
+  { id: 'all', label: 'All' },
+  { id: 'pending', label: 'Pending' },
+  { id: 'approved', label: 'Approved' },
+  { id: 'rejected', label: 'Rejected' },
+];
+
 export default function AdminEnrollmentsPage() {
-  const { store, loading, save } = useStore();
-  const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('all');
+  const { store, loading, refresh } = useStore();
+  const [tab, setTab] = useState('all');
   const [selected, setSelected] = useState<EnrollmentApplication | null>(null);
+  const [confirm, setConfirm] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
 
   const rows = useMemo(() => {
     return store.enrollmentApplications.filter((row) => {
-      const haystack = `${row.studentFullname} ${row.parentFullname} ${row.parentEmail} ${row.preferredProgram}`.toLowerCase();
-      const matchesQuery = haystack.includes(query.toLowerCase());
       const current = enrollmentStatusLabel(row.status).toLowerCase();
-      const matchesStatus = status === 'all' || current === status;
-      return matchesQuery && matchesStatus;
+      return tab === 'all' || current === tab;
     });
-  }, [store.enrollmentApplications, query, status]);
+  }, [store.enrollmentApplications, tab]);
 
   async function setStatusFor(id: string, next: string) {
-    const label = enrollmentStatusLabel(next);
-    if (!window.confirm(`${label} this enrollment application?`)) return;
-    await save({
-      ...store,
-      enrollmentApplications: store.enrollmentApplications.map((row) =>
-        row.applicationId === id ? { ...row, status: next } : row,
-      ),
-    });
-    setSelected((current) => (current?.applicationId === id ? { ...current, status: next } : current));
-    setMessage(`Application ${label.toLowerCase()}.`);
+    try {
+      if (next === 'approved') await api.approveEnrollment(id);
+      else if (next === 'rejected') await api.rejectEnrollment(id);
+      else if (next === 'cancelled') await api.cancelEnrollment(id);
+      else return;
+      await refresh();
+      setSelected((current) => (current?.applicationId === id ? { ...current, status: next } : current));
+      setOk(true);
+      setMessage(`Application ${enrollmentStatusLabel(next).toLowerCase()}.`);
+      setConfirm(null);
+    } catch (err) {
+      setOk(false);
+      setMessage(err instanceof Error ? err.message : 'Could not update the application.');
+    }
   }
 
   if (loading) return <Loading />;
 
   return (
     <>
-      <h1>Enrollments</h1>
-      <p>Review public applications submitted from the website.</p>
-      {message ? <Alert kind="success">{message}</Alert> : null}
-      <div className="toolbar">
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search student, parent, or program"
-        />
-        <Select value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="all">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="cancelled">Cancelled</option>
-        </Select>
+      <AdminPageHeader
+        kicker="Admissions"
+        title="Enrollments"
+        description="Review website applications and approve, reject, or inspect each family file."
+      />
+      {message ? <Alert kind={ok ? 'success' : 'danger'}>{message}</Alert> : null}
+      <div className="admin-tabs" role="tablist" aria-label="Enrollment status">
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={tab === item.id ? 'admin-tab active' : 'admin-tab'}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
-      {rows.length === 0 ? (
-        <EmptyState title="No enrollments" hint="Submitted applications will appear here." />
-      ) : (
-        <>
-          <div className="admin-table-wrap">
-            <Table>
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Program</th>
-                  <th>Contact</th>
-                  <th>Submitted</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.applicationId}>
-                    <td>{row.studentFullname}</td>
-                    <td>{row.preferredProgram}</td>
-                    <td>
-                      {row.parentPhone}
-                      <br />
-                      {row.parentEmail}
-                    </td>
-                    <td>{row.submittedAt ? new Date(row.submittedAt).toLocaleString() : '—'}</td>
-                    <td>
-                      <StatusBadge status={enrollmentStatusLabel(row.status)} />
-                    </td>
-                    <td>
-                      <Button type="button" variant="ghost" onClick={() => setSelected(row)}>
-                        View
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </div>
-          <div className="admin-card-list">
-            {rows.map((row) => (
-              <article key={row.applicationId} className="hlc-card">
-                <h2>{row.studentFullname}</h2>
-                <p>{row.preferredProgram}</p>
-                <p>{row.parentEmail}</p>
-                <StatusBadge status={enrollmentStatusLabel(row.status)} />
-                <Button type="button" onClick={() => setSelected(row)}>
-                  View details
-                </Button>
-              </article>
-            ))}
-          </div>
-        </>
-      )}
-
-      {selected ? (
-        <div className="enroll-overlay" onClick={() => setSelected(null)} role="presentation">
-          <div className="enroll-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="enroll-modal-close" onClick={() => setSelected(null)} aria-label="Close">
-              ×
-            </button>
-            <header className="enroll-modal-head">
-              <h2>{selected.studentFullname}</h2>
-              <p className="enroll-modal-school">{selected.preferredProgram}</p>
-            </header>
-            <div className="enroll-modal-form">
-              <p>
-                <strong>Date of birth:</strong> {selected.studentBirthdate || '—'}
-              </p>
-              <p>
-                <strong>Age:</strong> {selected.studentAge || '—'}
-              </p>
-              <p>
-                <strong>Gender:</strong> {selected.studentGender || '—'}
-              </p>
-              <p>
-                <strong>Parent / guardian:</strong> {selected.parentFullname}
-              </p>
-              <p>
-                <strong>Parent contact:</strong> {selected.parentPhone}
-              </p>
-              <p>
-                <strong>Parent email:</strong> {selected.parentEmail}
-              </p>
-              <p>
-                <strong>Submitted:</strong> {selected.submittedAt ? new Date(selected.submittedAt).toLocaleString() : '—'}
-              </p>
-              <p>
-                <strong>Status:</strong> {enrollmentStatusLabel(selected.status)}
-              </p>
-              {selected.notes ? (
-                <pre className="admin-notes">{selected.notes}</pre>
-              ) : null}
-              <div className="enroll-modal-actions">
-                {selected.status === 'pending_review' || selected.status === 'pending' ? (
+      <AdminTable
+        rows={rows}
+        rowKey={(row) => row.applicationId}
+        empty={<EmptyState title="No enrollments" hint="Submitted applications will appear here." />}
+        columns={[
+          { key: 'name', header: 'Student Name', sortValue: (row) => row.studentFullname, render: (row) => row.studentFullname },
+          { key: 'program', header: 'Program', sortValue: (row) => row.preferredProgram, render: (row) => emptyCell(row.preferredProgram) },
+          {
+            key: 'date',
+            header: 'Enrollment Date',
+            sortValue: (row) => row.submittedAt || '',
+            render: (row) => emptyCell(formatDate(row.submittedAt)),
+          },
+          {
+            key: 'status',
+            header: 'Status',
+            sortValue: (row) => enrollmentStatusLabel(row.status),
+            render: (row) => <StatusBadge status={enrollmentStatusLabel(row.status)} />,
+          },
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (row) => (
+              <div className="icon-actions">
+                <button type="button" className="icon-btn" aria-label={`View ${row.studentFullname}`} onClick={() => setSelected(row)}>
+                  👁
+                </button>
+                {row.status === 'pending_review' || row.status === 'pending' ? (
                   <>
-                    <Button type="button" onClick={() => setStatusFor(selected.applicationId, 'approved')}>
-                      Approve
-                    </Button>
-                    <Button type="button" variant="ghost" onClick={() => setStatusFor(selected.applicationId, 'rejected')}>
-                      Reject
-                    </Button>
-                    <Button type="button" variant="danger" onClick={() => setStatusFor(selected.applicationId, 'cancelled')}>
-                      Cancel
-                    </Button>
+                    <button type="button" className="icon-btn" aria-label="Approve" onClick={() => { setSelected(row); setConfirm('approved'); }}>
+                      ✓
+                    </button>
+                    <button type="button" className="icon-btn danger" aria-label="Reject" onClick={() => { setSelected(row); setConfirm('rejected'); }}>
+                      ✕
+                    </button>
                   </>
                 ) : null}
               </div>
-            </div>
-          </div>
-        </div>
+            ),
+          },
+        ]}
+        renderCard={(row) => (
+          <article className="admin-stack-card">
+            <h3>{row.studentFullname}</h3>
+            <p>{row.preferredProgram}</p>
+            <p>{row.submittedAt ? new Date(row.submittedAt).toLocaleDateString() : '—'}</p>
+            <StatusBadge status={enrollmentStatusLabel(row.status)} />
+            <Button type="button" variant="ghost" onClick={() => setSelected(row)}>
+              View
+            </Button>
+          </article>
+        )}
+      />
+
+      {selected ? (
+        <AdminModal
+          title={selected.studentFullname}
+          description={selected.preferredProgram}
+          onClose={() => {
+            setSelected(null);
+            setConfirm(null);
+          }}
+          footer={
+            selected.status === 'pending_review' || selected.status === 'pending' ? (
+              <>
+                <Button type="button" onClick={() => setConfirm('approved')}>
+                  Approve
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setConfirm('rejected')}>
+                  Reject
+                </Button>
+              </>
+            ) : undefined
+          }
+        >
+          <p>
+            <strong>Date of birth:</strong> {selected.studentBirthdate || '—'}
+          </p>
+          <p>
+            <strong>Age:</strong> {selected.studentAge || '—'}
+          </p>
+          <p>
+            <strong>Parent / guardian:</strong> {selected.parentFullname}
+          </p>
+          <p>
+            <strong>Contact:</strong> {selected.parentPhone} · {selected.parentEmail}
+          </p>
+          <p>
+            <strong>Submitted:</strong> {selected.submittedAt ? new Date(selected.submittedAt).toLocaleString() : '—'}
+          </p>
+          <p>
+            <strong>Status:</strong> {enrollmentStatusLabel(selected.status)}
+          </p>
+          {selected.notes ? <pre className="admin-notes">{selected.notes}</pre> : null}
+        </AdminModal>
+      ) : null}
+
+      {confirm && selected ? (
+        <AdminModal
+          title={`${enrollmentStatusLabel(confirm)} application`}
+          description={`This will mark ${selected.studentFullname} as ${enrollmentStatusLabel(confirm).toLowerCase()}.`}
+          onClose={() => setConfirm(null)}
+          footer={
+            <>
+              <Button type="button" variant="ghost" onClick={() => setConfirm(null)}>
+                Cancel
+              </Button>
+              <Button type="button" variant={confirm === 'rejected' ? 'danger' : 'primary'} onClick={() => void setStatusFor(selected.applicationId, confirm)}>
+                Confirm
+              </Button>
+            </>
+          }
+        >
+          <p>The family record stays in Enrollments with the updated status badge.</p>
+        </AdminModal>
       ) : null}
     </>
   );

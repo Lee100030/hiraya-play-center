@@ -16,7 +16,7 @@ type Particle = {
   color: string;
 };
 
-const COLORS = ['#d4af37', '#e8c547', '#f7f1e1', '#0dfb67', '#f0e826'];
+const COLORS = ['#C9A227', '#D4AF37', '#F5F1E6', '#8FAF8A', '#E8D48B'];
 
 function fillCapsule(ctx: CanvasRenderingContext2D, width: number, height: number) {
   const radius = height / 2;
@@ -54,12 +54,13 @@ export function AntigravityField() {
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+      const box = canvas.parentElement?.getBoundingClientRect();
+      const w = Math.max(1, Math.floor(box?.width || window.innerWidth));
+      const h = Math.max(1, Math.floor(box?.height || window.innerHeight));
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (!particles.length) {
         particles = Array.from({ length: count }, () => spawn(w, h));
@@ -101,15 +102,15 @@ export function AntigravityField() {
       mouse.x += (target.x - mouse.x) * 0.18;
       mouse.y += (target.y - mouse.y) * 0.18;
 
-      const w = window.innerWidth;
-      const h = window.innerHeight;
+      const w = canvas.clientWidth || window.innerWidth;
+      const h = canvas.clientHeight || window.innerHeight;
       const radius = magnet();
       const orbit = ring();
       ctx.clearRect(0, 0, w, h);
 
       const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 140);
       glow.addColorStop(0, 'rgba(212, 175, 55, 0.16)');
-      glow.addColorStop(0.45, 'rgba(13, 251, 103, 0.05)');
+      glow.addColorStop(0.45, 'rgba(201, 162, 39, 0.04)');
       glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = glow;
       ctx.fillRect(mouse.x - 140, mouse.y - 140, 280, 280);

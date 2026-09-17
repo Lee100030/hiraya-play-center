@@ -6,15 +6,16 @@ import type {
   TableHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
-import { statusTone } from '@hiraya/utils';
+import { statusLabel, statusTone } from '@hiraya/utils';
 
 export function Button({
   variant = 'primary',
+  className,
   children,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' | 'icon' }) {
   return (
-    <button className={`hlc-btn hlc-btn-${variant}`} {...props}>
+    <button className={['hlc-btn', `hlc-btn-${variant}`, className].filter(Boolean).join(' ')} {...props}>
       {children}
     </button>
   );
@@ -37,21 +38,35 @@ export function Field({
   children,
   error,
   required,
+  optional,
+  hint,
 }: {
   label: string;
   children: ReactNode;
   error?: string;
   required?: boolean;
+  optional?: boolean;
+  hint?: string;
 }) {
+  const markOptional = optional && !/\(optional\)/i.test(label);
   return (
     <label className="hlc-field">
       <span className="hlc-label">
         {label}
-        {required ? ' *' : ''}
+        {required ? ' *' : markOptional ? ' (optional)' : ''}
       </span>
       {children}
+      {hint ? <span className="hlc-field-hint">{hint}</span> : null}
       {error ? <span className="hlc-field-error">{error}</span> : null}
     </label>
+  );
+}
+
+export function FieldLegend() {
+  return (
+    <p className="hlc-field-legend">
+      Required fields are marked with *. Optional fields say (optional).
+    </p>
   );
 }
 
@@ -64,9 +79,24 @@ export function Card({ children, title }: { children: ReactNode; title?: string 
   );
 }
 
+export function EmptyValue({ label = 'Not assigned' }: { label?: string }) {
+  return <span className="cell-empty">{label}</span>;
+}
+
+export function emptyCell(value?: string | number | null) {
+  if (value == null) return <EmptyValue />;
+  const text = String(value).trim();
+  if (!text || text === '—') return <EmptyValue />;
+  return text;
+}
+
 export function StatusBadge({ status }: { status?: string }) {
-  const tone = statusTone(status);
-  return <span className={`hlc-badge hlc-badge-${tone}`}>{status || '—'}</span>;
+  const raw = (status || '').trim();
+  if (!raw || raw === '—') {
+    return <EmptyValue />;
+  }
+  const tone = statusTone(raw);
+  return <span className={`hlc-badge hlc-badge-${tone}`}>{statusLabel(raw)}</span>;
 }
 
 export function Alert({
@@ -94,10 +124,8 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
 
 export function Table({ children, ...props }: TableHTMLAttributes<HTMLTableElement>) {
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table className="hlc-table" {...props}>
-        {children}
-      </table>
-    </div>
+    <table className="hlc-table" {...props}>
+      {children}
+    </table>
   );
 }

@@ -41,6 +41,11 @@ public class HirayaLearningCenterDbContext : DbContext
     public DbSet<CenterHoliday> CenterHolidays => Set<CenterHoliday>();
     public DbSet<TeacherDuty> TeacherDuties => Set<TeacherDuty>();
     public DbSet<WebsiteGalleryItem> WebsiteGallery => Set<WebsiteGalleryItem>();
+    public DbSet<StaffTask> StaffTasks => Set<StaffTask>();
+    public DbSet<SessionPackage> SessionPackages => Set<SessionPackage>();
+    public DbSet<SessionHistoryEntry> SessionHistory => Set<SessionHistoryEntry>();
+    public DbSet<TeacherComment> TeacherComments => Set<TeacherComment>();
+    public DbSet<TeacherAdminNote> TeacherNotes => Set<TeacherAdminNote>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -226,6 +231,57 @@ public class HirayaLearningCenterDbContext : DbContext
             e.HasIndex(x => x.Status);
             e.Property(x => x.Caption).HasColumnType("text");
             e.Property(x => x.FilePath).HasMaxLength(512).HasColumnType("varchar(512)");
+        });
+
+        Key<StaffTask>(modelBuilder, "staff_tasks", x => x.TaskId);
+        modelBuilder.Entity<StaffTask>(e =>
+        {
+            e.HasIndex(x => x.Status);
+            e.Property(x => x.Description).HasColumnType("text");
+            e.Property(x => x.Response).HasColumnType("text");
+            e.Property(x => x.TeacherIds).HasColumnType("text");
+        });
+
+        Key<SessionPackage>(modelBuilder, "session_packages", x => x.PackageId);
+        modelBuilder.Entity<SessionPackage>(e =>
+        {
+            e.HasIndex(x => x.StudentId);
+            e.HasIndex(x => x.Status);
+        });
+
+        Key<SessionHistoryEntry>(modelBuilder, "session_history", x => x.HistoryId);
+        modelBuilder.Entity<SessionHistoryEntry>(e =>
+        {
+            e.HasIndex(x => x.PackageId);
+            e.HasIndex(x => x.StudentId);
+            e.Property(x => x.Note).HasColumnType("text");
+        });
+
+        Key<TeacherComment>(modelBuilder, "teacher_comments", x => x.CommentId);
+        modelBuilder.Entity<TeacherComment>(e =>
+        {
+            e.HasIndex(x => x.TeacherId);
+            e.Property(x => x.Content).HasColumnType("text");
+            e.Property(x => x.Reply).HasColumnType("text");
+        });
+
+        Key<TeacherAdminNote>(modelBuilder, "teacher_notes", x => x.NoteId);
+        modelBuilder.Entity<TeacherAdminNote>(e =>
+        {
+            e.HasIndex(x => x.TeacherId);
+            e.Property(x => x.Content).HasColumnType("text");
+        });
+
+        modelBuilder.Entity<NewsItem>(e =>
+        {
+            e.Property(x => x.Audience).HasMaxLength(64);
+            e.Property(x => x.AudienceId).HasMaxLength(191);
+            e.Property(x => x.Priority).HasMaxLength(32);
+        });
+
+        modelBuilder.Entity<SystemAlert>(e =>
+        {
+            e.Property(x => x.RelatedRecordId).HasMaxLength(191);
         });
     }
 

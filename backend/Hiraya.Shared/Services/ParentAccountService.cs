@@ -177,6 +177,28 @@ public class ParentAccountService
         });
     }
 
+    public async Task DeleteAsync(string parentUserId, HirayaUser actor)
+    {
+        EnsureAdmin(actor);
+        await _repository.MutateAsync(async db =>
+        {
+            var user = RequireParent(db, parentUserId);
+            if (string.Equals(actor.UserId, user.UserId, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("You cannot delete the account you are signed in with.");
+
+            var name = string.IsNullOrWhiteSpace(user.Fullname) ? user.Email : user.Fullname;
+            foreach (var link in db.ParentStudents.Where(l => l.ParentId == user.UserId).ToList())
+                FamilyAccess.DeactivateLink(db, user.UserId, link.StudentId);
+            db.ParentStudents.RemoveAll(l => l.ParentId == user.UserId);
+            db.AccountInvitations.RemoveAll(i => i.UserId == user.UserId);
+            db.Alerts.RemoveAll(a => a.RecipientId == user.UserId);
+            db.Users.RemoveAll(u => u.UserId == user.UserId);
+            AuditService.Append(db, actor, AuditModules.Parents, "delete", "user", parentUserId,
+                $"{actor.Fullname} deleted parent account {name}.");
+            await Task.CompletedTask;
+        });
+    }
+
     public async Task<int> ActivateAllAsync(HirayaUser actor)
     {
         EnsureAdmin(actor);
@@ -362,7 +384,7 @@ public class ParentAccountService
     private static HirayaUser RequireParent(HirayaDatabase db, string parentUserId)
     {
         FamilyAccess.EnsureLegacyLinks(db);
-        var user = db.Users.FirstOrDefault(u => u.UserId == parentUserId)
+        var user = db.Users.FirstOrDefault(u => string.Equals(u.UserId, parentUserId, StringComparison.OrdinalIgnoreCase))
                    ?? throw new InvalidOperationException("Parent account was not found.");
         if (user.Role != UserRoles.Parent)
             throw new InvalidOperationException("That account is not a parent.");

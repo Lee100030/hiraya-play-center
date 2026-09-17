@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/components/StoreProvider';
-import { Button, Card, Field, Input, Loading } from '@hiraya/ui';
+import { Button, Card, EmptyValue, Field, Input, Loading } from '@hiraya/ui';
 import { api } from '@/lib/api';
 import { FormEvent, useState } from 'react';
 
@@ -33,9 +33,10 @@ export default function ProfilePage() {
     <>
       <h1>Profile</h1>
       <Card title={live?.fullname || 'Account'}>
-        <p>{live?.email}</p>
-        <p>{live?.role}</p>
-        <p>{live?.phone}</p>
+        <p>{live?.email || <EmptyValue />}</p>
+        <p>{live?.role || <EmptyValue />}</p>
+        <p>{live?.phone || <EmptyValue />}</p>
+        <p>{live?.address || <EmptyValue />}</p>
       </Card>
       <form className="hlc-card" style={{ marginTop: 16, maxWidth: 420 }} onSubmit={onPassword}>
         <h2>Change password</h2>

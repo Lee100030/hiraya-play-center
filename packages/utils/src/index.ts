@@ -10,10 +10,35 @@ export function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+export function formatDateTime(value?: string | null) {
+  const raw = (value || '').trim();
+  if (!raw) return '';
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  const hasTime = /T\d{2}:/.test(raw) || raw.includes(' ');
+  return parsed.toLocaleString('en-PH', {
+    dateStyle: 'medium',
+    timeStyle: hasTime ? 'short' : undefined,
+  });
+}
+
+export function formatDate(value?: string | null) {
+  const raw = (value || '').trim();
+  if (!raw) return '';
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw.slice(0, 10);
+  return parsed.toLocaleDateString('en-PH', { dateStyle: 'medium' });
+}
+
 export function displayName(user?: Pick<HirayaUser, 'fullname' | 'firstName' | 'lastName'> | null): string {
   if (!user) return '';
-  if (user.fullname?.trim()) return user.fullname.trim();
-  return [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+  const first = (user.firstName || '').trim();
+  const last = (user.lastName || '').trim();
+  const assembled = [first, last].filter(Boolean).join(' ').trim();
+  const full = (user.fullname || '').trim();
+  if (assembled.includes(' ')) return assembled;
+  if (full.includes(' ')) return full;
+  return assembled || full;
 }
 
 export function studentDisplay(student: Student): string {
@@ -41,16 +66,33 @@ export function roleLabel(role?: string | null): string {
 }
 
 export function isAdmin(role?: string | null): boolean {
-  return role === UserRoles.SuperAdmin || role === UserRoles.Admin;
+  return role === UserRoles.SuperAdmin;
 }
 
 export function isFamilyRole(role?: string | null): boolean {
-  return role === UserRoles.Parent || role === UserRoles.Student;
+  return role === UserRoles.Parent;
+}
+
+/** Demo seed passwords are accepted case-insensitively (admin123 → Admin123). */
+export function resolveLoginPassword(login: string, password: string): string {
+  const key = (login || '').trim().split('@')[0].toLowerCase();
+  const canonical =
+    key === 'admin' || key === 'ops'
+      ? 'Admin123'
+      : key === 'teacher'
+        ? 'Teacher123'
+        : key === 'staff'
+          ? 'Staff123'
+          : key === 'parent'
+            ? 'Parent123'
+            : '';
+  if (canonical && password.toLowerCase() === canonical.toLowerCase()) return canonical;
+  return password;
 }
 
 export function defaultAllows(role: string, permission: string): boolean {
   if (role === UserRoles.SuperAdmin) return true;
-  if (role === UserRoles.Admin) return permission !== PermissionKeys.ManageRoles;
+  if (role === UserRoles.Admin) return false;
   if (role === UserRoles.Teacher) {
     return (
       [
@@ -90,21 +132,48 @@ export function allows(db: HirayaDatabase | null, role: string | null | undefine
   return defaultAllows(role, permission);
 }
 
-export function formatDate(value?: string | null): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+export function todayIsoDate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
-export function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+export function statusLabel(value?: string) {
+  const raw = (value || '').trim();
+  if (!raw || raw === '—') return '';
+  if (raw === 'pending_review' || raw === 'pending') return 'Pending';
+  return raw.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function statusTone(status?: string): 'success' | 'warn' | 'danger' | 'muted' {
-  const s = (status || '').toLowerCase();
-  if (['active', 'paid', 'present', 'published', 'confirmed'].includes(s)) return 'success';
-  if (['pending', 'pending_review', 'late', 'partial', 'draft'].includes(s)) return 'warn';
-  if (['overdue', 'absent', 'failed', 'cancelled', 'archived', 'deactivated'].includes(s)) return 'danger';
+  const s = (status || '').toLowerCase().replace(/[\s-]+/g, '_');
+  if (['active', 'paid', 'present', 'published', 'confirmed', 'approved', 'read', 'completed'].includes(s)) return 'success';
+  if (['pending', 'pending_review', 'late', 'partial', 'draft', 'unread', 'assigned', 'in_progress', 'submitted', 'almost_finished', 'high'].includes(s)) return 'warn';
+  if (['overdue', 'absent', 'failed', 'rejected'].includes(s)) return 'danger';
   return 'muted';
 }
+
+export { remainingSessions, remainingSessionsFor, normalizeSessionPackage, completeOneSession } from './sessionPackage';
+export { studentDayAttendance, isStudentHereToday, confirmStudentPresentToday } from './studentAttendance';
+export {
+  defaultCoeDraft,
+  downloadCertificateOfEmployment,
+  buildCoeParagraphs,
+  type CoeDraft,
+  type CoeHonorific,
+} from './certificateOfEmployment';
+export { operationsStats } from './operationsStats';
+export { assignedStudentsForTeacher, programsForTeacher, studentPlacement } from './assignments';
+
+export {
+  HKLC_NAV_GROUPS,
+  HKLC_WORKBOOK_SHEETS,
+  hklcNavForRole,
+  hklcTaskBoards,
+  type HklcNavGroup,
+  type HklcNavId,
+  type HklcNavItem,
+} from './hklcOperations';
+

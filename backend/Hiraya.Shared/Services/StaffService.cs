@@ -16,12 +16,18 @@ public class StaffSaveRequest
     public string Password { get; set; } = "";
     public string ConfirmPassword { get; set; } = "";
     public string Phone { get; set; } = "";
+    public string Address { get; set; } = "";
+    public string Notes { get; set; } = "";
+    public string FirstName { get; set; } = "";
+    public string MiddleName { get; set; } = "";
+    public string LastName { get; set; } = "";
     public string Role { get; set; } = UserRoles.Teacher;
     public string EmployeeCode { get; set; } = "";
     public string Position { get; set; } = "";
     public string Specialty { get; set; } = "";
     public string Bio { get; set; } = "";
     public string Status { get; set; } = "active";
+    public string HireDate { get; set; } = "";
 }
 
 public class StaffService
@@ -81,7 +87,7 @@ public class StaffService
         });
     }
 
-    public async Task SaveAsync(StaffSaveRequest input, HirayaUser? actor = null)
+    public async Task<string> SaveAsync(StaffSaveRequest input, HirayaUser? actor = null)
     {
         if (!Navigation.CanManageStaff(actor?.Role))
             throw new UnauthorizedAccessException("You cannot manage teachers or staff.");
@@ -89,17 +95,22 @@ public class StaffService
         var email = EnsureLoginEmail(input.Email);
         if (string.IsNullOrWhiteSpace(fullname))
             throw new InvalidOperationException("Full name is required.");
+        if (string.IsNullOrWhiteSpace(input.Role) ||
+            string.Equals(input.Role, UserRoles.Staff, StringComparison.OrdinalIgnoreCase))
+            input.Role = UserRoles.Teacher;
         if (!Navigation.IsEmployeeRole(input.Role))
-            throw new InvalidOperationException("Role must be Teacher or Staff.");
+            throw new InvalidOperationException("Teachers are the only staff accounts. Parents are created in Parent Monitoring.");
         EnsurePassword(input, requireForNew: string.IsNullOrWhiteSpace(input.UserId));
         if (await TryRemoteAsync(HttpMethod.Put, "api/staff", input))
-            return;
+            return string.IsNullOrWhiteSpace(input.UserId) ? email : input.UserId;
 
+        var userId = "";
         await _repository.MutateAsync(async db =>
         {
-            ApplySave(db, input, actor);
+            userId = ApplySave(db, input, actor);
             await Task.CompletedTask;
         });
+        return userId;
     }
 
     public Task ArchiveAsync(string userId, HirayaUser? actor = null) =>
@@ -165,13 +176,13 @@ public class StaffService
         }
     }
 
-    internal static void ApplySave(HirayaDatabase db, StaffSaveRequest input, HirayaUser? actor)
+    internal static string ApplySave(HirayaDatabase db, StaffSaveRequest input, HirayaUser? actor)
     {
-        var fullname = input.Fullname.Trim();
+        var fullname = (input.Fullname ?? "").Trim();
         var email = EnsureLoginEmail(input.Email);
-        var role = input.Role;
-        var userId = string.IsNullOrWhiteSpace(input.UserId) ? IdFactory.New("usr") : input.UserId;
-        var profileId = string.IsNullOrWhiteSpace(input.ProfileId) ? IdFactory.New("tprof") : input.ProfileId;
+        var role = string.IsNullOrWhiteSpace(input.Role) ? UserRoles.Teacher : input.Role.Trim();
+        var userId = string.IsNullOrWhiteSpace(input.UserId) ? IdFactory.New("usr") : input.UserId.Trim();
+        var profileId = string.IsNullOrWhiteSpace(input.ProfileId) ? IdFactory.New("tprof") : input.ProfileId.Trim();
         var existing = db.Users.FirstOrDefault(u => u.UserId == userId);
 
         if (db.Users.Any(u =>
@@ -191,7 +202,7 @@ public class StaffService
             throw new InvalidOperationException("Password is required for a new account.");
 
         EnsureDefaultSpecialties(db);
-        var specialty = input.Specialty.Trim();
+        var specialty = (input.Specialty ?? "").Trim();
         if (!string.IsNullOrWhiteSpace(specialty) &&
             !db.TeacherRoleOptions.Any(r => string.Equals(r.Name, specialty, StringComparison.OrdinalIgnoreCase)))
         {
@@ -204,6 +215,10 @@ public class StaffService
 
         var existingProfile = db.TeacherProfiles.FirstOrDefault(p => p.UserId == userId);
         var status = string.IsNullOrWhiteSpace(input.Status) ? "active" : input.Status.Trim();
+        var phone = (input.Phone ?? "").Trim();
+        var position = (input.Position ?? "").Trim();
+        var employeeCode = (input.EmployeeCode ?? "").Trim();
+        var bio = (input.Bio ?? "").Trim();
 
         db.Users.RemoveAll(u => u.UserId == userId);
         var saved = new HirayaUser
@@ -214,13 +229,14 @@ public class StaffService
             Password = storedPassword,
             Role = role,
             Status = status,
-            Phone = input.Phone.Trim(),
-            Username = existing?.Username ?? "",
-            FirstName = existing?.FirstName ?? "",
-            MiddleName = existing?.MiddleName ?? "",
-            LastName = existing?.LastName ?? "",
-            Address = existing?.Address ?? "",
-            Position = string.IsNullOrWhiteSpace(input.Position) ? existing?.Position ?? "" : input.Position.Trim(),
+            Phone = phone,
+            Username = string.IsNullOrWhiteSpace(existing?.Username) ? email.Split('@')[0] : existing.Username,
+            FirstName = string.IsNullOrWhiteSpace(input.FirstName) ? existing?.FirstName ?? "" : input.FirstName.Trim(),
+            MiddleName = input.MiddleName?.Trim() ?? existing?.MiddleName ?? "",
+            LastName = string.IsNullOrWhiteSpace(input.LastName) ? existing?.LastName ?? "" : input.LastName.Trim(),
+            Address = string.IsNullOrWhiteSpace(input.Address) ? existing?.Address ?? "" : input.Address.Trim(),
+            Notes = string.IsNullOrWhiteSpace(input.Notes) ? existing?.Notes ?? "" : input.Notes.Trim(),
+            Position = string.IsNullOrWhiteSpace(position) ? existing?.Position ?? "" : position,
             ProfileImagePath = existing?.ProfileImagePath ?? "",
             CreatedAt = string.IsNullOrWhiteSpace(existing?.CreatedAt) ? DateTime.UtcNow.ToString("o") : existing!.CreatedAt,
             LastLoginAt = existing?.LastLoginAt ?? "",
@@ -232,9 +248,7 @@ public class StaffService
             TimeFormat = existing?.TimeFormat ?? "HH:mm",
             Theme = existing?.Theme ?? "system"
         };
-        saved.SyncDisplayName();
-        if (string.IsNullOrWhiteSpace(saved.FirstName) && string.IsNullOrWhiteSpace(saved.LastName))
-            saved.Fullname = fullname;
+        ApplyStaffDisplayName(saved, fullname);
         db.Users.Add(saved);
 
         db.TeacherProfiles.RemoveAll(p => p.ProfileId == profileId || p.UserId == userId);
@@ -242,20 +256,35 @@ public class StaffService
         {
             ProfileId = profileId,
             UserId = userId,
-            EmployeeCode = string.IsNullOrWhiteSpace(input.EmployeeCode)
+            EmployeeCode = string.IsNullOrWhiteSpace(employeeCode)
                 ? existingProfile?.EmployeeCode ?? userId.ToUpperInvariant()
-                : input.EmployeeCode.Trim(),
-            Position = input.Position.Trim(),
+                : employeeCode,
+            Position = position,
             Specialty = specialty,
-            Phone = input.Phone.Trim(),
-            Bio = input.Bio.Trim(),
-            HireDate = existingProfile?.HireDate ?? DateTime.UtcNow.ToString("o"),
+            Phone = phone,
+            Bio = bio,
+            HireDate = string.IsNullOrWhiteSpace(input.HireDate)
+                ? existingProfile?.HireDate ?? DateTime.UtcNow.ToString("yyyy-MM-dd")
+                : input.HireDate.Trim(),
             Status = status
         });
 
         AuditService.Append(db, actor, AuditModules.Staff,
             string.IsNullOrWhiteSpace(input.UserId) ? "create" : "update",
             "user", userId, $"Saved {fullname} ({role}).");
+        return userId;
+    }
+
+    internal static void ApplyStaffDisplayName(HirayaUser saved, string fullname)
+    {
+        var parts = fullname.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 1)
+            saved.FirstName = parts[0];
+        if (parts.Length >= 2)
+            saved.LastName = string.Join(" ", parts.Skip(1));
+        saved.SyncDisplayName();
+        if (string.IsNullOrWhiteSpace(saved.FirstName) && string.IsNullOrWhiteSpace(saved.LastName))
+            saved.Fullname = fullname;
     }
 
     public async Task DeleteAsync(string userId, HirayaUser? actor = null)

@@ -4,11 +4,15 @@ import { useStore } from '@/components/StoreProvider';
 import { Button, EmptyState, Field, Input, Loading, Select, StatusBadge, Table } from '@hiraya/ui';
 import { newId, studentDisplay } from '@hiraya/utils';
 import type { Student } from '@hiraya/types';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 export default function StudentsPage() {
   const { store, loading, save } = useStore();
   const [query, setQuery] = useState('');
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (q) setQuery(q);
+  }, []);
   const [editing, setEditing] = useState<Student | null>(null);
 
   const rows = useMemo(

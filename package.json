@@ -7,6 +7,7 @@
   "scripts": {
     "start": "npm --prefix apps/web run dev",
     "dev": "npm --prefix apps/web run dev",
+    "dev:api": "dotnet run --project backend/Hiraya.Api/Hiraya.Api.csproj --urls http://0.0.0.0:5188",
     "dev:web": "npm --prefix apps/web run dev",
     "dev:mobile": "npx --yes pnpm@9.15.4 --filter @hiraya/mobile start",
     "dev:desktop": "npx --yes pnpm@9.15.4 --filter @hiraya/desktop dev",

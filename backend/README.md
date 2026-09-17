@@ -12,8 +12,8 @@ The original MAUI / Blazor projects were not deleted. Database schema and data s
 dotnet run --project Hiraya.Api
 ```
 
-Default URL: `http://127.0.0.1:5188`
+Default URL: `http://0.0.0.0:5188` (website, desktop, and phones on the LAN).
 
 Connection string is in `Hiraya.Api/appsettings.json`. Override the password with `HIRAYA_MYSQL_PASSWORD`.
 
-CORS includes the new Next.js (`3000`), Vite/Electron (`5173`), and Expo (`8081`) origins.
+CORS includes Next.js (`3000`), Vite/Electron (`5173`), and Expo (`8081`). Hub catalog: `GET /api/hub`.

@@ -18,10 +18,10 @@ export function SiteHeader({ site }: { site: PublicSite }) {
     <header className="site-header">
       <Link href="/" className="site-brand">
         {src.startsWith('/') ? (
-          <Image src="/images/hiraya-crest.png" alt="" width={48} height={48} />
+          <Image src="/images/hiraya-crest.png" alt="HIRAYA Learning Center crest" width={48} height={48} />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="" width={48} height={48} />
+          <img src={src} alt="HIRAYA Learning Center crest" width={48} height={48} />
         )}
         <span>HIRAYA</span>
       </Link>
@@ -37,7 +37,7 @@ export function SiteHeader({ site }: { site: PublicSite }) {
       </button>
       <nav id="public-nav" className={open ? 'site-nav open' : 'site-nav'}>
         {publicNav.map((item, index) => (
-          <span key={item.href} style={{ display: 'contents' }}>
+          <span key={item.href} className="site-nav-item">
             {index > 0 ? <span className="nav-dot" aria-hidden="true" /> : null}
             <Link
               href={item.href}

@@ -14,7 +14,7 @@ public static class ParentPortalApi
         {
             var actor = await ActorAsync(request, repo);
             if (actor is null)
-                return Results.Unauthorized();
+                return SessionExpired();
             if (actor.Role != UserRoles.Parent)
                 return Forbidden();
             return Results.Json(StoreSanitizer.PublicCopy(new HirayaDatabase { Users = [actor] }).Users[0], JsonDefaults.Options);
@@ -24,7 +24,7 @@ public static class ParentPortalApi
         {
             var actor = await ActorAsync(request, repo);
             if (actor is null)
-                return Results.Unauthorized();
+                return SessionExpired();
             if (actor.Role != UserRoles.Parent)
                 return Forbidden();
             var db = await repo.LoadAsync();
@@ -65,7 +65,7 @@ public static class ParentPortalApi
         {
             var actor = await ActorAsync(request, repo);
             if (actor is null)
-                return Results.Unauthorized();
+                return SessionExpired();
             if (!Navigation.CanManageStudents(actor.Role))
                 return Forbidden();
             var db = await repo.LoadAsync();
@@ -79,7 +79,7 @@ public static class ParentPortalApi
         {
             var actor = await ActorAsync(request, repo);
             if (actor is null)
-                return Results.Unauthorized();
+                return SessionExpired();
             try
             {
                 var created = await parents.CreateAsync(body, actor);
@@ -95,11 +95,99 @@ public static class ParentPortalApi
             }
         });
 
+        app.MapPut("/api/admin/parents/{parentId}", async (string parentId, ParentCreateRequest body, HttpRequest request, IHirayaRepository repo, ParentAccountService parents) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return SessionExpired();
+            try
+            {
+                await parents.UpdateProfileAsync(parentId, body, actor);
+                if (!string.IsNullOrWhiteSpace(body.Password))
+                    await parents.SetPasswordAsync(parentId, body.Password, body.ConfirmPassword, actor);
+                var data = await repo.LoadAsync();
+                return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbidden();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ParentWriteError(ex);
+            }
+        });
+
+        app.MapPost("/api/admin/parents/{parentId}/update", async (string parentId, ParentCreateRequest body, HttpRequest request, IHirayaRepository repo, ParentAccountService parents) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return SessionExpired();
+            try
+            {
+                await parents.UpdateProfileAsync(parentId, body, actor);
+                if (!string.IsNullOrWhiteSpace(body.Password))
+                    await parents.SetPasswordAsync(parentId, body.Password, body.ConfirmPassword, actor);
+                var data = await repo.LoadAsync();
+                return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbidden();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ParentWriteError(ex);
+            }
+        });
+
+        app.MapPost("/api/admin/parents/{parentId}/active", async (string parentId, ParentActiveBody body, HttpRequest request, IHirayaRepository repo, ParentAccountService parents) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return SessionExpired();
+            try
+            {
+                await parents.SetActiveAsync(parentId, body.Active, actor);
+                var data = await repo.LoadAsync();
+                return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbidden();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
+        app.MapDelete("/api/admin/parents/{parentId}", async (string parentId, HttpRequest request, IHirayaRepository repo, ParentAccountService parents) =>
+        {
+            var actor = await ActorAsync(request, repo);
+            if (actor is null)
+                return SessionExpired();
+            try
+            {
+                await parents.DeleteAsync(parentId, actor);
+                var data = await repo.LoadAsync();
+                return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbidden();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
         app.MapPost("/api/admin/parents/{parentId}/children", async (string parentId, AssignChildBody body, HttpRequest request, IHirayaRepository repo, ParentAccountService parents) =>
         {
             var actor = await ActorAsync(request, repo);
             if (actor is null)
-                return Results.Unauthorized();
+                return SessionExpired();
             try
             {
                 await parents.AssignChildAsync(parentId, body.StudentId, body.Relationship, actor);
@@ -119,7 +207,7 @@ public static class ParentPortalApi
         {
             var actor = await ActorAsync(request, repo);
             if (actor is null)
-                return Results.Unauthorized();
+                return SessionExpired();
             try
             {
                 await parents.RemoveChildAsync(parentId, studentId, actor);
@@ -162,7 +250,7 @@ public static class ParentPortalApi
     {
         var actor = await ActorAsync(request, repo);
         if (actor is null)
-            return Results.Unauthorized();
+            return SessionExpired();
         if (actor.Role != UserRoles.Parent)
             return Forbidden();
         var db = await repo.LoadAsync();
@@ -181,13 +269,21 @@ public static class ParentPortalApi
         var gate = request.HttpContext.RequestServices.GetService<SessionGate>();
         if (gate is not null && gate.IsRevoked(ticket.Jti))
             return null;
-        var db = await repo.LoadAsync();
-        var user = db.Users.FirstOrDefault(u => u.UserId == ticket.UserId);
+        var user = await repo.FindUserAsync(ticket.UserId, null);
         if (user is null || !AccountStatuses.AllowsPortalLogin(user.Status))
             return null;
         if (!string.Equals(ticket.Stamp, SessionTokens.PasswordStamp(user.Password), StringComparison.Ordinal))
             return null;
         return user;
+    }
+
+    private static IResult SessionExpired() =>
+        Results.Json(new { error = "Your session expired. Sign out and sign in, then save again." }, statusCode: StatusCodes.Status401Unauthorized);
+
+    private static IResult ParentWriteError(InvalidOperationException ex)
+    {
+        var notFound = ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase);
+        return Results.Json(new { error = ex.Message }, statusCode: notFound ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest);
     }
 
     private static IResult Forbidden() =>
@@ -200,6 +296,11 @@ public static class ParentPortalApi
     {
         public string StudentId { get; set; } = "";
         public string Relationship { get; set; } = FamilyRelationships.Guardian;
+    }
+
+    public sealed class ParentActiveBody
+    {
+        public bool Active { get; set; }
     }
 
     public sealed class ActivateBody

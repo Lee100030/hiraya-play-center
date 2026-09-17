@@ -22,6 +22,12 @@ public class NewsSaveRequest
     public bool Notify { get; set; } = true;
 }
 
+public class DirectMessageRequest
+{
+    public string ToUserId { get; set; } = "";
+    public string Body { get; set; } = "";
+}
+
 public class NotificationService
 {
     private readonly IHirayaRepository _repository;
@@ -133,6 +139,96 @@ public class NotificationService
                 "notification", input.Audience, $"Sent “{title}” to {people.Count} recipient(s).");
             await Task.CompletedTask;
         });
+    }
+
+    public static string DirectThreadKey(string a, string b)
+    {
+        var ids = new[] { a.Trim(), b.Trim() }.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+        return $"dm:{ids[0]}:{ids[1]}";
+    }
+
+    public async Task SendDirectAsync(HirayaUser actor, DirectMessageRequest input)
+    {
+        var body = (input.Body ?? "").Trim();
+        if (body.Length == 0)
+            throw new InvalidOperationException("Write a message first.");
+        if (body.Length > 2000)
+            throw new InvalidOperationException("Keep the message under 2,000 characters.");
+
+        await _repository.MutateAsync(async db =>
+        {
+            string targetId;
+            if (UserRoles.IsAdmin(actor.Role))
+            {
+                targetId = (input.ToUserId ?? "").Trim();
+                var target = db.Users.FirstOrDefault(u => u.UserId == targetId);
+                if (target is null)
+                    throw new InvalidOperationException("That person was not found.");
+                if (target.Role is not (UserRoles.Teacher or UserRoles.Parent))
+                    throw new InvalidOperationException("Messages can only be sent to a teacher or parent.");
+            }
+            else if (actor.Role is UserRoles.Teacher or UserRoles.Parent)
+            {
+                var admin = db.Users.FirstOrDefault(u => u.Role == UserRoles.SuperAdmin);
+                if (admin is null)
+                    throw new InvalidOperationException("The center administrator could not be reached.");
+                targetId = admin.UserId;
+            }
+            else
+            {
+                throw new UnauthorizedAccessException("You cannot send this message.");
+            }
+
+            if (string.Equals(actor.UserId, targetId, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Choose someone else to message.");
+
+            var targetUser = db.Users.First(u => u.UserId == targetId);
+            var thread = DirectThreadKey(actor.UserId, targetId);
+            var now = DateTime.UtcNow.ToString("o");
+            var senderName = PersonLabel(actor);
+            var targetName = PersonLabel(targetUser);
+
+            db.Alerts.Add(new SystemAlert
+            {
+                AlertId = IdFactory.New("al"),
+                Kind = NotificationKinds.Direct,
+                Title = senderName,
+                Message = body,
+                RecipientId = targetId,
+                Href = actor.UserId,
+                RelatedRecordId = thread,
+                Status = "unread",
+                CreatedAt = now,
+                Read = false
+            });
+            db.Alerts.Add(new SystemAlert
+            {
+                AlertId = IdFactory.New("al"),
+                Kind = NotificationKinds.Direct,
+                Title = $"To {targetName}",
+                Message = body,
+                RecipientId = actor.UserId,
+                Href = targetId,
+                RelatedRecordId = thread,
+                Status = "sent",
+                CreatedAt = now,
+                Read = true,
+                ReadAt = now
+            });
+            AuditService.Append(db, actor, AuditModules.Notifications, "direct",
+                "user", targetId, $"{senderName} messaged {targetName}.");
+            await Task.CompletedTask;
+        });
+    }
+
+    static string PersonLabel(HirayaUser user)
+    {
+        var assembled = $"{user.FirstName} {user.LastName}".Trim();
+        if (!string.IsNullOrWhiteSpace(assembled))
+            return assembled;
+        if (!string.IsNullOrWhiteSpace(user.Fullname))
+            return user.Fullname.Trim();
+        return string.IsNullOrWhiteSpace(user.Email) ? user.UserId : user.Email;
     }
 
     public async Task MarkReadAsync(string alertId, HirayaUser actor, bool read = true)

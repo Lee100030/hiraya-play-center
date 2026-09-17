@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Hide the Next.js "N" launcher so it cannot cover public form controls.
+  devIndicators: false,
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   transpilePackages: [
     '@hiraya/api',
     '@hiraya/config',

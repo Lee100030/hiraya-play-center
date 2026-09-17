@@ -1,8 +1,8 @@
-import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'crypto';
+import { randomBytes } from 'crypto';
 import mysql, { type Connection, type RowDataPacket } from 'mysql2/promise';
 import { emptyStore, type EnrollmentApplication, type HirayaDatabase } from '@hiraya/types';
 import { enrollPublicSchema } from '@hiraya/validation';
-import { ageFromBirthdate, CLOUD_SESSION_TOKEN, demoAdminUser, formatEnrollmentNotes } from '@/lib/enrollment';
+import { ageFromBirthdate, formatEnrollmentNotes } from '@/lib/enrollment';
 
 export const maxMysqlDuration = 30;
 
@@ -228,53 +228,4 @@ export async function saveEnrollmentStatuses(incoming: HirayaDatabase) {
     }
   });
   return loadStore();
-}
-
-function verifyPassword(password: string, stored: string) {
-  if (!stored.startsWith('pbkdf2$')) return stored === password;
-  const parts = stored.split('$');
-  if (parts.length !== 4) return false;
-  const iterations = Number(parts[1]);
-  const salt = Buffer.from(parts[2], 'base64');
-  const expected = Buffer.from(parts[3], 'base64');
-  const actual = pbkdf2Sync(password, salt, iterations, expected.length, 'sha256');
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
-}
-
-export async function loginWithMysql(login: string, password: string) {
-  const user = await withMysql(async (conn) => {
-    const [rows] = await conn.query<RowDataPacket[]>(
-      'SELECT * FROM users WHERE LOWER(Username) = LOWER(?) OR LOWER(Email) = LOWER(?) LIMIT 1',
-      [login.trim(), login.trim()],
-    );
-    return rows[0] || null;
-  }).catch(() => null);
-
-  if (user) {
-    const hash = String(user.PasswordHash || user.Password || '');
-    if (verifyPassword(password, hash)) {
-      return {
-        token: CLOUD_SESSION_TOKEN,
-        user: {
-          ...demoAdminUser(),
-          userId: String(user.UserId || 'user_admin'),
-          username: String(user.Username || login),
-          firstName: String(user.FirstName || 'Center'),
-          lastName: String(user.LastName || 'Admin'),
-          fullname: String(user.Fullname || `${user.FirstName || ''} ${user.LastName || ''}`.trim() || 'Center Admin'),
-          email: String(user.Email || ''),
-          role: String(user.Role || 'admin'),
-        },
-      };
-    }
-  }
-
-  const allowed =
-    login.trim().toLowerCase() === 'admin' && (password === 'admin123' || password === 'Admin123');
-  if (!allowed) throw new Error('Invalid username or password.');
-  return { token: CLOUD_SESSION_TOKEN, user: demoAdminUser() };
-}
-
-export function cloudSessionOk(token: string | null) {
-  return token === CLOUD_SESSION_TOKEN;
 }

@@ -64,7 +64,7 @@ public static class PermissionCatalog
     public static bool DefaultAllows(string role, string permission) => role switch
     {
         UserRoles.SuperAdmin => true,
-        UserRoles.Admin => permission != PermissionKeys.ManageRoles,
+        UserRoles.Admin => false,
         UserRoles.Teacher => permission is
             PermissionKeys.ViewStudents or
             PermissionKeys.ViewTeachers or

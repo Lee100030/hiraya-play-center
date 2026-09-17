@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { displayName, roleLabel } from '@hiraya/utils';
 import { appNav } from '@/lib/nav';
 import { useAuth } from './AuthProvider';
+import { StoreStatus } from './StoreStatus';
 import { Button } from '@hiraya/ui';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -51,7 +52,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Sign out
           </Button>
         </header>
-        <main className="page">{children}</main>
+        <main className="page">
+          <StoreStatus />
+          {children}
+        </main>
       </div>
     </div>
   );

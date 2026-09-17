@@ -1,20 +1,20 @@
 'use client';
 
 import { useStore } from '@/components/StoreProvider';
+import { api } from '@/lib/api';
 import { Button, EmptyState, Loading, StatusBadge, Table } from '@hiraya/ui';
 import { newId, studentDisplay } from '@hiraya/utils';
 
 export default function EnrollmentPage() {
-  const { store, loading, save } = useStore();
+  const { store, loading, refresh } = useStore();
   if (loading) return <Loading />;
 
   async function setApplicationStatus(id: string, status: string) {
-    await save({
-      ...store,
-      enrollmentApplications: store.enrollmentApplications.map((row) =>
-        row.applicationId === id ? { ...row, status } : row,
-      ),
-    });
+    if (status === 'approved') await api.approveEnrollment(id);
+    else if (status === 'rejected') await api.rejectEnrollment(id);
+    else if (status === 'cancelled') await api.cancelEnrollment(id);
+    else return;
+    await refresh();
   }
 
   return (
@@ -48,7 +48,7 @@ export default function EnrollmentPage() {
                   <StatusBadge status={row.status} />
                 </td>
                 <td>
-                  {row.status === 'pending_review' ? (
+                  {row.status === 'pending_review' || row.status === 'pending' ? (
                     <>
                       <Button type="button" onClick={() => setApplicationStatus(row.applicationId, 'approved')}>
                         Approve

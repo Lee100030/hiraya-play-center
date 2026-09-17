@@ -15,7 +15,7 @@ public class UserAdminSaveRequest
     public string Phone { get; set; } = "";
     public string Address { get; set; } = "";
     public string Position { get; set; } = "";
-    public string Role { get; set; } = UserRoles.Staff;
+    public string Role { get; set; } = UserRoles.Teacher;
     public string Status { get; set; } = "active";
     public string Notes { get; set; } = "";
     public string Password { get; set; } = "";

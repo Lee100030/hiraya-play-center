@@ -70,6 +70,22 @@ public class EfHirayaRepository : IHirayaRepository
     public Task DeleteItemAsync(string collection, string id, CancellationToken ct = default) =>
         MutateAsync(_ => Task.CompletedTask, ct);
 
+    public async Task<HirayaUser?> FindUserAsync(string? userId, string? login, CancellationToken ct = default)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+        if (!string.IsNullOrWhiteSpace(userId))
+            return await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId, ct);
+
+        var key = (login ?? "").Trim();
+        if (key.Length == 0)
+            return null;
+        var lower = key.ToLower();
+        return await db.Users.AsNoTracking().FirstOrDefaultAsync(u =>
+            (u.Email != null && u.Email.ToLower() == lower) ||
+            (u.Username != null && u.Username.ToLower() == lower) ||
+            (u.Fullname != null && u.Fullname.ToLower() == lower), ct);
+    }
+
     private async Task<HirayaDatabase> LoadUnlockedAsync(CancellationToken ct)
     {
         await using var db = await _factory.CreateDbContextAsync(ct);
@@ -103,18 +119,25 @@ public class EfHirayaRepository : IHirayaRepository
             CenterHolidays = await db.CenterHolidays.AsNoTracking().ToListAsync(ct),
             TeacherDuties = await db.TeacherDuties.AsNoTracking().ToListAsync(ct),
             WebsiteGallery = await db.WebsiteGallery.AsNoTracking().ToListAsync(ct),
-            Settings = await db.Settings.AsNoTracking().FirstOrDefaultAsync(ct) ?? new CenterSettings()
+            StaffTasks = await db.StaffTasks.AsNoTracking().ToListAsync(ct),
+            SessionPackages = await db.SessionPackages.AsNoTracking().ToListAsync(ct),
+            SessionHistory = await db.SessionHistory.AsNoTracking().ToListAsync(ct),
+            TeacherComments = await SafeToListAsync(db.TeacherComments, ct),
+            TeacherNotes = await SafeToListAsync(db.TeacherNotes, ct),
+            Settings = await db.Settings.AsNoTracking().OrderBy(s => s.SettingsId).FirstOrDefaultAsync(ct) ?? new CenterSettings()
         };
         FamilyAccess.EnsureLegacyLinks(data);
+        WorkflowOps.EnsureLists(data);
         PermissionCatalog.EnsureRows(data);
         EnsureRoles(data);
         EnsureRooms(data);
-        return Clone(data);
+        return data;
     }
 
     private async Task SaveUnlockedAsync(HirayaDatabase incoming, CancellationToken ct)
     {
         var data = Clone(incoming);
+        WorkflowOps.EnsureLists(data);
         EnsureRoles(data);
         EnsureRooms(data);
         PermissionCatalog.EnsureRows(data);
@@ -164,6 +187,11 @@ public class EfHirayaRepository : IHirayaRepository
                 await ReplaceAsync(db.CenterHolidays, data.CenterHolidays, ct);
                 await ReplaceAsync(db.TeacherDuties, data.TeacherDuties, ct);
                 await ReplaceAsync(db.WebsiteGallery, data.WebsiteGallery, ct);
+                await ReplaceAsync(db.StaffTasks, data.StaffTasks, ct);
+                await ReplaceAsync(db.SessionPackages, data.SessionPackages, ct);
+                await ReplaceAsync(db.SessionHistory, data.SessionHistory, ct);
+                await ReplaceAsync(db.TeacherComments, data.TeacherComments, ct);
+                await ReplaceAsync(db.TeacherNotes, data.TeacherNotes, ct);
 
                 var settings = await db.Settings.ToListAsync(ct);
                 db.Settings.RemoveRange(settings);
@@ -180,11 +208,23 @@ public class EfHirayaRepository : IHirayaRepository
         }
     }
 
-    private static async Task ReplaceAsync<T>(DbSet<T> set, List<T> next, CancellationToken ct) where T : class
+    private static async Task<List<T>> SafeToListAsync<T>(DbSet<T> set, CancellationToken ct) where T : class
+    {
+        try
+        {
+            return await set.AsNoTracking().ToListAsync(ct);
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static async Task ReplaceAsync<T>(DbSet<T> set, List<T>? next, CancellationToken ct) where T : class
     {
         var current = await set.ToListAsync(ct);
         set.RemoveRange(current);
-        if (next.Count > 0)
+        if (next is { Count: > 0 })
             await set.AddRangeAsync(next, ct);
     }
 

@@ -1,16 +1,27 @@
 import { ProgramCard } from '@/components/public/ProgramCard';
 import type { PublicSite } from '@hiraya/types';
 
-export function ProgramsSection({ site }: { site: PublicSite }) {
+export function ProgramsSection({
+  site,
+  standalone = false,
+  loading = false,
+}: {
+  site: PublicSite;
+  standalone?: boolean;
+  loading?: boolean;
+}) {
+  const Heading = standalone ? 'h1' : 'h2';
   return (
-    <section className="public-section" id="programs">
-      <p className="eyebrow">Learning</p>
-      <h2>Our programs</h2>
-      <p>Choose a program that is right for your child.</p>
-      {site.programs.length === 0 ? (
-        <p>Programs will be available soon.</p>
+    <section className={standalone ? 'public-inner programs-page' : 'public-section'} id="programs">
+      <header className="programs-header">
+        <p className="eyebrow">Learning</p>
+        <Heading>Our programs</Heading>
+        <p>Choose a program that is right for your child — from kindergarten through the early grades.</p>
+      </header>
+      {loading || !site.programs.length ? (
+        <p className="programs-empty">{loading ? 'Loading programs…' : 'Programs will be available soon.'}</p>
       ) : (
-        <div className="program-grid">
+        <div className="programs-grid">
           {site.programs.map((program) => (
             <ProgramCard key={program.programId || program.name} program={program} />
           ))}

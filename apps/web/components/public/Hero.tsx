@@ -1,10 +1,13 @@
 'use client';
 
+import { AntigravityField } from '@/components/public/AntigravityField';
+import { CampusTour } from '@/components/public/CampusTour';
+import { EnrollTrigger } from '@/components/public/enrollment';
 import { crestSrc } from '@/lib/publicSite';
 import type { PublicSite } from '@hiraya/types';
 import dynamic from 'next/dynamic';
-import { EnrollTrigger } from '@/components/public/enrollment';
 import Image from 'next/image';
+import { useState } from 'react';
 
 const GradientWaves = dynamic(() => import('@/components/public/GradientWaves'), {
   ssr: false,
@@ -12,13 +15,16 @@ const GradientWaves = dynamic(() => import('@/components/public/GradientWaves'),
 
 export function Hero({ site }: { site: PublicSite }) {
   const src = crestSrc(site);
+  const [tour, setTour] = useState(false);
+
   return (
     <section className="home-stage">
+      <AntigravityField />
       <div className="home-waves" aria-hidden="true">
         <GradientWaves
-          horizonColor="#0dfb67"
-          waveColor="#f0e826"
-          crestColor="#FFFFFF"
+          horizonColor="#12301F"
+          waveColor="#C9A227"
+          crestColor="#F5F1E6"
           speed={0.4}
           amplitude={2.5}
           waveScale={0.6}
@@ -54,16 +60,26 @@ export function Hero({ site }: { site: PublicSite }) {
           <img className="home-hero-logo" src={src} alt="HIRAYA Learning Center crest" />
         )}
         <p className="home-kicker">{site.centerName}</p>
-        <h1>Growing Minds. Building Futures.</h1>
-        <p>{site.welcomeMessage || site.description}</p>
-        <EnrollTrigger className="btn-hero">Enroll now</EnrollTrigger>
+        <h1>
+          Growing minds.
+          <br />
+          Building&nbsp;futures.
+        </h1>
+        <p className="lede-light">{site.welcomeMessage || site.description}</p>
+        <div className="hero-cta-row">
+          <EnrollTrigger className="btn-hero">Start enrollment</EnrollTrigger>
+          <button type="button" className="btn-ghost-light" onClick={() => setTour(true)}>
+            Watch a campus tour
+          </button>
+        </div>
       </div>
       <p className="home-trust">
         <span className="home-stars" aria-hidden="true">
           ★★★★★
         </span>
-        <span>{site.businessHours || 'Growing together with care'}</span>
+        <span>Small classes · Family partnership · {site.businessHours || 'Weekday learning'}</span>
       </p>
+      {tour ? <CampusTour onClose={() => setTour(false)} /> : null}
     </section>
   );
 }

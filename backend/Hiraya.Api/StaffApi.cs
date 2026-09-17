@@ -15,8 +15,8 @@ public static class StaffApi
                 return Results.Unauthorized();
             return await RunAsync(async () =>
             {
-                await new StaffService(repo).SaveAsync(body, actor);
-                return Results.NoContent();
+                var userId = await new StaffService(repo).SaveAsync(body, actor);
+                return Results.Json(new { userId }, JsonDefaults.Options);
             });
         });
 

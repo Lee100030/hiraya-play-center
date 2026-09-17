@@ -1,52 +1,9 @@
-import type { EnrollmentApplication, EnrollmentApplyInput, HirayaDatabase, HirayaUser } from '@hiraya/types';
-import { UserRoles, emptyStore } from '@hiraya/types';
+import type { EnrollmentApplication, EnrollmentApplyInput, HirayaDatabase } from '@hiraya/types';
+import { emptyStore } from '@hiraya/types';
 import { newId } from '@hiraya/utils';
 
-export const DEMO_SESSION_TOKEN = 'hiraya-demo-local';
-export const CLOUD_SESSION_TOKEN = 'hiraya-cloud-mysql';
 export const LOCAL_ENROLLMENTS_KEY = 'hiraya.local.enrollments';
 export const LOCAL_STORE_KEY = 'hiraya.local.store';
-
-export function isDemoToken(token?: string | null) {
-  return token === DEMO_SESSION_TOKEN;
-}
-
-export function isCloudToken(token?: string | null) {
-  return token === CLOUD_SESSION_TOKEN;
-}
-
-export function isDemoLogin(login: string, password: string) {
-  return login.trim().toLowerCase() === 'admin' && password === 'admin123';
-}
-
-export function demoAdminUser(): HirayaUser {
-  return {
-    userId: 'user_demo_admin',
-    username: 'admin',
-    firstName: 'Center',
-    middleName: '',
-    lastName: 'Admin',
-    fullname: 'Center Admin',
-    email: 'admin@hiraya.local',
-    role: UserRoles.Admin,
-    status: 'active',
-    phone: '',
-    address: '',
-    position: 'Administrator',
-    profileImagePath: '',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    lastLoginAt: new Date().toISOString(),
-    notifyAttendance: true,
-    notifyPayments: true,
-    notifySchedule: true,
-    notifyProgress: true,
-    dateFormat: 'yyyy-MM-dd',
-    timeFormat: 'HH:mm',
-    theme: 'light',
-    notes: 'Local demonstration session',
-  };
-}
 
 export function ageFromBirthdate(value: string) {
   if (!value) return '';

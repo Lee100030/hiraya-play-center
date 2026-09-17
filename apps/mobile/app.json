@@ -4,15 +4,61 @@
     "slug": "hiraya-learning-center",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/hiraya-crest.png",
     "scheme": "hiraya",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.hiraya.learningcenter" },
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#00000000",
+      "translucent": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hiraya.learningcenter",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "HIRAYA uses your local network to reach the school API while you are testing with Expo Go.",
+        "NSPhotoLibraryUsageDescription": "HIRAYA uses your photos so teachers and parents can set a profile picture.",
+        "NSCameraUsageDescription": "HIRAYA uses the camera so you can take a profile photo."
+      }
+    },
     "android": {
       "package": "com.hiraya.learningcenter",
-      "adaptiveIcon": { "backgroundColor": "#0B3D2E" }
+      "usesCleartextTraffic": true,
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/hiraya-crest.png",
+        "backgroundColor": "#0B3D2E"
+      }
     },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "HIRAYA uses your photos so you can set a profile picture.",
+          "cameraPermission": "HIRAYA uses the camera so you can take a profile photo."
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/PlayfairDisplay-Bold.ttf",
+            "./assets/fonts/CormorantGaramond-Bold.ttf",
+            "./assets/fonts/Poppins-Regular.ttf",
+            "./assets/fonts/Poppins-SemiBold.ttf",
+            "./assets/fonts/Poppins-Bold.ttf",
+            "./assets/fonts/Outfit-Regular.ttf"
+          ]
+        }
+      ]
+    ],
     "experiments": { "typedRoutes": true }
   }
 }

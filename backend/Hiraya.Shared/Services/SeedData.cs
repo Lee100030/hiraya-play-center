@@ -30,21 +30,6 @@ public static class SeedData
                 },
                 new HirayaUser
                 {
-                    UserId = "usr_admin_001",
-                    FirstName = "Lea",
-                    LastName = "Cruz",
-                    Fullname = "Lea Cruz",
-                    Username = "ops",
-                    Email = "ops@hiraya.local",
-                    Role = UserRoles.Admin,
-                    Status = "active",
-                    Phone = "09170000005",
-                    Position = "Operations Administrator",
-                    CreatedAt = "2024-01-01T00:00:00.000Z",
-                    Password = PasswordHasher.Hash("Admin123")
-                },
-                new HirayaUser
-                {
                     UserId = "usr_teacher_001",
                     FirstName = "Ana",
                     LastName = "Reyes",
@@ -57,21 +42,6 @@ public static class SeedData
                     Position = "Lead Teacher",
                     CreatedAt = "2024-01-01T00:00:00.000Z",
                     Password = PasswordHasher.Hash("Teacher123")
-                },
-                new HirayaUser
-                {
-                    UserId = "usr_staff_001",
-                    FirstName = "Rico",
-                    LastName = "Mendoza",
-                    Fullname = "Rico Mendoza",
-                    Username = "staff",
-                    Email = "staff@hiraya.local",
-                    Role = UserRoles.Staff,
-                    Status = "active",
-                    Phone = "09170000006",
-                    Position = "Front Desk",
-                    CreatedAt = "2024-01-01T00:00:00.000Z",
-                    Password = PasswordHasher.Hash("Staff123")
                 },
                 new HirayaUser
                 {
@@ -100,18 +70,6 @@ public static class SeedData
                     Phone = "09170000002",
                     Bio = "Lead classroom teacher.",
                     HireDate = "2022-03-01T00:00:00.000Z",
-                    Status = "active"
-                },
-                new TeacherProfile
-                {
-                    ProfileId = "tprof_002",
-                    UserId = "usr_staff_001",
-                    EmployeeCode = "S-001",
-                    Position = "Front Desk",
-                    Specialty = "",
-                    Phone = "09170000006",
-                    Bio = "Operations support.",
-                    HireDate = "2024-01-15T00:00:00.000Z",
                     Status = "active"
                 }
             ],
@@ -567,5 +525,34 @@ public static class SeedData
     {
         var diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
         return date.Date.AddDays(-diff);
+    }
+
+    public static bool TryCanonicalSeedPassword(string login, string password, out string canonical)
+    {
+        canonical = "";
+        var key = (login ?? "").Trim();
+        if (key.Contains('@'))
+            key = key.Split('@')[0];
+        var typed = password ?? "";
+        canonical = key.ToLowerInvariant() switch
+        {
+            "admin" or "ops" => "Admin123",
+            "teacher" => "Teacher123",
+            "staff" => "Staff123",
+            "parent" => "Parent123",
+            _ => ""
+        };
+        if (canonical.Length == 0)
+            return false;
+        return string.Equals(typed, canonical, StringComparison.Ordinal) ||
+               string.Equals(typed, canonical, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static HirayaUser? FindSeedUser(string login)
+    {
+        var key = (login ?? "").Trim();
+        return Create().Users.FirstOrDefault(u =>
+            string.Equals(u.Username, key, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(u.Email, key, StringComparison.OrdinalIgnoreCase));
     }
 }

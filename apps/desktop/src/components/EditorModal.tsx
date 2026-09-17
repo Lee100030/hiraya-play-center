@@ -1,0 +1,65 @@
+import { Button } from '@hiraya/ui';
+import type { FormEvent, ReactNode } from 'react';
+
+export function FormSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="form-section form-span">
+      <h3 className="form-section-title">{title}</h3>
+      <div className="form-section-body">{children}</div>
+    </section>
+  );
+}
+
+export function EditorModal({
+  title,
+  children,
+  error,
+  busy,
+  submitLabel,
+  onClose,
+  onSubmit,
+  legend = true,
+}: {
+  title: string;
+  children: ReactNode;
+  error?: string | null;
+  busy?: boolean;
+  submitLabel: string;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
+  legend?: boolean;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <form
+        className="modal-card"
+        encType="multipart/form-data"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSubmit(event);
+        }}
+      >
+        <header>
+          <div className="modal-heading">
+            <h2>{title}</h2>
+            {legend ? <p className="form-legend">* Required</p> : null}
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </header>
+        {error ? <p className="form-error">{error}</p> : null}
+        <div className="form-grid">{children}</div>
+        <footer>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy}>
+            {busy ? 'Saving…' : submitLabel}
+          </Button>
+        </footer>
+      </form>
+    </div>
+  );
+}

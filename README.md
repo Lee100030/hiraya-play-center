@@ -2,6 +2,15 @@
 
 This repository is the **React / Next.js / Expo / Electron** frontend for HIRAYA Learning Center. It talks to the existing **ASP.NET Core API** and **MySQL** database. The original .NET MAUI Hybrid app in `C:\Users\LEE\source\repos\Hiraya` is unchanged.
 
+**Current mode: local only.** Do not `git push`, Vercel deploy, or DigitalOcean publish until the project owner asks.
+
+## Local first
+
+1. Start **XAMPP MySQL** (`hiraya_learning_center`).
+2. `npm run dev:api` → Hiraya.Api at `http://127.0.0.1:5188`
+3. `npm start` → website at `http://127.0.0.1:3000`
+4. Optional: `npm run dev:desktop` and `npm run dev:mobile` against the same API.
+
 ## Apps
 
 | App | Folder | Where it runs |
@@ -9,7 +18,7 @@ This repository is the **React / Next.js / Expo / Electron** frontend for HIRAYA
 | **Website** | `apps/web` | Vercel (Next.js). Root Directory must be `apps/web`. |
 | **Desktop app** | `apps/desktop` | Electron on Windows. Not deployed on Vercel. |
 | **Mobile** | `apps/mobile` | Expo / Android. Not deployed on Vercel. |
-| Backend | `backend/Hiraya.Api` | ASP.NET API + MySQL |
+| **Central API** | `backend/Hiraya.Api` | One hub for website, desktop, and mobile. MySQL `hiraya_learning_center`. `http://0.0.0.0:5188` |
 
 ### Vercel (website only)
 
@@ -67,11 +76,21 @@ You can also press **F5** and choose **Run website**, or **Terminal → Run Task
 
 `pnpm` does not need to be installed globally. `npm start` runs the Next.js app.
 
-Login data needs MySQL (XAMPP) plus the API in a second terminal:
+Login and school data are **centralized**. Start MySQL (XAMPP), then the API in a second terminal:
 
 ```bash
-dotnet run --project backend/Hiraya.Api/Hiraya.Api.csproj --urls http://127.0.0.1:5188
+npm run dev:api
 ```
+
+That process is the hub:
+
+| Client | How it reaches the hub |
+|--------|-------------------------|
+| Website (`:3000`) | Browser → Next `/api/*` → Hiraya.Api `:5188` |
+| Desktop (`:5173`) | Electron → Hiraya.Api `:5188` |
+| Mobile (Expo) | Phone LAN IP → Hiraya.Api `:5188` |
+
+Same logins, students, enrollments, and store document. Session header: `X-Hiraya-Session`. Check `GET http://127.0.0.1:5188/api/hub`.
 
 ## First run (if packages are missing)
 

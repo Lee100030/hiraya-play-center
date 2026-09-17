@@ -45,10 +45,34 @@ public class ProfilePhotoService
             try { File.Delete(leftover); } catch { /* ignore locked files */ }
         }
 
-        await File.WriteAllBytesAsync(full, bytes);
+        await WriteReplacingAsync(full, bytes);
         var stored = relative.Replace('\\', '/');
         await _accounts.SetProfileImageAsync(userId, stored);
         return stored;
+    }
+
+    static async Task WriteReplacingAsync(string full, byte[] bytes)
+    {
+        var temp = full + ".tmp";
+        await File.WriteAllBytesAsync(temp, bytes);
+        IOException? last = null;
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            try
+            {
+                File.Copy(temp, full, overwrite: true);
+                try { File.Delete(temp); } catch { /* leftover temp is ok */ }
+                return;
+            }
+            catch (IOException ex)
+            {
+                last = ex;
+                await Task.Delay(40 * (attempt + 1));
+            }
+        }
+        try { File.Delete(temp); } catch { /* ignore */ }
+        throw new InvalidOperationException(
+            last?.Message ?? "Could not replace the profile photo. Close the record and try again.");
     }
 
     public async Task RemoveAsync(string userId)

@@ -5,10 +5,10 @@ import { ProgramsSection } from '@/components/public/ProgramsSection';
 import { usePublicSite } from '@/hooks/usePublicSite';
 
 export default function ProgramsPage() {
-  const { site } = usePublicSite();
+  const { site, loading } = usePublicSite();
   return (
     <PublicChrome>
-      <ProgramsSection site={site} />
+      <ProgramsSection site={site} standalone loading={loading} />
     </PublicChrome>
   );
 }

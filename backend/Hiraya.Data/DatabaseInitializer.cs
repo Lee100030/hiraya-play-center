@@ -27,10 +27,13 @@ public static class DatabaseInitializer
             await db.Database.EnsureCreatedAsync();
         }
 
+        await EnsureWorkflowSchemaAsync(db, logger);
+
         if (await db.Users.AnyAsync())
         {
             await BackfillParentStudentsAsync(db, logger);
             await BackfillCenterOperationsAsync(db, logger);
+            await NormalizeProductAccountsAsync(db, logger);
             return;
         }
 
@@ -73,7 +76,27 @@ public static class DatabaseInitializer
         db.CenterHolidays.AddRange(seed.CenterHolidays);
         db.TeacherDuties.AddRange(seed.TeacherDuties);
         db.Settings.Add(seed.Settings);
+        if (seed.StaffTasks.Count > 0) db.StaffTasks.AddRange(seed.StaffTasks);
+        if (seed.SessionPackages.Count > 0) db.SessionPackages.AddRange(seed.SessionPackages);
+        if (seed.SessionHistory.Count > 0) db.SessionHistory.AddRange(seed.SessionHistory);
         await db.SaveChangesAsync();
+        await NormalizeProductAccountsAsync(db, logger);
+    }
+
+    private static async Task NormalizeProductAccountsAsync(HirayaLearningCenterDbContext db, ILogger logger)
+    {
+        try
+        {
+            var data = new HirayaDatabase { Users = await db.Users.ToListAsync() };
+            ProductAccounts.NormalizeDirectory(data);
+            var changed = await db.SaveChangesAsync();
+            if (changed > 0)
+                logger.LogInformation("Normalized product accounts ({Count} changes).", changed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not normalize Super Admin / teacher / parent accounts.");
+        }
     }
 
     private static async Task BackfillParentStudentsAsync(HirayaLearningCenterDbContext db, ILogger logger)
@@ -156,6 +179,118 @@ public static class DatabaseInitializer
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Could not backfill center operations records.");
+        }
+    }
+
+    private static async Task EnsureWorkflowSchemaAsync(HirayaLearningCenterDbContext db, ILogger logger)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS staff_tasks (
+                  TaskId varchar(191) NOT NULL,
+                  Title varchar(191) NOT NULL,
+                  Description text NOT NULL,
+                  Priority varchar(191) NOT NULL,
+                  DueAt varchar(191) NOT NULL,
+                  TeacherIds text NOT NULL,
+                  ClassId varchar(191) NOT NULL,
+                  StudentId varchar(191) NOT NULL,
+                  Status varchar(191) NOT NULL,
+                  Response text NOT NULL,
+                  AttachmentName varchar(191) NOT NULL,
+                  AssignedBy varchar(191) NOT NULL,
+                  CompletedAt varchar(191) NOT NULL,
+                  CompletedBy varchar(191) NOT NULL,
+                  CreatedAt varchar(191) NOT NULL,
+                  UpdatedAt varchar(191) NOT NULL,
+                  PRIMARY KEY (TaskId)
+                );
+                """);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS session_packages (
+                  PackageId varchar(191) NOT NULL,
+                  StudentId varchar(191) NOT NULL,
+                  ProgramId varchar(191) NOT NULL,
+                  TotalSessions int NOT NULL,
+                  UsedSessions int NOT NULL,
+                  RemainingSessions int NOT NULL,
+                  StartDate varchar(191) NOT NULL,
+                  ExpirationDate varchar(191) NOT NULL,
+                  Status varchar(191) NOT NULL,
+                  CreatedAt varchar(191) NOT NULL,
+                  UpdatedAt varchar(191) NOT NULL,
+                  PRIMARY KEY (PackageId)
+                );
+                """);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS session_history (
+                  HistoryId varchar(191) NOT NULL,
+                  PackageId varchar(191) NOT NULL,
+                  StudentId varchar(191) NOT NULL,
+                  ScheduleId varchar(191) NOT NULL,
+                  AttendanceId varchar(191) NOT NULL,
+                  Action varchar(191) NOT NULL,
+                  Note text NOT NULL,
+                  ActorId varchar(191) NOT NULL,
+                  CreatedAt varchar(191) NOT NULL,
+                  PRIMARY KEY (HistoryId)
+                );
+                """);
+            await TryAddColumn(db, "announcements", "Audience", "varchar(64) NOT NULL DEFAULT 'everyone'");
+            await TryAddColumn(db, "announcements", "AudienceId", "varchar(191) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "announcements", "Priority", "varchar(32) NOT NULL DEFAULT 'normal'");
+            await TryAddColumn(db, "announcements", "ExpiresAt", "varchar(191) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "notifications", "RelatedRecordId", "varchar(191) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "notifications", "ReadAt", "varchar(191) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "schedules", "ProgramId", "varchar(191) NOT NULL DEFAULT ''");
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS teacher_comments (
+                  CommentId varchar(191) NOT NULL,
+                  TeacherId varchar(191) NOT NULL,
+                  CreatedBy varchar(191) NOT NULL,
+                  Content text NOT NULL,
+                  Visibility varchar(191) NOT NULL,
+                  Status varchar(191) NOT NULL,
+                  Reply text NOT NULL,
+                  CreatedAt varchar(191) NOT NULL,
+                  UpdatedAt varchar(191) NOT NULL,
+                  PRIMARY KEY (CommentId)
+                );
+                """);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS teacher_notes (
+                  NoteId varchar(191) NOT NULL,
+                  TeacherId varchar(191) NOT NULL,
+                  Title varchar(191) NOT NULL,
+                  Content text NOT NULL,
+                  Priority varchar(191) NOT NULL,
+                  ReminderDate varchar(191) NOT NULL,
+                  Visibility varchar(191) NOT NULL,
+                  Status varchar(191) NOT NULL,
+                  CreatedBy varchar(191) NOT NULL,
+                  CreatedAt varchar(191) NOT NULL,
+                  UpdatedAt varchar(191) NOT NULL,
+                  PRIMARY KEY (NoteId)
+                );
+                """);
+            logger.LogInformation("Workflow schema is ready (tasks, sessions, teacher workspace notes).");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not ensure workflow schema. Create staff_tasks / session_packages tables in MySQL.");
+        }
+    }
+
+    private static async Task TryAddColumn(HirayaLearningCenterDbContext db, string table, string column, string definition)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync($"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition};");
+        }
+        catch
+        {
+            /* column already exists */
         }
     }
 

@@ -67,6 +67,7 @@ public sealed class PublicEnrollmentRequest
 public sealed class PublicEnrollmentResult
 {
     public bool Submitted { get; set; }
+    public string ApplicationId { get; set; } = "";
 }
 
 public static class PublicSiteCatalog
@@ -94,9 +95,11 @@ public static class PublicSiteCatalog
             Mission = settings.Mission,
             Vision = settings.Vision,
             Values = settings.Values,
-            Address = settings.Address,
-            Phone = settings.Phone,
-            Email = settings.Email,
+            Address = string.IsNullOrWhiteSpace(settings.Address)
+                ? "Rodriguez (Montalban), Rizal, Philippines"
+                : settings.Address,
+            Phone = string.IsNullOrWhiteSpace(settings.Phone) ? "+63 917 753 4258" : settings.Phone,
+            Email = string.IsNullOrWhiteSpace(settings.Email) ? "hirayakids.learning@gmail.com" : settings.Email,
             Website = settings.Website,
             BusinessHours = string.IsNullOrWhiteSpace(settings.BusinessHours)
                 ? "Monday–Friday, 8:00–17:00"

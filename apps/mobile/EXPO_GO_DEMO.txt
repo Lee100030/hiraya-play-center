@@ -1,0 +1,26 @@
+HIRAYA mobile demo (Expo Go)
+
+This zip is a backup of the Expo app. For the defense, run the app from the PC
+on the same Wi-Fi as the phone. Do not publish to GitHub, Vercel, or a domain.
+
+On the demo PC (folder: Hiraya play Center React)
+
+1. XAMPP MySQL on
+2. npm run dev:api          (wait until http://127.0.0.1:5188/api/health is ok)
+3. npm run dev:mobile       (QR appears in the terminal)
+
+On the phone
+
+- Install Expo Go
+- Same Wi-Fi as the PC
+- Scan the QR code
+- API must be the PC LAN IP on port 5188, not localhost
+
+Logins
+
+- Teacher: teacher / Teacher123
+- Parent:  parent / Parent123
+  (or johnleelugnasin if that is the linked parent on this database)
+
+Website (local only, not Vercel): http://127.0.0.1:3000
+Desktop: npm run dev:desktop

@@ -3,9 +3,9 @@ import './globals.css';
 import './public-site.css';
 
 export const metadata: Metadata = {
-  title: 'HIRAYA Learning Center',
+  title: 'Hiraya Kids Learning Center',
   description:
-    'A safe and supportive learning environment where children can grow, learn, and develop their skills.',
+    'Growing minds. Building futures. A safe preschool and learning center where children grow, learn, and thrive.',
   icons: { icon: '/images/hiraya-crest.png' },
 };
 

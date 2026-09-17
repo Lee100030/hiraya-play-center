@@ -108,7 +108,7 @@ public class EnrollmentService
             var app = db.EnrollmentApplications.FirstOrDefault(a => a.ApplicationId == applicationId)
                       ?? throw new InvalidOperationException("Application not found.");
 
-            if (app.Status != "pending_review")
+            if (app.Status != "pending_review" && app.Status != "pending")
                 throw new InvalidOperationException("Application already processed.");
 
             var learningClass = ResolveClass(db, classId, app.PreferredProgram);
@@ -169,11 +169,28 @@ public class EnrollmentService
         {
             var app = db.EnrollmentApplications.FirstOrDefault(a => a.ApplicationId == applicationId)
                       ?? throw new InvalidOperationException("Application not found.");
-            if (app.Status != "pending_review")
+            if (app.Status != "pending_review" && app.Status != "pending")
                 throw new InvalidOperationException("Application already processed.");
             app.Status = "rejected";
             AuditService.Append(db, actor.UserId, "", AuditModules.Enrollment, "reject",
                 "application", applicationId, $"Rejected application for {app.StudentFullname}.");
+            await Task.CompletedTask;
+        });
+    }
+
+    public async Task CancelApplicationAsync(string applicationId, HirayaUser actor)
+    {
+        if (!Navigation.CanManageEnrollment(actor.Role))
+            throw new UnauthorizedAccessException("Only administrators can cancel enrollment applications.");
+        await _repository.MutateAsync(async db =>
+        {
+            var app = db.EnrollmentApplications.FirstOrDefault(a => a.ApplicationId == applicationId)
+                      ?? throw new InvalidOperationException("Application not found.");
+            if (app.Status != "pending_review" && app.Status != "pending")
+                throw new InvalidOperationException("Application already processed.");
+            app.Status = "cancelled";
+            AuditService.Append(db, actor.UserId, "", AuditModules.Enrollment, "cancel",
+                "application", applicationId, $"Cancelled application for {app.StudentFullname}.");
             await Task.CompletedTask;
         });
     }

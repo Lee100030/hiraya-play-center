@@ -262,6 +262,7 @@ export interface Schedule {
   room: string;
   notes: string;
   status: string;
+  programId?: string;
 }
 
 export interface TeacherWorkShift {
@@ -311,6 +312,8 @@ export interface SystemAlert {
   status: string;
   createdAt: string;
   read: boolean;
+  relatedRecordId?: string;
+  readAt?: string;
 }
 
 export interface NewsItem {
@@ -321,6 +324,55 @@ export interface NewsItem {
   isPublished: boolean;
   status: string;
   createdBy: string;
+  audience?: string;
+  audienceId?: string;
+  priority?: string;
+  expiresAt?: string;
+}
+
+export interface StaffTask {
+  taskId: string;
+  title: string;
+  description: string;
+  priority: string;
+  dueAt: string;
+  teacherIds: string;
+  classId: string;
+  studentId: string;
+  status: string;
+  response: string;
+  attachmentName: string;
+  assignedBy: string;
+  completedAt: string;
+  completedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SessionPackage {
+  packageId: string;
+  studentId: string;
+  programId: string;
+  totalSessions: number;
+  usedSessions: number;
+  remainingSessions: number;
+  startDate: string;
+  expirationDate: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SessionHistoryEntry {
+  historyId: string;
+  packageId: string;
+  studentId: string;
+  scheduleId: string;
+  attendanceId: string;
+  action: string;
+  note: string;
+  actorId: string;
+  createdAt: string;
 }
 
 export interface TeacherRoleOption {
@@ -418,6 +470,32 @@ export interface AuditLogEntry {
   createdAt: string;
 }
 
+export interface TeacherComment {
+  commentId: string;
+  teacherId: string;
+  createdBy: string;
+  content: string;
+  visibility: string;
+  status: string;
+  reply: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeacherAdminNote {
+  noteId: string;
+  teacherId: string;
+  title: string;
+  content: string;
+  priority: string;
+  reminderDate: string;
+  visibility: string;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LearningModule {
   moduleId: string;
   title: string;
@@ -484,6 +562,11 @@ export interface HirayaDatabase {
   centerHolidays: CenterHoliday[];
   teacherDuties: TeacherDuty[];
   websiteGallery: WebsiteGalleryItem[];
+  staffTasks: StaffTask[];
+  sessionPackages: SessionPackage[];
+  sessionHistory: SessionHistoryEntry[];
+  teacherComments: TeacherComment[];
+  teacherNotes: TeacherAdminNote[];
   settings: CenterSettings;
 }
 
@@ -516,6 +599,11 @@ export interface PublicSite {
   contentUpdatedAt: string;
   programs: PublicProgram[];
   gallery?: { itemId: string; title: string; caption: string }[];
+}
+
+export interface EnrollmentApplyResult {
+  submitted: boolean;
+  applicationId?: string;
 }
 
 export interface EnrollmentApplyInput {
@@ -565,6 +653,11 @@ export const emptyStore = (): HirayaDatabase => ({
   centerHolidays: [],
   teacherDuties: [],
   websiteGallery: [],
+  staffTasks: [],
+  sessionPackages: [],
+  sessionHistory: [],
+  teacherComments: [],
+  teacherNotes: [],
   settings: {
     settingsId: 'center',
     centerName: 'HIRAYA Learning Center',

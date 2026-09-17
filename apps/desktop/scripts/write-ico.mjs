@@ -1,0 +1,22 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const pngPath = path.join(root, 'public', 'images', 'hiraya-crest.png');
+const icoDir = path.join(root, 'build');
+const icoPath = path.join(icoDir, 'icon.ico');
+const png = fs.readFileSync(pngPath);
+const header = Buffer.alloc(22);
+header.writeUInt16LE(0, 0);
+header.writeUInt16LE(1, 2);
+header.writeUInt16LE(1, 4);
+header.writeUInt8(0, 6);
+header.writeUInt8(0, 7);
+header.writeUInt16LE(1, 8);
+header.writeUInt16LE(32, 10);
+header.writeUInt32LE(png.length, 12);
+header.writeUInt32LE(22, 16);
+fs.mkdirSync(icoDir, { recursive: true });
+fs.writeFileSync(icoPath, Buffer.concat([header, png]));
+console.log(icoPath);
