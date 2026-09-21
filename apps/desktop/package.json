@@ -1,7 +1,7 @@
 {
   "name": "@hiraya/desktop",
   "version": "1.0.0",
-  "description": "HIRAYA Learning Center desktop operations client",
+  "description": "HIRAYA Desktop — Learning Center operations client",
   "author": "HIRAYA Learning Center",
   "private": true,
   "main": "electron/main.cjs",
@@ -37,7 +37,7 @@
   },
   "build": {
     "appId": "com.hiraya.learningcenter.desktop",
-    "productName": "HIRAYA",
+    "productName": "HIRAYA Desktop",
     "artifactName": "HIRAYA-Setup-${version}.${ext}",
     "directories": {
       "output": "release"

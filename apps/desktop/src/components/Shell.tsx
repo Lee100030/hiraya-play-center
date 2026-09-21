@@ -3,6 +3,7 @@ import { Avatar, Button } from '@hiraya/ui';
 import { displayName, roleLabel } from '@hiraya/utils';
 import type { HirayaUser } from '@hiraya/types';
 import { deskNav, type ViewId } from '../lib/views';
+import { TitleBar } from './TitleBar';
 
 export function Shell({
   user,
@@ -33,7 +34,9 @@ export function Shell({
   }, [items]);
 
   return (
-    <div className="desk-shell">
+    <div className="desk-app">
+      <TitleBar />
+      <div className="desk-shell">
       <aside className="desk-nav">
         <div className="desk-brand">
           <img src="./images/hiraya-crest.png" alt="" width={48} height={48} />
@@ -90,6 +93,7 @@ export function Shell({
           )}
         </header>
         <main className="desk-main hlc-float-safe">{children}</main>
+      </div>
       </div>
     </div>
   );

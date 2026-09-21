@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert } from '@hiraya/ui';
 import { emptyStore, type HirayaDatabase, type HirayaUser } from '@hiraya/types';
 import { Shell } from './components/Shell';
+import { TitleBar } from './components/TitleBar';
 import { DashboardPage } from './pages/DashboardPage';
 import {
   ParentsPage,
@@ -27,7 +28,7 @@ import {
 } from './pages/RecordsPages';
 import { api, USER_STORAGE_KEY } from './lib/api';
 import type { ViewId } from './lib/views';
-import { SESSION_STORAGE_KEY } from '@hiraya/config';
+import { SESSION_STORAGE_KEY, brand } from '@hiraya/config';
 
 export default function App() {
   const [user, setUser] = useState<HirayaUser | null>(null);
@@ -53,6 +54,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    document.title = brand.windowTitle;
+  }, []);
+
+  useEffect(() => {
     const token = localStorage.getItem(SESSION_STORAGE_KEY);
     const raw = localStorage.getItem(USER_STORAGE_KEY);
     if (token && raw) {
@@ -75,55 +80,59 @@ export default function App() {
 
   if (!user) {
     return (
-      <main className="login-stage">
-        <form
-          className="login-glass"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            setError(null);
-            try {
-              const session = await api.login(login, password);
-              localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
-              setUser(session.user);
-              setPassword('');
-            } catch (err) {
-              setError(err instanceof Error ? err.message : 'Sign-in failed');
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <img src="./images/hiraya-crest.png" alt="HIRAYA Learning Center crest" width={80} height={80} />
-          <p className="hlc-kicker">Staff entrance</p>
-          <h1>HIRAYA Super Admin</h1>
-          <p>Private desk for center directors. Passwords stay on the local hub.</p>
-          {error ? <Alert>{error}</Alert> : null}
-          <label>
-            Username or email
-            <input
-              value={login}
-              onChange={(e) => setLogin(e.target.value)}
-              autoComplete="username"
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </label>
-          <button className="login-gradient" type="submit" disabled={busy}>
-            {busy ? 'Signing in…' : 'Continue'}
-          </button>
-          <p className="login-hint">Local Super Admin: admin · Admin123</p>
-        </form>
-      </main>
+      <div className="desk-app">
+        <TitleBar />
+        <main className="login-stage">
+          <form
+            className="login-glass"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              setError(null);
+              try {
+                const session = await api.login(login, password);
+                localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
+                setUser(session.user);
+                setPassword('');
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Sign-in failed');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <img src="./images/hiraya-crest.png" alt="HIRAYA Learning Center crest" width={80} height={80} />
+            <p className="hlc-kicker">Staff entrance</p>
+            <h1>HIRAYA Desktop</h1>
+            <p className="login-sublabel">Learning Center</p>
+            <p>Windows operations client for administrators, teachers, and staff. Passwords stay on the local hub.</p>
+            {error ? <Alert>{error}</Alert> : null}
+            <label>
+              Username or email
+              <input
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+                autoComplete="username"
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <button className="login-gradient" type="submit" disabled={busy}>
+              {busy ? 'Signing in…' : 'Continue'}
+            </button>
+            <p className="login-hint">Local Super Admin: admin · Admin123</p>
+          </form>
+        </main>
+      </div>
     );
   }
 

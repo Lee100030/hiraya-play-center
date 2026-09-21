@@ -17,6 +17,8 @@ export function resolveApiBaseUrl(explicit?: string): string {
 export const brand = {
   name: 'HIRAYA Learning Center',
   shortName: 'HIRAYA',
+  appSubtitle: 'Desktop',
+  windowTitle: 'HIRAYA Desktop',
   green: '#0B3D2E',
   greenDeep: '#041009',
   gold: '#D4AF37',

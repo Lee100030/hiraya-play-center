@@ -12,11 +12,51 @@ body {
 
 h1, h2, h3 { font-family: var(--hlc-font-serif); color: var(--hlc-green); }
 
+.desk-app {
+  display: grid;
+  grid-template-rows: 40px minmax(0, 1fr);
+  min-height: 100vh;
+  height: 100vh;
+}
+
+.app-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  background: #020806;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.28);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.app-titlebar img {
+  width: 22px;
+  height: 22px;
+}
+
+.app-title {
+  font-family: var(--hlc-font-serif);
+  font-size: 1.05rem;
+  letter-spacing: 0.16em;
+  color: #e8c547;
+}
+
+.app-sublabel {
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #f7f1e1;
+  opacity: 0.82;
+  padding: 2px 10px;
+  border-left: 1px solid rgba(247, 241, 225, 0.28);
+}
+
 .desk-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
-  min-height: 100vh;
-  height: 100vh;
+  min-height: 0;
+  height: 100%;
 }
 
 .desk-nav {
@@ -106,7 +146,8 @@ h1, h2, h3 { font-family: var(--hlc-font-serif); color: var(--hlc-green); }
 .desk-main { padding: 1.25rem 1.4rem; overflow: auto; }
 
 .login-stage {
-  min-height: 100vh;
+  min-height: 0;
+  height: 100%;
   display: grid;
   place-items: center;
   padding: 48px 20px;
@@ -172,6 +213,14 @@ h1, h2, h3 { font-family: var(--hlc-font-serif); color: var(--hlc-green); }
 }
 
 .login-gradient:disabled { opacity: 0.6; cursor: wait; }
+
+.login-sublabel {
+  margin: 0 0 8px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: #e8c547;
+}
 
 .login-hint {
   margin: 16px 0 0;

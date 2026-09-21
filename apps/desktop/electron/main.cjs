@@ -12,6 +12,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 720,
     show: false,
+    title: 'HIRAYA Desktop',
     backgroundColor: '#0B3D2E',
     autoHideMenuBar: false,
     webPreferences: {
@@ -27,7 +28,9 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+  win.setTitle('HIRAYA Desktop');
   win.once('ready-to-show', () => {
+    win.setTitle('HIRAYA Desktop');
     win.show();
     win.focus();
   });
