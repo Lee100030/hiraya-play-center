@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { displayName, roleLabel } from '@hiraya/utils';
-import { appNav } from '@/lib/nav';
+import { appNav, navGroupForPath } from '@/lib/nav';
 import { useAuth } from './AuthProvider';
 import { Avatar, Button } from '@hiraya/ui';
 
@@ -20,19 +20,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!ready || !user) return <div className="hlc-loading">Opening HIRAYA…</div>;
 
   const items = appNav(user.role);
+  const section = navGroupForPath(pathname, user.role);
   const account = items.filter((item) => item.href === '/app/profile' || item.href === '/app/settings');
   const main = items.filter((item) => item.href !== '/app/profile' && item.href !== '/app/settings');
+  const groups = new Map<string, typeof main>();
+  for (const item of main) {
+    const key = item.group || 'Main';
+    const list = groups.get(key) || [];
+    list.push(item);
+    groups.set(key, list);
+  }
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-mark" style={{ padding: '0.4rem 0.7rem 1rem', color: '#e8c547' }}>
           HIRAYA
+          <span className="app-sublabel" style={{ display: 'block', marginTop: 4, paddingLeft: 0, borderLeft: 0, color: '#f7f1e1', opacity: 0.82 }}>
+            Learning Center
+          </span>
         </div>
-        {main.map((item) => (
-          <Link key={item.href} href={item.href} className={pathname === item.href ? 'active' : ''}>
-            {item.label}
-          </Link>
+        { [...groups.entries()].map(([group, links]) => (
+          <div key={group} className="nav-group">
+            <p>{group}</p>
+            {links.map((item) => (
+              <Link key={item.href} href={item.href} className={pathname === item.href ? 'active' : ''}>
+                {item.label}
+              </Link>
+            ))}
+          </div>
         ))}
         <div style={{ marginTop: 'auto', padding: '1rem 0.5rem 0' }}>
           {account.map((item) => (
@@ -61,7 +77,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div>
         <header className="topbar">
-          <strong>HIRAYA Learning Center</strong>
+          <div className="desk-topbar-brand">
+            <strong>HIRAYA Learning Center</strong>
+            <span className="desk-sublabel">{section}</span>
+          </div>
           <span className="hlc-muted">Local hub</span>
         </header>
         <main className="page hlc-float-safe">{children}</main>

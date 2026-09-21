@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Breadcrumb, Card, Loading, RolePlaybook, StatCard, StatusBadge } from '@hiraya/ui';
+import { Card, Loading, PageHeader, RolePlaybook, StatCard, StatusBadge } from '@hiraya/ui';
 import { ADMIN_ROLE_PLAYBOOK, adminHomeStats, dayGreeting, displayName, roleLabel } from '@hiraya/utils';
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/components/StoreProvider';
@@ -24,18 +24,12 @@ export default function DashboardPage() {
 
   return (
     <>
-      <header className="hlc-page-header">
-        <div>
-          <Breadcrumb trail={['HIRAYA', 'Dashboard']} />
-          <span className="hlc-workspace-chip">HKLC operations</span>
-          <h1>
-            {dayGreeting()}, {displayName(user)}
-          </h1>
-          <p className="hlc-muted">
-            {roleLabel(user?.role)} · live counts from the local hub.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        crumb="Dashboard"
+        kicker="HKLC operations"
+        title={`${dayGreeting()}, ${displayName(user)}`}
+        description={`${roleLabel(user?.role)} · live counts from the local hub.`}
+      />
       {error ? <p>{error}</p> : null}
 
       <div className="hlc-stat-grid">

@@ -80,9 +80,11 @@ export function Shell({
       </aside>
       <div className="desk-main-wrap">
         <header className="desk-topbar">
-          <div>
-            <p className="hlc-kicker" style={{ margin: 0 }}>Workspace</p>
+          <div className="desk-topbar-brand">
             <strong>HIRAYA Learning Center</strong>
+            <span className="desk-sublabel">
+              {items.find((item) => item.id === (view === 'teacher-workspace' ? 'staff' : view))?.group || 'Dashboard'}
+            </span>
           </div>
           {error ? (
             <span className="desk-top-error">

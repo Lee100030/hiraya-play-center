@@ -1,7 +1,7 @@
 'use client';
 
 import { useStore } from '@/components/StoreProvider';
-import { EmptyState, Loading, StatusBadge, Table } from '@hiraya/ui';
+import { EmptyState, Loading, PageHeader, StatusBadge, Table } from '@hiraya/ui';
 import { displayName } from '@hiraya/utils';
 
 export default function ParentsPage() {
@@ -10,7 +10,7 @@ export default function ParentsPage() {
   const parents = store.users.filter((u) => u.role === 'parent');
   return (
     <>
-      <h1>Parents</h1>
+      <PageHeader crumb="Parents" kicker="Management" title="Parents" description="Guardians and linked children." />
       {parents.length === 0 ? (
         <EmptyState title="No parent accounts" />
       ) : (

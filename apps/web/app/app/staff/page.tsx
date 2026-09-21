@@ -1,7 +1,7 @@
 'use client';
 
 import { useStore } from '@/components/StoreProvider';
-import { EmptyState, Loading, StatusBadge, Table } from '@hiraya/ui';
+import { EmptyState, Loading, PageHeader, StatusBadge, Table } from '@hiraya/ui';
 import { displayName } from '@hiraya/utils';
 
 export default function StaffPage() {
@@ -10,7 +10,12 @@ export default function StaffPage() {
   const people = store.users.filter((u) => ['teacher', 'staff', 'admin', 'super_admin'].includes(u.role));
   return (
     <>
-      <h1>Teachers & staff</h1>
+      <PageHeader
+        crumb="Teachers"
+        kicker="Management"
+        title="Teachers & staff"
+        description="Open a teacher to review status and assignments."
+      />
       {people.length === 0 ? (
         <EmptyState title="No staff records" />
       ) : (

@@ -81,11 +81,13 @@ export function Avatar({
 
 export function PageHeader({
   kicker,
+  crumb,
   title,
   description,
   actions,
 }: {
   kicker?: string;
+  crumb?: string;
   title: string;
   description?: string;
   actions?: ReactNode;
@@ -93,7 +95,8 @@ export function PageHeader({
   return (
     <header className="hlc-page-header">
       <div>
-        {kicker ? <p className="hlc-kicker">{kicker}</p> : null}
+        {crumb ? <Breadcrumb trail={['HIRAYA', crumb]} /> : null}
+        {kicker ? <span className="hlc-workspace-chip">{kicker}</span> : null}
         <h1>{title}</h1>
         {description ? <p className="hlc-muted">{description}</p> : null}
       </div>

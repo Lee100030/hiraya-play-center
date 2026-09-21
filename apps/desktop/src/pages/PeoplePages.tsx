@@ -111,6 +111,7 @@ export function StudentsPage({
   return (
     <>
       <PageHeader
+        crumb="Students"
         kicker="Management"
         title="Students"
         description="Create, edit, and archive learners. Counts come from the local hub."
@@ -334,7 +335,7 @@ export function ParentsPage({
   if (loading) return <Loading />;
   return (
     <>
-      <PageHeader kicker="Management" title="Parents" description="Guardians and linked children." />
+      <PageHeader kicker="Management" crumb="Parents" title="Parents" description="Guardians and linked children." />
       <Input placeholder="Search parents" value={query} onChange={(e) => setQuery(e.target.value)} />
       {rows.length === 0 ? (
         <EmptyState title="No records found." hint="Parent accounts appear after enrollment or staff create them." />
@@ -403,6 +404,7 @@ export function TeachersPage({
   return (
     <>
       <PageHeader
+        crumb="Teachers"
         kicker="Management"
         title="Teachers"
         description="Open a card for the teacher profile. Set Active / Inactive here."

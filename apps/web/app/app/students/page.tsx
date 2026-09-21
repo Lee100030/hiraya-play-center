@@ -1,7 +1,7 @@
 'use client';
 
 import { useStore } from '@/components/StoreProvider';
-import { Button, EmptyState, Field, Input, Loading, Select, StatusBadge, Table } from '@hiraya/ui';
+import { Button, EmptyState, Field, Input, Loading, PageHeader, Select, StatusBadge, Table } from '@hiraya/ui';
 import { newId, studentDisplay } from '@hiraya/utils';
 import type { Student } from '@hiraya/types';
 import { FormEvent, useMemo, useState } from 'react';
@@ -56,8 +56,13 @@ export default function StudentsPage() {
 
   return (
     <>
+      <PageHeader
+        crumb="Students"
+        kicker="Management"
+        title="Students"
+        description="Create, edit, and archive learners. Counts come from the local hub."
+      />
       <div className="toolbar">
-        <h1>Students</h1>
         <Input placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
       <form className="hlc-card form-grid" onSubmit={onSubmit}>

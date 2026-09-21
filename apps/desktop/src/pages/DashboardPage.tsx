@@ -1,4 +1,4 @@
-import { Button, Breadcrumb, Card, Loading, NetworkError, RolePlaybook, StatCard, StatusBadge } from '@hiraya/ui';
+import { Button, Card, Loading, NetworkError, PageHeader, RolePlaybook, StatCard, StatusBadge } from '@hiraya/ui';
 import {
   ADMIN_ROLE_PLAYBOOK,
   adminHomeStats,
@@ -42,29 +42,27 @@ export function DashboardPage({
 
   return (
     <>
-      <header className="hlc-page-header">
-        <div>
-          <Breadcrumb trail={['HIRAYA', 'Dashboard']} />
-          <span className="hlc-workspace-chip">HKLC operations</span>
-          <h1>
-            {dayGreeting()}, {displayName(user)}
-          </h1>
-          <p className="hlc-muted">{roleLabel(user.role)} · live counts from the local hub.</p>
-        </div>
-        {onView ? (
-          <div className="hlc-toolbar">
-            <Button type="button" onClick={() => onView('students')}>
-              + Student
-            </Button>
-            <Button type="button" onClick={() => onView('enrollment')}>
-              + Enrollment
-            </Button>
-            <Button type="button" onClick={() => onView('announcements')}>
-              + Announcement
-            </Button>
-          </div>
-        ) : null}
-      </header>
+      <PageHeader
+        crumb="Dashboard"
+        kicker="HKLC operations"
+        title={`${dayGreeting()}, ${displayName(user)}`}
+        description={`${roleLabel(user.role)} · live counts from the local hub.`}
+        actions={
+          onView ? (
+            <div className="hlc-toolbar">
+              <Button type="button" onClick={() => onView('students')}>
+                + Student
+              </Button>
+              <Button type="button" onClick={() => onView('enrollment')}>
+                + Enrollment
+              </Button>
+              <Button type="button" onClick={() => onView('announcements')}>
+                + Announcement
+              </Button>
+            </div>
+          ) : null
+        }
+      />
 
       <div className="hlc-stat-grid">
         {kpis.map((kpi) => (
