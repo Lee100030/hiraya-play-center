@@ -1,12 +1,17 @@
 const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
 
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1100,
     minHeight: 720,
+    show: false,
     backgroundColor: '#0B3D2E',
     autoHideMenuBar: false,
     webPreferences: {
@@ -22,6 +27,10 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+  win.once('ready-to-show', () => {
+    win.show();
+    win.focus();
+  });
 
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
