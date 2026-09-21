@@ -404,10 +404,10 @@ export function CertificatesPage({
               </Select>
             </Field>
             <Field label="Start">
-              <Input name="startDate" type="date" defaultValue={editing.startDate} />
+              <Input name="startDate" type="date" defaultValue={editing.startDate || todayIsoDate()} />
             </Field>
             <Field label="Completion">
-              <Input name="completionDate" type="date" defaultValue={editing.completionDate} />
+              <Input name="completionDate" type="date" defaultValue={editing.completionDate || todayIsoDate()} />
             </Field>
             <Field label="File / acknowledgment note">
               <Input name="fileNote" defaultValue={editing.fileNote} />
@@ -741,10 +741,10 @@ export function CalendarAdminPage({
           </Select>
         </Field>
         <Field label="Start">
-          <Input name="startAt" type="datetime-local" required />
+          <Input name="startAt" type="date" defaultValue={todayIsoDate()} required />
         </Field>
         <Field label="End">
-          <Input name="endAt" type="datetime-local" />
+          <Input name="endAt" type="date" />
         </Field>
         <Field label="Notes">
           <Input name="notes" />

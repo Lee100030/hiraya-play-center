@@ -523,10 +523,10 @@ export function CalendarOpsBlock() {
           </Select>
         </Field>
         <Field label="Start">
-          <Input name="startAt" type="datetime-local" required />
+          <Input name="startAt" type="date" defaultValue={todayIsoDate()} required />
         </Field>
         <Field label="End">
-          <Input name="endAt" type="datetime-local" />
+          <Input name="endAt" type="date" />
         </Field>
         <Field label="Notes">
           <Input name="notes" />
