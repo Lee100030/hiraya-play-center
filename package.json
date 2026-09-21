@@ -7,10 +7,12 @@
   "scripts": {
     "start": "npm --prefix apps/web run dev",
     "dev": "npm --prefix apps/web run dev",
+    "dev:api": "dotnet run --project backend/Hiraya.Api/Hiraya.Api.csproj --urls http://0.0.0.0:5188",
     "dev:web": "npm --prefix apps/web run dev",
     "dev:all": "npx --yes pnpm@9.15.4 exec turbo run dev --parallel",
     "dev:mobile": "npx --yes pnpm@9.15.4 --filter @hiraya/mobile start",
     "dev:desktop": "npx --yes pnpm@9.15.4 --filter @hiraya/desktop dev",
+    "package:desktop": "npx --yes pnpm@9.15.4 --filter @hiraya/desktop package",
     "build": "npx --yes pnpm@9.15.4 exec turbo run build",
     "lint": "npx --yes pnpm@9.15.4 exec turbo run lint",
     "typecheck": "npx --yes pnpm@9.15.4 exec turbo run typecheck",
