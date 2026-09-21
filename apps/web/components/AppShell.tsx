@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
-import { displayName, roleLabel } from '@hiraya/utils';
+import { displayName, MANAGEMENT_LANES, roleLabel } from '@hiraya/utils';
 import { appNav, navGroupForPath } from '@/lib/nav';
 import { useAuth } from './AuthProvider';
 import { Avatar, Button } from '@hiraya/ui';
@@ -11,7 +11,10 @@ import { Avatar, Button } from '@hiraya/ui';
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, ready, logout } = useAuth();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const peopleLane = searchParams.get('lane');
   const router = useRouter();
+  const peopleHrefs = ['/app/students', '/app/parents', '/app/staff'];
 
   useEffect(() => {
     if (ready && !user) router.replace('/admin');
@@ -43,11 +46,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         { [...groups.entries()].map(([group, links]) => (
           <div key={group} className="nav-group">
             <p>{group}</p>
-            {links.map((item) => (
-              <Link key={item.href} href={item.href} className={pathname === item.href ? 'active' : ''}>
-                {item.label}
-              </Link>
-            ))}
+            {links.map((item) => {
+              const nested = item.group === 'Management' && peopleHrefs.includes(item.href);
+              const current = pathname === item.href;
+              return (
+                <div key={item.href} className="nav-item-block">
+                  <Link href={item.href} className={current && !peopleLane ? 'active' : current ? 'is-open' : ''}>
+                    {item.label}
+                  </Link>
+                  {nested ? (
+                    <div className="nav-sub">
+                      {MANAGEMENT_LANES.map((lane) => (
+                        <Link
+                          key={lane.id}
+                          href={`${item.href}?lane=${lane.id}`}
+                          className={current && peopleLane === lane.id ? 'active' : ''}
+                        >
+                          {lane.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ))}
         <div style={{ marginTop: 'auto', padding: '1rem 0.5rem 0' }}>

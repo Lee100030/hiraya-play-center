@@ -134,6 +134,21 @@ h1, h2, h3 { font-family: var(--hlc-font-serif); color: var(--hlc-green); }
 }
 
 .desk-nav button.active { background: rgba(212, 175, 55, 0.2); color: #e8c547; }
+.desk-nav button.is-open { color: #e8c547; }
+.nav-item-block { margin-bottom: 2px; }
+.nav-sub {
+  margin: 0 0 6px 0.55rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid rgba(212, 175, 55, 0.28);
+  display: grid;
+  gap: 2px;
+}
+.desk-nav .nav-sub button {
+  padding: 0.32rem 0.55rem;
+  font-size: 0.78rem;
+  line-height: 1.25;
+  opacity: 0.92;
+}
 
 .desk-nav-foot {
   margin-top: auto;

@@ -2,21 +2,23 @@
 
 import { useStore } from '@/components/StoreProvider';
 import { Button, EmptyState, Field, Input, Loading, PageHeader, Select, StatusBadge, Table } from '@hiraya/ui';
-import { newId, studentDisplay } from '@hiraya/utils';
+import { newId, studentDisplay, laneLabel, parsePeopleLane, studentInLane } from '@hiraya/utils';
 import type { Student } from '@hiraya/types';
 import { FormEvent, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 export default function StudentsPage() {
   const { store, loading, save } = useStore();
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Student | null>(null);
+  const lane = parsePeopleLane(useSearchParams().get('lane'));
 
   const rows = useMemo(
     () =>
-      store.students.filter((s) =>
-        studentDisplay(s).toLowerCase().includes(query.toLowerCase()),
+      store.students.filter(
+        (s) => studentInLane(s, lane) && studentDisplay(s).toLowerCase().includes(query.toLowerCase()),
       ),
-    [store.students, query],
+    [store.students, query, lane],
   );
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -59,8 +61,12 @@ export default function StudentsPage() {
       <PageHeader
         crumb="Students"
         kicker="Management"
-        title="Students"
-        description="Create, edit, and archive learners. Counts come from the local hub."
+        title={lane ? `Students · ${laneLabel(lane)}` : 'Students'}
+        description={
+          lane
+            ? `Learners in ${laneLabel(lane)}.`
+            : 'Create, edit, and archive learners. Use the program sublabels to open a group.'
+        }
       />
       <div className="toolbar">
         <Input placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />

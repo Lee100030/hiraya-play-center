@@ -14,29 +14,21 @@ import {
   Table,
   emptyCell,
 } from '@hiraya/ui';
-import { displayName, newId, roleLabel, studentDisplay, CENTER_PROGRAMS } from '@hiraya/utils';
+import { displayName, newId, roleLabel, studentDisplay, CENTER_PROGRAMS, childrenOfParent, laneLabel, parentInLane, studentInLane, teacherInLane, type ManagementLaneId } from '@hiraya/utils';
 import type { HirayaDatabase, HirayaUser, Student } from '@hiraya/types';
 import type { ViewId } from '../lib/views';
 import { StaffTasksBlock } from './AdminPhase2';
-
-function childrenOf(store: HirayaDatabase, parentId: string) {
-  const ids = new Set(
-    store.parentStudents.filter((l) => l.parentId === parentId && l.isActive).map((l) => l.studentId),
-  );
-  if (ids.size === 0) {
-    return store.students.filter((s) => s.parentId === parentId);
-  }
-  return store.students.filter((s) => ids.has(s.studentId) || s.parentId === parentId);
-}
 
 export function StudentsPage({
   store,
   loading,
   onSave,
+  lane,
 }: {
   store: HirayaDatabase;
   loading: boolean;
   onSave: (next: HirayaDatabase) => Promise<void>;
+  lane?: ManagementLaneId | null;
 }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
@@ -48,8 +40,10 @@ export function StudentsPage({
 
   const rows = useMemo(
     () =>
-      store.students.filter((s) => studentDisplay(s).toLowerCase().includes(query.toLowerCase())),
-    [store.students, query],
+      store.students.filter(
+        (s) => studentInLane(s, lane) && studentDisplay(s).toLowerCase().includes(query.toLowerCase()),
+      ),
+    [store.students, query, lane],
   );
 
   if (loading) return <Loading />;
@@ -113,8 +107,12 @@ export function StudentsPage({
       <PageHeader
         crumb="Students"
         kicker="Management"
-        title="Students"
-        description="Create, edit, and archive learners. Counts come from the local hub."
+        title={lane ? `Students · ${laneLabel(lane)}` : 'Students'}
+        description={
+          lane
+            ? `Learners in ${laneLabel(lane)}.`
+            : 'Create, edit, and archive learners. Use the program sublabels to open a group.'
+        }
         actions={
           <>
             <Button type="button" onClick={() => setEditing({} as Student)}>
@@ -322,20 +320,33 @@ export function StudentsPage({
 export function ParentsPage({
   store,
   loading,
-  onSave,
+  lane,
 }: {
   store: HirayaDatabase;
   loading: boolean;
-  onSave: (next: HirayaDatabase) => Promise<void>;
+  onSave?: (next: HirayaDatabase) => Promise<void>;
+  lane?: ManagementLaneId | null;
 }) {
   const [query, setQuery] = useState('');
   const rows = store.users.filter(
-    (u) => u.role === 'parent' && displayName(u).toLowerCase().includes(query.toLowerCase()),
+    (u) =>
+      u.role === 'parent' &&
+      parentInLane(store, u.userId, lane) &&
+      displayName(u).toLowerCase().includes(query.toLowerCase()),
   );
   if (loading) return <Loading />;
   return (
     <>
-      <PageHeader kicker="Management" crumb="Parents" title="Parents" description="Guardians and linked children." />
+      <PageHeader
+        kicker="Management"
+        crumb="Parents"
+        title={lane ? `Parents · ${laneLabel(lane)}` : 'Parents'}
+        description={
+          lane
+            ? `Guardians with children in ${laneLabel(lane)}.`
+            : 'Guardians and linked children. Use the program sublabels to open a group.'
+        }
+      />
       <Input placeholder="Search parents" value={query} onChange={(e) => setQuery(e.target.value)} />
       {rows.length === 0 ? (
         <EmptyState title="No records found." hint="Parent accounts appear after enrollment or staff create them." />
@@ -358,7 +369,7 @@ export function ParentsPage({
                 </td>
                 <td>{emptyCell(row.phone)}</td>
                 <td>{emptyCell(row.email)}</td>
-                <td>{emptyCell(childrenOf(store, row.userId).map(studentDisplay).join(', '))}</td>
+                <td>{emptyCell(childrenOfParent(store, row.userId).map(studentDisplay).join(', '))}</td>
                 <td>
                   <StatusBadge status={row.status} />
                 </td>
@@ -376,13 +387,18 @@ export function TeachersPage({
   loading,
   onOpen,
   onSave,
+  lane,
 }: {
   store: HirayaDatabase;
   loading: boolean;
   onOpen: (user: HirayaUser) => void;
   onSave?: (next: HirayaDatabase) => Promise<void>;
+  lane?: ManagementLaneId | null;
 }) {
-  const people = store.users.filter((u) => ['teacher', 'staff', 'admin', 'super_admin'].includes(u.role));
+  const people = store.users.filter(
+    (u) =>
+      ['teacher', 'staff', 'admin', 'super_admin'].includes(u.role) && teacherInLane(store, u.userId, lane),
+  );
   const [profile, setProfile] = useState<HirayaUser | null>(null);
   const [busy, setBusy] = useState(false);
   if (loading) return <Loading />;
@@ -406,8 +422,12 @@ export function TeachersPage({
       <PageHeader
         crumb="Teachers"
         kicker="Management"
-        title="Teachers"
-        description="Open a card for the teacher profile. Set Active / Inactive here."
+        title={lane ? `Teachers · ${laneLabel(lane)}` : 'Teachers'}
+        description={
+          lane
+            ? `Teachers assigned to ${laneLabel(lane)}.`
+            : 'Open a card for the teacher profile. Use the program sublabels to open a group.'
+        }
       />
       {people.length === 0 ? (
         <EmptyState title="No records found." />

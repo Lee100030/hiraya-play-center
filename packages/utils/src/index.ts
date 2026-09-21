@@ -123,6 +123,89 @@ export const CENTER_PROGRAMS = [
   { id: 'tutorial', name: 'Tutorial Session' },
 ] as const;
 
+export const MANAGEMENT_LANES = [
+  {
+    id: 'playgroup',
+    label: 'Playgroup',
+    aliases: ['playgroup', 'play group', 'play-group'],
+  },
+  {
+    id: 'preschool',
+    label: 'Pre-school (Kinder, Nursery, Grade 1–3)',
+    aliases: ['pre-school', 'preschool', 'kinder', 'kindergarten', 'nursery', 'grade 1', 'grade1', 'grade 1–3', 'grade 1-3'],
+  },
+  {
+    id: 'aba',
+    label: 'ABA Therapy',
+    aliases: ['aba'],
+  },
+  {
+    id: 'tutorial',
+    label: 'Tutorial Session',
+    aliases: ['tutorial'],
+  },
+] as const;
+
+export type ManagementLaneId = (typeof MANAGEMENT_LANES)[number]['id'];
+
+export function programLane(value?: string | null): ManagementLaneId | null {
+  const text = (value || '').toLowerCase();
+  if (!text.trim()) return null;
+  for (const lane of MANAGEMENT_LANES) {
+    if (lane.aliases.some((alias) => text.includes(alias))) return lane.id;
+  }
+  return null;
+}
+
+export function laneLabel(id?: string | null): string {
+  return MANAGEMENT_LANES.find((lane) => lane.id === id)?.label || '';
+}
+
+export function parsePeopleLane(value?: string | null): ManagementLaneId | null {
+  return MANAGEMENT_LANES.some((lane) => lane.id === value) ? (value as ManagementLaneId) : null;
+}
+
+export function studentInLane(student: Student, lane?: ManagementLaneId | null): boolean {
+  if (!lane) return true;
+  return programLane(student.program) === lane || programLane(student.gradeLevel) === lane;
+}
+
+export function childrenOfParent(store: HirayaDatabase, parentId: string): Student[] {
+  const ids = new Set(
+    store.parentStudents.filter((link) => link.parentId === parentId && link.isActive).map((link) => link.studentId),
+  );
+  if (ids.size === 0) {
+    return store.students.filter((student) => student.parentId === parentId);
+  }
+  return store.students.filter((student) => ids.has(student.studentId) || student.parentId === parentId);
+}
+
+export function parentInLane(store: HirayaDatabase, parentId: string, lane?: ManagementLaneId | null): boolean {
+  if (!lane) return true;
+  return childrenOfParent(store, parentId).some((student) => studentInLane(student, lane));
+}
+
+export function teacherInLane(store: HirayaDatabase, userId: string, lane?: ManagementLaneId | null): boolean {
+  if (!lane) return true;
+  const profile = store.teacherProfiles.find((row) => row.userId === userId);
+  const user = store.users.find((row) => row.userId === userId);
+  if (programLane(profile?.specialty) === lane || programLane(user?.position) === lane) return true;
+  const taught = store.classes.filter((row) => row.teacherId === userId);
+  const classIds = new Set(taught.map((row) => row.classId));
+  for (const row of taught) {
+    if (programLane(row.name) === lane) return true;
+    const program = store.programs.find((item) => item.programId === row.programId);
+    if (programLane(program?.name) === lane) return true;
+  }
+  return store.enrollments.some((enrollment) => {
+    if (enrollment.teacherId !== userId && !classIds.has(enrollment.classId)) return false;
+    const program = store.programs.find((item) => item.programId === enrollment.programId);
+    if (programLane(program?.name) === lane) return true;
+    const student = store.students.find((item) => item.studentId === enrollment.studentId);
+    return student ? studentInLane(student, lane) : false;
+  });
+}
+
 export const FULL_PIPELINE = [
   'inquiry',
   'application',

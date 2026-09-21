@@ -1,13 +1,14 @@
 import { useMemo, type ReactNode } from 'react';
 import { Avatar, Button } from '@hiraya/ui';
-import { displayName, roleLabel } from '@hiraya/utils';
+import { displayName, MANAGEMENT_LANES, roleLabel, type ManagementLaneId } from '@hiraya/utils';
 import type { HirayaUser } from '@hiraya/types';
-import { deskNav, type ViewId } from '../lib/views';
+import { deskNav, MANAGEMENT_PEOPLE_VIEWS, type ViewId } from '../lib/views';
 import { TitleBar } from './TitleBar';
 
 export function Shell({
   user,
   view,
+  peopleLane,
   error,
   onView,
   onLogout,
@@ -16,8 +17,9 @@ export function Shell({
 }: {
   user: HirayaUser;
   view: ViewId;
+  peopleLane?: ManagementLaneId | null;
   error: string | null;
-  onView: (id: ViewId) => void;
+  onView: (id: ViewId, lane?: ManagementLaneId | null) => void;
   onLogout: () => void;
   onRetry?: () => void;
   children: ReactNode;
@@ -49,16 +51,36 @@ export function Shell({
           {groups.map(([group, links]) => (
             <div key={group} className="nav-group">
               <p>{group}</p>
-              {links.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={view === item.id || (view === 'teacher-workspace' && item.id === 'staff') ? 'active' : ''}
-                  onClick={() => onView(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
+              {links.map((item) => {
+                const nested = item.group === 'Management' && MANAGEMENT_PEOPLE_VIEWS.includes(item.id);
+                const current =
+                  view === item.id || (view === 'teacher-workspace' && item.id === 'staff');
+                return (
+                  <div key={item.id} className="nav-item-block">
+                    <button
+                      type="button"
+                      className={current && !peopleLane ? 'active' : current ? 'is-open' : ''}
+                      onClick={() => onView(item.id, null)}
+                    >
+                      {item.label}
+                    </button>
+                    {nested ? (
+                      <div className="nav-sub">
+                        {MANAGEMENT_LANES.map((lane) => (
+                          <button
+                            key={lane.id}
+                            type="button"
+                            className={current && peopleLane === lane.id ? 'active' : ''}
+                            onClick={() => onView(item.id, lane.id)}
+                          >
+                            {lane.label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </nav>

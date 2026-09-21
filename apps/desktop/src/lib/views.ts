@@ -31,6 +31,8 @@ export type ViewId =
 
 export type NavItem = { id: ViewId; label: string; group: string };
 
+export const MANAGEMENT_PEOPLE_VIEWS: ViewId[] = ['students', 'parents', 'staff'];
+
 export function deskNav(role?: string | null): NavItem[] {
   if (isFamilyRole(role)) {
     return [

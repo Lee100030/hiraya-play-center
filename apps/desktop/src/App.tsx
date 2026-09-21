@@ -38,11 +38,13 @@ import {
 import { api, USER_STORAGE_KEY } from './lib/api';
 import type { ViewId } from './lib/views';
 import { SESSION_STORAGE_KEY, brand } from '@hiraya/config';
+import type { ManagementLaneId } from '@hiraya/utils';
 
 export default function App() {
   const [user, setUser] = useState<HirayaUser | null>(null);
   const [store, setStore] = useState<HirayaDatabase>(emptyStore());
   const [view, setView] = useState<ViewId>('dashboard');
+  const [peopleLane, setPeopleLane] = useState<ManagementLaneId | null>(null);
   const [teacher, setTeacher] = useState<HirayaUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -149,10 +151,12 @@ export default function App() {
     <Shell
       user={user}
       view={view}
+      peopleLane={peopleLane}
       error={error}
       onRetry={() => void refresh()}
-      onView={(id) => {
+      onView={(id, lane) => {
         setView(id);
+        setPeopleLane(lane ?? null);
         if (id !== 'teacher-workspace') setTeacher(null);
       }}
       onLogout={async () => {
@@ -164,12 +168,13 @@ export default function App() {
       {view === 'dashboard' ? (
         <DashboardPage user={user} store={store} loading={loading} error={error} onRetry={() => void refresh()} onView={setView} />
       ) : null}
-      {view === 'students' ? <StudentsPage store={store} loading={loading} onSave={save} /> : null}
-      {view === 'parents' ? <ParentsPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'students' ? <StudentsPage store={store} loading={loading} onSave={save} lane={peopleLane} /> : null}
+      {view === 'parents' ? <ParentsPage store={store} loading={loading} onSave={save} lane={peopleLane} /> : null}
       {view === 'staff' ? (
         <TeachersPage
           store={store}
           loading={loading}
+          lane={peopleLane}
           onSave={save}
           onOpen={(row) => {
             setTeacher(row);
