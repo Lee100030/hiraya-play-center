@@ -81,7 +81,7 @@ export function Shell({
       <div className="desk-main-wrap">
         <header className="desk-topbar">
           <div>
-            <p className="hlc-kicker" style={{ margin: 0 }}>Super Admin desk</p>
+            <p className="hlc-kicker" style={{ margin: 0 }}>Workspace</p>
             <strong>HIRAYA Learning Center</strong>
           </div>
           {error ? (

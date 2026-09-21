@@ -255,3 +255,82 @@ export function statusTone(status?: string): 'success' | 'warn' | 'danger' | 'mu
     return 'danger';
   return 'muted';
 }
+
+export function dayGreeting(now = new Date(), timeZone = 'Asia/Manila'): string {
+  const hourPart = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    hourCycle: 'h23',
+    timeZone,
+  })
+    .formatToParts(now)
+    .find((part) => part.type === 'hour');
+  const hour = Number(hourPart?.value ?? now.getHours());
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+export const ADMIN_ROLE_PLAYBOOK = [
+  {
+    id: 'program-director',
+    title: 'Program Director',
+    mark: 'PD',
+    items: [
+      'Own Playgroup, Pre-school, ABA, and Tutorial quality',
+      'Set class groupings and teacher assignments',
+      'Review session notes before they reach families',
+    ],
+  },
+  {
+    id: 'admin-director',
+    title: 'Administrative Director',
+    mark: 'AD',
+    items: [
+      'Keep center policy, staffing, and reports current',
+      'Escalate overdue payments and enrollment bottlenecks',
+      'Sign off on certificates and official letters',
+    ],
+  },
+  {
+    id: 'supervisor',
+    title: 'Supervisor',
+    mark: 'SV',
+    items: [
+      'Walk rooms and confirm today’s class list',
+      'Mark attendance and queue make-up sessions',
+      'Log field-trip headcount and duty coverage',
+      'Spot-check ABA and tutorial session records',
+      'Flag parent concerns from the floor',
+    ],
+  },
+  {
+    id: 'admin-officer',
+    title: 'Administrative Officer',
+    mark: 'AO',
+    items: [
+      'Intake enrollment applications and requirements',
+      'Post invoices, proofs, and payment status',
+      'File forms and document acknowledgments',
+      'Publish announcements to the parent group',
+      'Track certificate requests to ready-for-release',
+    ],
+  },
+] as const;
+
+export function adminHomeStats(store: HirayaDatabase, today = todayIsoDate()) {
+  const pendingApps = store.enrollmentApplications.filter((row) =>
+    ['pending', 'pending_review', 'inquiry', 'application', 'requirements'].includes((row.status || '').toLowerCase()),
+  );
+  const openPay = store.payments.filter((p) => ['pending', 'partial', 'overdue'].includes(p.paymentStatus));
+  const tasksDue = (store.staffTasks || []).filter(
+    (t) => t.status !== 'done' && t.status !== 'complete' && (!t.dueDate || t.dueDate <= today),
+  );
+  return {
+    activeStudents: store.students.filter((s) => s.status === 'active').length,
+    pendingEnrollments: pendingApps.length,
+    sessionsToday: store.schedules.filter((row) => (row.startAt || '').slice(0, 10) === today).length,
+    tasksDue: tasksDue.length,
+    unreadAnnouncements: store.alerts.filter((a) => !a.read).length,
+    openPayments: openPay.length,
+  };
+}

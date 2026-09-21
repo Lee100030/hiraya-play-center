@@ -1,42 +1,64 @@
 'use client';
 
-import { useStore } from '@/components/StoreProvider';
+import { useRouter } from 'next/navigation';
+import { Breadcrumb, Card, Loading, RolePlaybook, StatCard, StatusBadge } from '@hiraya/ui';
+import { ADMIN_ROLE_PLAYBOOK, adminHomeStats, dayGreeting, displayName, roleLabel } from '@hiraya/utils';
 import { useAuth } from '@/components/AuthProvider';
-import { Card, Loading, StatusBadge } from '@hiraya/ui';
-import { roleLabel } from '@hiraya/utils';
+import { useStore } from '@/components/StoreProvider';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const { store, loading, error } = useStore();
   if (loading) return <Loading />;
+
+  const stats = adminHomeStats(store);
+  const kpis = [
+    { label: 'Active students', value: stats.activeStudents, hint: 'Open students', href: '/app/students' },
+    { label: 'Pending enrollments', value: stats.pendingEnrollments, hint: 'Review applications', href: '/app/enrollment' },
+    { label: 'Sessions today', value: stats.sessionsToday, hint: 'Open schedules', href: '/app/schedules' },
+    { label: 'Tasks due', value: stats.tasksDue, hint: 'Open teachers', href: '/app/staff' },
+    { label: 'Unread alerts', value: stats.unreadAnnouncements, hint: 'Open inbox', href: '/app/notifications' },
+    { label: 'Open payments', value: stats.openPayments, hint: 'Open payments', href: '/app/payments' },
+  ];
+
   return (
     <>
-      <h1>Dashboard</h1>
-      <p>
-        Signed in as {user?.fullname} · {roleLabel(user?.role)}
-      </p>
+      <header className="hlc-page-header">
+        <div>
+          <Breadcrumb trail={['HIRAYA', 'Dashboard']} />
+          <span className="hlc-workspace-chip">HKLC operations</span>
+          <h1>
+            {dayGreeting()}, {displayName(user)}
+          </h1>
+          <p className="hlc-muted">
+            {roleLabel(user?.role)} · live counts from the local hub.
+          </p>
+        </div>
+      </header>
       {error ? <p>{error}</p> : null}
-      <div className="grid-cards">
-        <Card title="Students">{store.students.length}</Card>
-        <Card title="Teachers / staff">
-          {store.users.filter((u) => u.role === 'teacher' || u.role === 'staff').length}
-        </Card>
-        <Card title="Open enrollments">
-          {store.enrollmentApplications.filter((a) => a.status === 'pending_review').length}
-        </Card>
-        <Card title="Open payments">
-          {store.payments.filter((p) => ['pending', 'partial', 'overdue'].includes(p.paymentStatus)).length}
-        </Card>
-        <Card title="Today attendance">
-          {store.attendance.filter((a) => a.attendanceDate.slice(0, 10) === new Date().toISOString().slice(0, 10)).length}
-        </Card>
-        <Card title="Unread alerts">{store.alerts.filter((a) => !a.read).length}</Card>
-        <Card title="Make-up queue">{(store.makeupRequests || []).filter((r) => r.status === 'pending').length}</Card>
-        <Card title="Certificates in process">
-          {(store.certificateRequests || []).filter((r) => r.status !== 'ready' && r.status !== 'downloaded').length}
-        </Card>
+
+      <div className="hlc-stat-grid">
+        {kpis.map((kpi) => (
+          <StatCard
+            key={kpi.label}
+            label={kpi.label}
+            value={kpi.value}
+            hint={kpi.hint}
+            onClick={() => router.push(kpi.href)}
+          />
+        ))}
       </div>
-      <section style={{ marginTop: 24 }}>
+
+      <div className="hlc-section-head">
+        <h2>Workbook roles</h2>
+        <p className="hlc-section-note">
+          Reference only — duties follow the Hiraya Kids Learning Center workbook. These lines are not links.
+        </p>
+      </div>
+      <RolePlaybook roles={ADMIN_ROLE_PLAYBOOK} />
+
+      <section style={{ marginTop: 8 }}>
         <h2>Latest announcements</h2>
         {store.news.slice(0, 5).map((item) => (
           <article key={item.newsId} className="hlc-card" style={{ marginBottom: 12 }}>
@@ -45,6 +67,11 @@ export default function DashboardPage() {
             <p>{item.body}</p>
           </article>
         ))}
+        {store.news.length === 0 ? (
+          <Card>
+            <p className="hlc-muted">No records found.</p>
+          </Card>
+        ) : null}
       </section>
     </>
   );

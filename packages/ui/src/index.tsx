@@ -183,3 +183,62 @@ export function Table({ children, ...props }: TableHTMLAttributes<HTMLTableEleme
     </div>
   );
 }
+
+export function Breadcrumb({ trail }: { trail: string[] }) {
+  return (
+    <nav className="hlc-breadcrumb" aria-label="Breadcrumb">
+      {trail.map((part, index) => (
+        <span key={`${part}-${index}`}>
+          {index > 0 ? <span aria-hidden="true"> / </span> : null}
+          <span className={index === trail.length - 1 ? 'is-current' : undefined}>{part}</span>
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+export function StatCard({
+  label,
+  value,
+  hint,
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button type="button" className="hlc-stat-card" onClick={onClick} disabled={!onClick}>
+      <p className="hlc-stat-label">{label}</p>
+      <p className="hlc-stat-value">{value}</p>
+      {hint ? <p className="hlc-stat-hint">{hint}</p> : null}
+    </button>
+  );
+}
+
+export function RolePlaybook({
+  roles,
+}: {
+  roles: readonly { id: string; title: string; mark: string; items: readonly string[] }[];
+}) {
+  return (
+    <div className="hlc-role-grid">
+      {roles.map((role) => (
+        <section key={role.id} className="hlc-card hlc-role-card">
+          <div className="hlc-role-card-head">
+            <span className="hlc-role-mark" aria-hidden="true">
+              {role.mark}
+            </span>
+            <h3>{role.title}</h3>
+          </div>
+          <ul>
+            {role.items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
