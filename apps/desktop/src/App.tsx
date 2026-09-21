@@ -14,9 +14,10 @@ import {
 import {
   AnnouncementsPage,
   AttendancePage,
-  CalendarPage,
   ClassesPage,
   EnrollmentPage,
+  FeedbackPage,
+  GroupChatPage,
   ModulesPage,
   NotificationsPage,
   PaymentsPage,
@@ -26,6 +27,14 @@ import {
   SchedulesPage,
   SettingsPage,
 } from './pages/RecordsPages';
+import {
+  CalendarAdminPage,
+  CertificatesPage,
+  FieldTripsPage,
+  FormsPage,
+  MakeupPage,
+  PipelinePage,
+} from './pages/AdminPhase2';
 import { api, USER_STORAGE_KEY } from './lib/api';
 import type { ViewId } from './lib/views';
 import { SESSION_STORAGE_KEY, brand } from '@hiraya/config';
@@ -153,7 +162,7 @@ export default function App() {
       }}
     >
       {view === 'dashboard' ? (
-        <DashboardPage user={user} store={store} loading={loading} error={error} onRetry={() => void refresh()} />
+        <DashboardPage user={user} store={store} loading={loading} error={error} onRetry={() => void refresh()} onView={setView} />
       ) : null}
       {view === 'students' ? <StudentsPage store={store} loading={loading} onSave={save} /> : null}
       {view === 'parents' ? <ParentsPage store={store} loading={loading} onSave={save} /> : null}
@@ -161,6 +170,7 @@ export default function App() {
         <TeachersPage
           store={store}
           loading={loading}
+          onSave={save}
           onOpen={(row) => {
             setTeacher(row);
             setView('teacher-workspace');
@@ -168,18 +178,25 @@ export default function App() {
         />
       ) : null}
       {view === 'teacher-workspace' && teacher ? (
-        <TeacherWorkspace store={store} teacher={teacher} onBack={() => setView('staff')} />
+        <TeacherWorkspace store={store} teacher={teacher} onBack={() => setView('staff')} onSave={save} />
       ) : null}
       {view === 'programs' ? <ProgramsPage store={store} loading={loading} /> : null}
       {view === 'classes' ? <ClassesPage store={store} loading={loading} /> : null}
-      {view === 'enrollment' ? <EnrollmentPage store={store} loading={loading} /> : null}
-      {view === 'attendance' ? <AttendancePage store={store} loading={loading} /> : null}
+      {view === 'enrollment' ? <EnrollmentPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'pipeline' ? <PipelinePage store={store} loading={loading} onView={setView} /> : null}
+      {view === 'attendance' ? <AttendancePage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'makeup' ? <MakeupPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'certificates' ? <CertificatesPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'field-trips' ? <FieldTripsPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'forms' ? <FormsPage store={store} loading={loading} onSave={save} /> : null}
       {view === 'progress' ? <ProgressPage store={store} loading={loading} /> : null}
-      {view === 'payments' ? <PaymentsPage store={store} loading={loading} /> : null}
-      {view === 'schedules' ? <SchedulesPage store={store} loading={loading} /> : null}
-      {view === 'calendar' ? <CalendarPage store={store} loading={loading} /> : null}
+      {view === 'payments' ? <PaymentsPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'schedules' ? <SchedulesPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'calendar' ? <CalendarAdminPage store={store} loading={loading} onSave={save} /> : null}
       {view === 'notifications' ? <NotificationsPage store={store} loading={loading} /> : null}
-      {view === 'announcements' ? <AnnouncementsPage store={store} loading={loading} /> : null}
+      {view === 'announcements' ? <AnnouncementsPage store={store} loading={loading} user={user} onSave={save} /> : null}
+      {view === 'feedback' ? <FeedbackPage store={store} loading={loading} /> : null}
+      {view === 'chat' ? <GroupChatPage store={store} loading={loading} user={user} onSave={save} /> : null}
       {view === 'modules' ? <ModulesPage store={store} loading={loading} /> : null}
       {view === 'reports' ? <ReportsPage store={store} loading={loading} /> : null}
       {view === 'settings' ? <SettingsPage store={store} loading={loading} /> : null}

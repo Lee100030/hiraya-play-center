@@ -113,10 +113,145 @@ export function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function statusTone(status?: string): 'success' | 'warn' | 'danger' | 'muted' {
+export const CENTER_PROGRAMS = [
+  { id: 'playgroup', name: 'Playgroup' },
+  { id: 'kinder', name: 'Kindergarten' },
+  { id: 'nursery', name: 'Nursery' },
+  { id: 'grade1-3', name: 'Grade 1–3' },
+  { id: 'preschool', name: 'Pre-school (Kinder, Nursery, Grade 1–3)' },
+  { id: 'aba', name: 'ABA Therapy' },
+  { id: 'tutorial', name: 'Tutorial Session' },
+] as const;
+
+export const FULL_PIPELINE = [
+  'inquiry',
+  'application',
+  'requirements',
+  'enrollment',
+  'payment',
+  'confirmation',
+  'schedule',
+  'attendance',
+  'makeup',
+  'progress',
+  'certificate',
+] as const;
+
+export const STANDARD_FORMS = [
+  'Enrollment Form',
+  'Student Information Form',
+  'Medical/Health Information',
+  'Emergency Contact Form',
+  'Attendance Policy',
+  'Payment Policy',
+  'ABA Attendance Policy',
+  'Parent Consent Form',
+  'Photo/Video Consent',
+  'Field Trip Consent',
+  'Make-Up Class Request',
+  'Feedback Form',
+  'Withdrawal Form',
+  'Clearance Form',
+] as const;
+
+export const CALENDAR_CATEGORIES = [
+  { id: 'class', label: '📚 Class Days' },
+  { id: 'activity', label: '🎨 Activities' },
+  { id: 'field_trip', label: '🚌 Field Trips' },
+  { id: 'event', label: '🎉 Events' },
+  { id: 'suspension', label: '🌧️ Suspensions' },
+  { id: 'makeup', label: '🔄 Make-up Classes' },
+  { id: 'payment', label: '💳 Payment Due Dates' },
+  { id: 'meeting', label: '📢 Parent Meetings' },
+] as const;
+
+export const MAKEUP_REASONS = ['Weather', 'Child sick', 'Family emergency', 'Other'] as const;
+
+export const PIPELINE_STAGES = [
+  'inquiry',
+  'application',
+  'requirements',
+  'enrollment',
+  'payment',
+  'confirmed',
+] as const;
+
+export function normalizePipeline(status?: string | null): string {
   const s = (status || '').toLowerCase();
-  if (['active', 'paid', 'present', 'published', 'confirmed'].includes(s)) return 'success';
-  if (['pending', 'pending_review', 'late', 'partial', 'draft'].includes(s)) return 'warn';
-  if (['overdue', 'absent', 'failed', 'cancelled', 'archived', 'deactivated'].includes(s)) return 'danger';
+  if (s === 'pending' || s === 'pending_review') return 'application';
+  if (s === 'approved') return 'enrollment';
+  if ((PIPELINE_STAGES as readonly string[]).includes(s)) return s;
+  return s || 'inquiry';
+}
+
+export const REQUIREMENT_DOCS = [
+  'PSA Birth Certificate',
+  'Report Card',
+  'ID Picture',
+  'LRN',
+  'Other',
+] as const;
+
+export const NEWS_CATEGORIES = [
+  { id: 'classes', label: '📚 Classes' },
+  { id: 'field_trip', label: '🚌 Field Trip' },
+  { id: 'payment', label: '💳 Payment' },
+  { id: 'weather', label: '🌧️ Weather' },
+  { id: 'event', label: '🎉 Event' },
+] as const;
+
+export function statusTone(status?: string): 'success' | 'warn' | 'danger' | 'muted' {
+  const s = (status || '').toLowerCase().replace(/[_-]+/g, ' ');
+  if (
+    [
+      'active',
+      'paid',
+      'present',
+      'published',
+      'confirmed',
+      'approved',
+      'ready',
+      'downloaded',
+      'signed',
+      'yes',
+    ].includes(s)
+  )
+    return 'success';
+  if (
+    [
+      'pending',
+      'pending review',
+      'late',
+      'partial',
+      'partially paid',
+      'draft',
+      'inquiry',
+      'application',
+      'requirements',
+      'enrollment',
+      'payment',
+      'processing',
+      'received',
+      'makeup',
+      'make up',
+      'outstanding',
+      'open',
+    ].includes(s)
+  )
+    return 'warn';
+  if (
+    [
+      'overdue',
+      'absent',
+      'failed',
+      'cancelled',
+      'archived',
+      'deactivated',
+      'inactive',
+      'rejected',
+      'unpublished',
+    ].includes(s)
+  )
+    return 'danger';
   return 'muted';
 }

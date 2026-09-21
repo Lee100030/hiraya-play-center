@@ -298,6 +298,10 @@ namespace Hiraya.Data.Migrations
                     b.Property<int>("ModuleMaxFileMb")
                         .HasColumnType("int");
 
+                    b.Property<string>("OpsJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
                     b.Property<bool>("NotificationsEnabled")
                         .HasColumnType("tinyint(1)");
 

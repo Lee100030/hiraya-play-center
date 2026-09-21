@@ -7,6 +7,7 @@ export const publicNav: NavItem[] = [
   { href: '/', label: 'Home' },
   { href: '/about', label: 'About' },
   { href: '/programs', label: 'Programs' },
+  { href: '/#hiring', label: 'Careers' },
   { href: '/contact', label: 'Contact' },
 ];
 
@@ -33,6 +34,7 @@ export function appNav(role?: string | null): NavItem[] {
       { href: '/app', label: 'Dashboard' },
       { href: '/app/classes', label: 'Classes' },
       { href: '/app/attendance', label: 'Attendance' },
+      { href: '/app/makeup', label: 'Make-up' },
       { href: '/app/progress', label: 'Progress' },
       { href: '/app/schedules', label: 'Schedules' },
       { href: '/app/calendar', label: 'Calendar' },
@@ -49,7 +51,12 @@ export function appNav(role?: string | null): NavItem[] {
     { href: '/app/programs', label: 'Programs', roles: classroom },
     { href: '/app/classes', label: 'Classes', roles: classroom },
     { href: '/app/enrollment', label: 'Enrollment', roles: classroom },
+    { href: '/app/pipeline', label: 'Family pipeline', roles: admins },
     { href: '/app/attendance', label: 'Attendance', roles: classroom },
+    { href: '/app/makeup', label: 'Make-up requests', roles: classroom },
+    { href: '/app/certificates', label: 'Certificates', roles: admins },
+    { href: '/app/field-trips', label: 'Field trips', roles: classroom },
+    { href: '/app/forms', label: 'Forms', roles: admins },
     { href: '/app/progress', label: 'Progress', roles: classroom },
     { href: '/app/schedules', label: 'Schedules', roles: classroom },
     { href: '/app/calendar', label: 'Calendar', roles: classroom },

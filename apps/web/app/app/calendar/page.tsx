@@ -1,5 +1,6 @@
 'use client';
 
+import { CalendarOpsBlock } from '@/components/AdminOps';
 import { useStore } from '@/components/StoreProvider';
 import { Card, Loading } from '@hiraya/ui';
 
@@ -9,6 +10,7 @@ export default function CalendarPage() {
   return (
     <>
       <h1>Center calendar</h1>
+      <CalendarOpsBlock />
       <div className="grid-cards">
         <Card title="Holidays">
           {store.centerHolidays.map((h) => (

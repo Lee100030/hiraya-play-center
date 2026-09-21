@@ -1,3 +1,14 @@
+export {
+  EnrollmentPage,
+  PaymentsPage,
+  AttendancePage,
+  SchedulesPage,
+  AnnouncementsPage,
+  ProgramsPage,
+  FeedbackPage,
+  GroupChatPage,
+} from './AdminPhase1';
+
 import type { ReactNode } from 'react';
 import { EmptyState, Loading, PageHeader, StatusBadge, Table, emptyCell } from '@hiraya/ui';
 import { displayName, formatDate, studentDisplay } from '@hiraya/utils';
@@ -32,116 +43,6 @@ function ListPage({
   );
 }
 
-export function EnrollmentPage({ store, loading }: { store: HirayaDatabase; loading: boolean }) {
-  return (
-    <ListPage kicker="Admissions" title="Enrollment" description="Public applications stored on the hub." loading={loading} empty={!store.enrollmentApplications.length}>
-      <Table>
-        <thead>
-          <tr>
-            <th>Student</th>
-            <th>Parent</th>
-            <th>Program</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {store.enrollmentApplications.map((row) => (
-            <tr key={row.applicationId}>
-              <td>{emptyCell(row.studentFullname)}</td>
-              <td>{emptyCell(row.parentFullname)}</td>
-              <td>{emptyCell(row.preferredProgram)}</td>
-              <td>
-                <StatusBadge status={row.status} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    </ListPage>
-  );
-}
-
-export function AttendancePage({ store, loading }: { store: HirayaDatabase; loading: boolean }) {
-  return (
-    <ListPage kicker="Operations" title="Attendance" description="Daily presence from the hub." loading={loading} empty={!store.attendance.length}>
-      <Table>
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Student</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {store.attendance.slice(0, 80).map((row) => (
-            <tr key={row.attendanceId}>
-              <td>{formatDate(row.attendanceDate)}</td>
-              <td>{nameOfStudent(store, row.studentId)}</td>
-              <td>
-                <StatusBadge status={row.status} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    </ListPage>
-  );
-}
-
-export function PaymentsPage({ store, loading }: { store: HirayaDatabase; loading: boolean }) {
-  return (
-    <ListPage kicker="Operations" title="Payments" description="Balances and receipts from the hub." loading={loading} empty={!store.payments.length}>
-      <Table>
-        <thead>
-          <tr>
-            <th>Student</th>
-            <th>Amount</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {store.payments.map((row) => (
-            <tr key={row.paymentId}>
-              <td>{nameOfStudent(store, row.studentId)}</td>
-              <td>{row.amount}</td>
-              <td>
-                <StatusBadge status={row.paymentStatus} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    </ListPage>
-  );
-}
-
-export function ProgramsPage({ store, loading }: { store: HirayaDatabase; loading: boolean }) {
-  return (
-    <ListPage kicker="Learning" title="Programs" description="Play and academic layers." loading={loading} empty={!store.programs.length}>
-      <Table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {store.programs.map((row) => (
-            <tr key={row.programId}>
-              <td>{row.name}</td>
-              <td>{emptyCell(row.description)}</td>
-              <td>
-                <StatusBadge status={row.status} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    </ListPage>
-  );
-}
-
 export function ClassesPage({ store, loading }: { store: HirayaDatabase; loading: boolean }) {
   return (
     <ListPage kicker="Learning" title="Classes" description="Rooms and assigned teachers." loading={loading} empty={!store.classes.length}>
@@ -160,35 +61,6 @@ export function ClassesPage({ store, loading }: { store: HirayaDatabase; loading
               <td>{row.name}</td>
               <td>{emptyCell(displayName(store.users.find((u) => u.userId === row.teacherId)))}</td>
               <td>{emptyCell(row.room)}</td>
-              <td>
-                <StatusBadge status={row.status} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    </ListPage>
-  );
-}
-
-export function SchedulesPage({ store, loading }: { store: HirayaDatabase; loading: boolean }) {
-  return (
-    <ListPage kicker="Operations" title="Schedules" description="Class times from the hub." loading={loading} empty={!store.schedules.length}>
-      <Table>
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>When</th>
-            <th>Teacher</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {store.schedules.map((row) => (
-            <tr key={row.scheduleId}>
-              <td>{emptyCell(row.title)}</td>
-              <td>{formatDate(row.startAt)}</td>
-              <td>{emptyCell(displayName(store.users.find((u) => u.userId === row.teacherId)))}</td>
               <td>
                 <StatusBadge status={row.status} />
               </td>
@@ -276,31 +148,6 @@ export function NotificationsPage({ store, loading }: { store: HirayaDatabase; l
               <td>{emptyCell(row.title)}</td>
               <td>{emptyCell(row.message)}</td>
               <td>{formatDate(row.createdAt)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    </ListPage>
-  );
-}
-
-export function AnnouncementsPage({ store, loading }: { store: HirayaDatabase; loading: boolean }) {
-  return (
-    <ListPage kicker="Communications" title="Announcements" description="Center news." loading={loading} empty={!store.news.length}>
-      <Table>
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {store.news.map((row) => (
-            <tr key={row.newsId}>
-              <td>{row.title}</td>
-              <td>
-                <StatusBadge status={row.status} />
-              </td>
             </tr>
           ))}
         </tbody>

@@ -27,6 +27,8 @@ public static class DatabaseInitializer
             await db.Database.EnsureCreatedAsync();
         }
 
+        await EnsureOpsJsonColumnAsync(db, logger);
+
         if (await db.Users.AnyAsync())
         {
             await BackfillParentStudentsAsync(db, logger);
@@ -74,6 +76,20 @@ public static class DatabaseInitializer
         db.TeacherDuties.AddRange(seed.TeacherDuties);
         db.Settings.Add(seed.Settings);
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureOpsJsonColumnAsync(HirayaLearningCenterDbContext db, ILogger logger)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE system_settings ADD COLUMN OpsJson longtext NULL");
+            logger.LogInformation("Added system_settings.OpsJson for Phase 2/3 collections.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "OpsJson column already present or could not be added.");
+        }
     }
 
     private static async Task BackfillParentStudentsAsync(HirayaLearningCenterDbContext db, ILogger logger)

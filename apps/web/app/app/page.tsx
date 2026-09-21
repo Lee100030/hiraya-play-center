@@ -31,6 +31,10 @@ export default function DashboardPage() {
           {store.attendance.filter((a) => a.attendanceDate.slice(0, 10) === new Date().toISOString().slice(0, 10)).length}
         </Card>
         <Card title="Unread alerts">{store.alerts.filter((a) => !a.read).length}</Card>
+        <Card title="Make-up queue">{(store.makeupRequests || []).filter((r) => r.status === 'pending').length}</Card>
+        <Card title="Certificates in process">
+          {(store.certificateRequests || []).filter((r) => r.status !== 'ready' && r.status !== 'downloaded').length}
+        </Card>
       </div>
       <section style={{ marginTop: 24 }}>
         <h2>Latest announcements</h2>

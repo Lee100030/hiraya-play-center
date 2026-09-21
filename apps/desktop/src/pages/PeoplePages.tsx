@@ -14,9 +14,10 @@ import {
   Table,
   emptyCell,
 } from '@hiraya/ui';
-import { displayName, newId, roleLabel, studentDisplay } from '@hiraya/utils';
+import { displayName, newId, roleLabel, studentDisplay, CENTER_PROGRAMS } from '@hiraya/utils';
 import type { HirayaDatabase, HirayaUser, Student } from '@hiraya/types';
 import type { ViewId } from '../lib/views';
+import { StaffTasksBlock } from './AdminPhase2';
 
 function childrenOf(store: HirayaDatabase, parentId: string) {
   const ids = new Set(
@@ -42,6 +43,8 @@ export function StudentsPage({
   const [editing, setEditing] = useState<Student | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [profile, setProfile] = useState<Student | null>(null);
+  const [tab, setTab] = useState<'schedule' | 'attendance' | 'payments' | 'documents' | 'certificates' | 'notes'>('schedule');
 
   const rows = useMemo(
     () =>
@@ -72,6 +75,7 @@ export function StudentsPage({
       firstName: String(form.get('firstName') || ''),
       middleName: String(form.get('middleName') || ''),
       lastName: String(form.get('lastName') || ''),
+      nickname: String(form.get('nickname') || ''),
       fullname: '',
       birthdate: String(form.get('birthdate') || ''),
       age: Number(form.get('age') || 0),
@@ -140,11 +144,7 @@ export function StudentsPage({
               key={row.studentId}
               type="button"
               className={`hlc-card hlc-person-card${selected.includes(row.studentId) ? ' is-selected' : ''}`}
-              onClick={() =>
-                setSelected((cur) =>
-                  cur.includes(row.studentId) ? cur.filter((id) => id !== row.studentId) : [...cur, row.studentId],
-                )
-              }
+              onClick={() => setProfile(row)}
               onDoubleClick={() => setEditing(row)}
             >
               <Avatar name={studentDisplay(row)} />
@@ -178,8 +178,17 @@ export function StudentsPage({
             <Field label="Last name">
               <Input name="lastName" defaultValue={editing.lastName} required />
             </Field>
+            <Field label="Nickname">
+              <Input name="nickname" defaultValue={editing.nickname} />
+            </Field>
             <Field label="Program">
-              <Input name="program" defaultValue={editing.program} />
+              <Select name="program" defaultValue={editing.program}>
+                {CENTER_PROGRAMS.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field label="Parent">
               <Select name="parentId" defaultValue={editing.parentId || ''}>
@@ -203,6 +212,106 @@ export function StudentsPage({
               </Select>
             </Field>
           </form>
+        </Modal>
+      ) : null}
+      {profile ? (
+        <Modal
+          title={studentDisplay(profile)}
+          onClose={() => setProfile(null)}
+          actions={
+            <Button type="button" variant="ghost" onClick={() => setProfile(null)}>
+              Close
+            </Button>
+          }
+        >
+          <div className="desk-split">
+            <Avatar name={studentDisplay(profile)} size={96} />
+            <div>
+              <p>Nickname {emptyCell(profile.nickname)}</p>
+              <p>Age {profile.age || 'Not assigned'}</p>
+              <p>Birthday {emptyCell(profile.birthdate)}</p>
+              <p>Program {emptyCell(profile.program)}</p>
+              <p>Start {emptyCell(profile.enrollmentDate)}</p>
+              <StatusBadge status={profile.status} />
+            </div>
+          </div>
+          <div className="hlc-toolbar" style={{ margin: '12px 0' }}>
+            {(['schedule', 'attendance', 'payments', 'documents', 'certificates', 'notes'] as const).map((id) => (
+              <Button key={id} type="button" variant={tab === id ? 'primary' : 'ghost'} onClick={() => setTab(id)}>
+                {id}
+              </Button>
+            ))}
+          </div>
+          {tab === 'schedule' ? (
+            store.schedules.filter((s) => s.studentId === profile.studentId).length ? (
+              store.schedules
+                .filter((s) => s.studentId === profile.studentId)
+                .map((s) => (
+                  <p key={s.scheduleId}>
+                    {s.startAt} · {emptyCell(s.title)}
+                  </p>
+                ))
+            ) : (
+              <p className="hlc-muted">No records found.</p>
+            )
+          ) : null}
+          {tab === 'attendance' ? (
+            store.attendance.filter((a) => a.studentId === profile.studentId).length ? (
+              store.attendance
+                .filter((a) => a.studentId === profile.studentId)
+                .slice(0, 12)
+                .map((a) => (
+                  <p key={a.attendanceId}>
+                    {a.attendanceDate} · <StatusBadge status={a.status} />
+                  </p>
+                ))
+            ) : (
+              <p className="hlc-muted">No records found.</p>
+            )
+          ) : null}
+          {tab === 'payments' ? (
+            store.payments.filter((p) => p.studentId === profile.studentId).length ? (
+              store.payments
+                .filter((p) => p.studentId === profile.studentId)
+                .map((p) => (
+                  <p key={p.paymentId}>
+                    ₱{p.amount} · <StatusBadge status={p.paymentStatus} />
+                  </p>
+                ))
+            ) : (
+              <p className="hlc-muted">No records found.</p>
+            )
+          ) : null}
+          {tab === 'documents' ? (
+            store.formSubmissions.filter((s) => s.studentId === profile.studentId).length ? (
+              store.formSubmissions
+                .filter((s) => s.studentId === profile.studentId)
+                .map((s) => {
+                  const form = store.centerForms.find((f) => f.formId === s.formId);
+                  return (
+                    <p key={s.submissionId}>
+                      {form?.title || s.formId} · <StatusBadge status={s.status} />
+                    </p>
+                  );
+                })
+            ) : (
+              <p className="hlc-muted">Requirement files attach from enrollment and Forms.</p>
+            )
+          ) : null}
+          {tab === 'certificates' ? (
+            store.certificateRequests.filter((c) => c.studentId === profile.studentId).length ? (
+              store.certificateRequests
+                .filter((c) => c.studentId === profile.studentId)
+                .map((c) => (
+                  <p key={c.requestId}>
+                    {emptyCell(c.certificateType)} · {emptyCell(c.program)} · <StatusBadge status={c.status} />
+                  </p>
+                ))
+            ) : (
+              <p className="hlc-muted">No records found. Requests appear from Certificates.</p>
+            )
+          ) : null}
+          {tab === 'notes' ? <p>{emptyCell(profile.notes)}</p> : null}
         </Modal>
       ) : null}
     </>
@@ -265,26 +374,45 @@ export function TeachersPage({
   store,
   loading,
   onOpen,
+  onSave,
 }: {
   store: HirayaDatabase;
   loading: boolean;
   onOpen: (user: HirayaUser) => void;
+  onSave?: (next: HirayaDatabase) => Promise<void>;
 }) {
   const people = store.users.filter((u) => ['teacher', 'staff', 'admin', 'super_admin'].includes(u.role));
+  const [profile, setProfile] = useState<HirayaUser | null>(null);
+  const [busy, setBusy] = useState(false);
   if (loading) return <Loading />;
+
+  async function setActive(row: HirayaUser, active: boolean) {
+    if (!onSave) return;
+    setBusy(true);
+    try {
+      await onSave({
+        ...store,
+        users: store.users.map((u) => (u.userId === row.userId ? { ...u, status: active ? 'active' : 'inactive' } : u)),
+      });
+      setProfile({ ...row, status: active ? 'active' : 'inactive' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
         kicker="Management"
         title="Teachers"
-        description="Open a card for the teacher workspace (students, classes, notes)."
+        description="Open a card for the teacher profile. Set Active / Inactive here."
       />
       {people.length === 0 ? (
         <EmptyState title="No records found." />
       ) : (
         <div className="hlc-gallery">
           {people.map((person) => (
-            <button key={person.userId} type="button" className="hlc-card hlc-person-card" onClick={() => onOpen(person)}>
+            <button key={person.userId} type="button" className="hlc-card hlc-person-card" onClick={() => setProfile(person)}>
               <Avatar name={displayName(person)} photo={person.profileImagePath} />
               <h3>{displayName(person)}</h3>
               <p>{roleLabel(person.role)}</p>
@@ -294,6 +422,41 @@ export function TeachersPage({
           ))}
         </div>
       )}
+      {profile ? (
+        <Modal
+          title={displayName(profile)}
+          onClose={() => setProfile(null)}
+          busy={busy}
+          actions={
+            <>
+              <Button type="button" variant="ghost" onClick={() => setProfile(null)}>
+                Close
+              </Button>
+              <Button type="button" onClick={() => onOpen(profile)}>
+                Open workspace
+              </Button>
+            </>
+          }
+        >
+          <div className="desk-split">
+            <Avatar name={displayName(profile)} photo={profile.profileImagePath} size={96} />
+            <div>
+              <p>{emptyCell(profile.email)}</p>
+              <p>{emptyCell(profile.phone)}</p>
+              <p>{emptyCell(profile.position)}</p>
+              <StatusBadge status={profile.status} />
+            </div>
+          </div>
+          <div className="hlc-toolbar" style={{ marginTop: 16 }}>
+            <Button type="button" disabled={busy} onClick={() => void setActive(profile, true)}>
+              Active
+            </Button>
+            <Button type="button" variant="danger" disabled={busy} onClick={() => void setActive(profile, false)}>
+              Inactive
+            </Button>
+          </div>
+        </Modal>
+      ) : null}
     </>
   );
 }
@@ -302,10 +465,12 @@ export function TeacherWorkspace({
   store,
   teacher,
   onBack,
+  onSave,
 }: {
   store: HirayaDatabase;
   teacher: HirayaUser;
   onBack: () => void;
+  onSave?: (next: HirayaDatabase) => Promise<void>;
 }) {
   const assigned = store.students.filter(
     (s) =>
@@ -358,6 +523,7 @@ export function TeacherWorkspace({
             ))
           )}
         </Card>
+        <StaffTasksBlock store={store} teacher={teacher} onSave={onSave} />
       </div>
     </>
   );

@@ -1,10 +1,11 @@
 import { resolveApiBaseUrl, SESSION_HEADER } from '@hiraya/config';
-import type {
-  AuthSession,
-  EnrollmentApplyInput,
-  HirayaDatabase,
-  HirayaUser,
-  PublicSite,
+import {
+  emptyStore,
+  type AuthSession,
+  type EnrollmentApplyInput,
+  type HirayaDatabase,
+  type HirayaUser,
+  type PublicSite,
 } from '@hiraya/types';
 
 export class ApiError extends Error {
@@ -102,7 +103,20 @@ export class HirayaApi {
 
   async getStore(): Promise<HirayaDatabase> {
     const res = await fetch(this.url('/api/store'), { headers: await this.headers(false) });
-    return this.parse<HirayaDatabase>(res);
+    const data = await this.parse<HirayaDatabase>(res);
+    const base = emptyStore();
+    return {
+      ...base,
+      ...data,
+      makeupRequests: data.makeupRequests || [],
+      certificateRequests: data.certificateRequests || [],
+      fieldTrips: data.fieldTrips || [],
+      centerForms: data.centerForms || [],
+      formSubmissions: data.formSubmissions || [],
+      calendarEntries: data.calendarEntries || [],
+      staffTasks: data.staffTasks || [],
+      settings: { ...base.settings, ...(data.settings || {}) },
+    };
   }
 
   async putStore(db: HirayaDatabase): Promise<HirayaDatabase> {
