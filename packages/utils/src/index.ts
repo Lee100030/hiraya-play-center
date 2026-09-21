@@ -90,10 +90,22 @@ export function allows(db: HirayaDatabase | null, role: string | null | undefine
   return defaultAllows(role, permission);
 }
 
+export function emptyCell(value?: string | number | null): string {
+  if (value === 0) return '0';
+  const text = String(value ?? '').trim();
+  return text || 'Not assigned';
+}
+
+export function remainingSessions(total?: number | null, used?: number | null): number {
+  const t = Number(total || 0);
+  const u = Number(used || 0);
+  return Math.max(0, t - u);
+}
+
 export function formatDate(value?: string | null): string {
-  if (!value) return '—';
+  if (!value) return 'Not assigned';
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
+  if (Number.isNaN(d.getTime())) return emptyCell(value);
   return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 

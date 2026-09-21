@@ -17,6 +17,8 @@ bin/
 obj/
 .vs/
 apps/mobile/.expo
+*.pem
+!*.pem.example
 apps/desktop/release
 *.tsbuildinfo
 .pnpm-store

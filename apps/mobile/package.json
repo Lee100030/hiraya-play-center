@@ -7,6 +7,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
+    "eas:android": "npx --yes eas-cli build --platform android --profile preview --non-interactive",
+    "eas:ios": "npx --yes eas-cli build --platform ios --profile production --non-interactive",
     "lint": "echo ok",
     "typecheck": "tsc --noEmit"
   },

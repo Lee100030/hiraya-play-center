@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { displayName, roleLabel } from '@hiraya/utils';
 import { appNav } from '@/lib/nav';
 import { useAuth } from './AuthProvider';
-import { Button } from '@hiraya/ui';
+import { Avatar, Button } from '@hiraya/ui';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, ready, logout } = useAuth();
@@ -20,6 +20,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!ready || !user) return <div className="hlc-loading">Opening HIRAYA…</div>;
 
   const items = appNav(user.role);
+  const account = items.filter((item) => item.href === '/app/profile' || item.href === '/app/settings');
+  const main = items.filter((item) => item.href !== '/app/profile' && item.href !== '/app/settings');
 
   return (
     <div className="app-shell">
@@ -27,20 +29,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="brand-mark" style={{ padding: '0.4rem 0.7rem 1rem', color: '#e8c547' }}>
           HIRAYA
         </div>
-        <p style={{ margin: '0 0.7rem 1rem', fontSize: 13, opacity: 0.85 }}>
-          {displayName(user)}
-          <br />
-          {roleLabel(user.role)}
-        </p>
-        {items.map((item) => (
+        {main.map((item) => (
           <Link key={item.href} href={item.href} className={pathname === item.href ? 'active' : ''}>
             {item.label}
           </Link>
         ))}
-      </aside>
-      <div>
-        <header className="topbar">
-          <strong>HIRAYA Learning Center</strong>
+        <div style={{ marginTop: 'auto', padding: '1rem 0.5rem 0' }}>
+          {account.map((item) => (
+            <Link key={item.href} href={item.href} className={pathname === item.href ? 'active' : ''}>
+              {item.label}
+            </Link>
+          ))}
+          <p style={{ margin: '0.6rem 0.7rem', fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Avatar name={displayName(user)} photo={user.profileImagePath} size={32} />
+            <span>
+              {displayName(user)}
+              <br />
+              {roleLabel(user.role)}
+            </span>
+          </p>
           <Button
             variant="ghost"
             onClick={async () => {
@@ -50,8 +57,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             Sign out
           </Button>
+        </div>
+      </aside>
+      <div>
+        <header className="topbar">
+          <strong>HIRAYA Learning Center</strong>
+          <span className="hlc-muted">Local hub</span>
         </header>
-        <main className="page">{children}</main>
+        <main className="page hlc-float-safe">{children}</main>
       </div>
     </div>
   );

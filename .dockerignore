@@ -1,0 +1,13 @@
+.git
+**/bin
+**/obj
+**/node_modules
+**/.next
+**/dist
+**/release
+**/.expo
+**/.turbo
+*.user
+*.pem
+.env
+.env.local

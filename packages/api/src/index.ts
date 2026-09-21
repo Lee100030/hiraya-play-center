@@ -108,7 +108,9 @@ export class HirayaApi {
       headers: await this.headers(),
       body: JSON.stringify(db),
     });
-    return this.parse<HirayaDatabase>(res);
+    if (res.status === 204) return this.getStore();
+    await this.parse(res);
+    return this.getStore();
   }
 
   async getPublicSite(): Promise<PublicSite> {
@@ -155,5 +157,8 @@ export class HirayaApi {
 }
 
 export function createHirayaApi(tokenStore: TokenStore, baseUrl?: string): HirayaApi {
-  return new HirayaApi(tokenStore, baseUrl ? resolveApiBaseUrl(baseUrl) : resolveApiBaseUrl());
+  return new HirayaApi(
+    tokenStore,
+    baseUrl === undefined ? resolveApiBaseUrl() : resolveApiBaseUrl(baseUrl),
+  );
 }
