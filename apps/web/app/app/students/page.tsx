@@ -1,22 +1,26 @@
 'use client';
 
 import { useStore } from '@/components/StoreProvider';
-import { Button, EmptyState, Field, Input, Loading, Select, StatusBadge, Table } from '@hiraya/ui';
-import { newId, studentDisplay } from '@hiraya/utils';
+import { Button, EmptyState, Field, Input, Loading, PageHeader, Select, StatusBadge, Table } from '@hiraya/ui';
+import { StaffMessageHost, StudentMessageButton } from '@/components/StaffMessage';
+import { newId, studentDisplay, laneLabel, parsePeopleLane, studentInLane } from '@hiraya/utils';
 import type { Student } from '@hiraya/types';
 import { FormEvent, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 export default function StudentsPage() {
   const { store, loading, save } = useStore();
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Student | null>(null);
+  const [messageTo, setMessageTo] = useState<{ label: string; hint?: string; recipientIds: string[] } | null>(null);
+  const lane = parsePeopleLane(useSearchParams().get('lane'));
 
   const rows = useMemo(
     () =>
-      store.students.filter((s) =>
-        studentDisplay(s).toLowerCase().includes(query.toLowerCase()),
+      store.students.filter(
+        (s) => studentInLane(s, lane) && studentDisplay(s).toLowerCase().includes(query.toLowerCase()),
       ),
-    [store.students, query],
+    [store.students, query, lane],
   );
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -56,8 +60,17 @@ export default function StudentsPage() {
 
   return (
     <>
+      <PageHeader
+        crumb="Students"
+        kicker="Management"
+        title={lane ? `Students · ${laneLabel(lane)}` : 'Students'}
+        description={
+          lane
+            ? `Learners in ${laneLabel(lane)}.`
+            : 'Create, edit, and archive learners. Use the program sublabels to open a group.'
+        }
+      />
       <div className="toolbar">
-        <h1>Students</h1>
         <Input placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
       <form className="hlc-card form-grid" onSubmit={onSubmit}>
@@ -113,6 +126,7 @@ export default function StudentsPage() {
                   <StatusBadge status={row.status} />
                 </td>
                 <td>
+                  <StudentMessageButton store={store} student={row} onOpen={setMessageTo} />
                   <Button variant="ghost" type="button" onClick={() => setEditing(row)}>
                     Edit
                   </Button>
@@ -122,6 +136,7 @@ export default function StudentsPage() {
           </tbody>
         </Table>
       )}
+      <StaffMessageHost store={store} save={save} target={messageTo} onClose={() => setMessageTo(null)} />
     </>
   );
 }

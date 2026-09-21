@@ -1,207 +1,211 @@
-import { useMemo, useState } from 'react';
-import { createHirayaApi } from '@hiraya/api';
-import { resolveApiBaseUrl, SESSION_STORAGE_KEY } from '@hiraya/config';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert } from '@hiraya/ui';
 import { emptyStore, type HirayaDatabase, type HirayaUser } from '@hiraya/types';
-import { Alert, Button, Card, Field, Input, StatusBadge, Table } from '@hiraya/ui';
-import { displayName, roleLabel, studentDisplay } from '@hiraya/utils';
-
-const api = createHirayaApi(
-  {
-    getToken: () => localStorage.getItem(SESSION_STORAGE_KEY),
-    setToken: (token) => {
-      if (token) localStorage.setItem(SESSION_STORAGE_KEY, token);
-      else localStorage.removeItem(SESSION_STORAGE_KEY);
-    },
-  },
-  resolveApiBaseUrl(import.meta.env.VITE_API_URL),
-);
-
-type View = 'dashboard' | 'students' | 'attendance' | 'payments' | 'enrollment' | 'reports';
+import { Shell } from './components/Shell';
+import { TitleBar } from './components/TitleBar';
+import { DashboardPage } from './pages/DashboardPage';
+import {
+  ParentsPage,
+  ProfilePage,
+  StudentsPage,
+  TeacherWorkspace,
+  TeachersPage,
+} from './pages/PeoplePages';
+import {
+  AnnouncementsPage,
+  AttendancePage,
+  ClassesPage,
+  EnrollmentPage,
+  FeedbackPage,
+  GroupChatPage,
+  ModulesPage,
+  NotificationsPage,
+  PaymentsPage,
+  ProgramsPage,
+  ProgressPage,
+  ReportsPage,
+  SchedulesPage,
+  SettingsPage,
+} from './pages/RecordsPages';
+import {
+  CalendarAdminPage,
+  CertificatesPage,
+  FieldTripsPage,
+  FormsPage,
+  MakeupPage,
+  PipelinePage,
+} from './pages/AdminPhase2';
+import { api, USER_STORAGE_KEY } from './lib/api';
+import type { ViewId } from './lib/views';
+import { SESSION_STORAGE_KEY, brand } from '@hiraya/config';
+import type { ManagementLaneId } from '@hiraya/utils';
 
 export default function App() {
   const [user, setUser] = useState<HirayaUser | null>(null);
   const [store, setStore] = useState<HirayaDatabase>(emptyStore());
-  const [view, setView] = useState<View>('dashboard');
+  const [view, setView] = useState<ViewId>('dashboard');
+  const [peopleLane, setPeopleLane] = useState<ManagementLaneId | null>(null);
+  const [teacher, setTeacher] = useState<HirayaUser | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [login, setLogin] = useState('admin');
+  const [loading, setLoading] = useState(false);
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const nav = useMemo(
-    () =>
-      [
-        ['dashboard', 'Dashboard'],
-        ['students', 'Students'],
-        ['enrollment', 'Enrollment'],
-        ['attendance', 'Attendance'],
-        ['payments', 'Payments'],
-        ['reports', 'Reports'],
-      ] as const,
-    [],
-  );
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setStore(await api.getStore());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to connect to the local API. Check that the backend is running.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.title = brand.windowTitle;
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = localStorage.getItem(USER_STORAGE_KEY);
+    if (token && raw) {
+      try {
+        setUser(JSON.parse(raw) as HirayaUser);
+      } catch {
+        localStorage.removeItem(USER_STORAGE_KEY);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) void refresh();
+  }, [user, refresh]);
+
+  async function save(next: HirayaDatabase) {
+    await api.putStore(next);
+    setStore(await api.getStore());
+  }
 
   if (!user) {
     return (
-      <form
-        className="desk-login hlc-card"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setError(null);
-          try {
-            const session = await api.login(login, password);
-            setUser(session.user);
-            setStore(await api.getStore());
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'Sign-in failed');
-          }
-        }}
-      >
-        <h1>HIRAYA Desktop</h1>
-        <p>Windows operations client for administrators, teachers, and staff.</p>
-        {error ? <Alert>{error}</Alert> : null}
-        <Field label="Username">
-          <Input value={login} onChange={(e) => setLogin(e.target.value)} />
-        </Field>
-        <div style={{ height: 12 }} />
-        <Field label="Password">
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </Field>
-        <div style={{ marginTop: 16 }}>
-          <Button type="submit">Open workspace</Button>
-        </div>
-      </form>
+      <div className="desk-app">
+        <TitleBar />
+        <main className="login-stage">
+          <form
+            className="login-glass"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              setError(null);
+              try {
+                const session = await api.login(login, password);
+                localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
+                setUser(session.user);
+                setPassword('');
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Sign-in failed');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <img src="./images/hiraya-crest.png" alt="HIRAYA Learning Center crest" width={80} height={80} />
+            <p className="hlc-kicker">Staff entrance</p>
+            <h1>HIRAYA Desktop</h1>
+            <p className="login-sublabel">Learning Center</p>
+            <p>Windows operations client for administrators, teachers, and staff. Passwords stay on the local hub.</p>
+            {error ? <Alert>{error}</Alert> : null}
+            <label>
+              Username or email
+              <input
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+                autoComplete="username"
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </label>
+            <button className="login-gradient" type="submit" disabled={busy}>
+              {busy ? 'Signing in…' : 'Continue'}
+            </button>
+            <p className="login-hint">Local Super Admin: admin · Admin123</p>
+          </form>
+        </main>
+      </div>
     );
   }
 
   return (
-    <div className="desk-shell">
-      <aside className="desk-nav">
-        <h2 style={{ color: '#e8c547' }}>HIRAYA</h2>
-        <p>
-          {displayName(user)}
-          <br />
-          {roleLabel(user.role)}
-        </p>
-        {nav.map(([id, label]) => (
-          <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>
-            {label}
-          </button>
-        ))}
-        <button
-          onClick={async () => {
-            await api.logout();
-            setUser(null);
+    <Shell
+      user={user}
+      view={view}
+      peopleLane={peopleLane}
+      error={error}
+      onRetry={() => void refresh()}
+      onView={(id, lane) => {
+        setView(id);
+        setPeopleLane(lane ?? null);
+        if (id !== 'teacher-workspace') setTeacher(null);
+      }}
+      onLogout={async () => {
+        await api.logout();
+        setUser(null);
+        setStore(emptyStore());
+      }}
+    >
+      {view === 'dashboard' ? (
+        <DashboardPage user={user} store={store} loading={loading} error={error} onRetry={() => void refresh()} onView={setView} />
+      ) : null}
+      {view === 'students' ? <StudentsPage store={store} loading={loading} onSave={save} lane={peopleLane} /> : null}
+      {view === 'parents' ? <ParentsPage store={store} loading={loading} onSave={save} lane={peopleLane} /> : null}
+      {view === 'staff' ? (
+        <TeachersPage
+          store={store}
+          loading={loading}
+          lane={peopleLane}
+          onSave={save}
+          onOpen={(row) => {
+            setTeacher(row);
+            setView('teacher-workspace');
           }}
-        >
-          Sign out
-        </button>
-      </aside>
-      <main className="desk-main">
-        {view === 'dashboard' && (
-          <>
-            <h1>Operations desk</h1>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-              <Card title="Students">{store.students.length}</Card>
-              <Card title="Open payments">
-                {store.payments.filter((p) => ['pending', 'partial', 'overdue'].includes(p.paymentStatus)).length}
-              </Card>
-              <Card title="Applications">{store.enrollmentApplications.length}</Card>
-            </div>
-          </>
-        )}
-        {view === 'students' && (
-          <Table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Program</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {store.students.map((s) => (
-                <tr key={s.studentId}>
-                  <td>{studentDisplay(s)}</td>
-                  <td>{s.program}</td>
-                  <td>
-                    <StatusBadge status={s.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-        {view === 'attendance' && (
-          <Table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Student</th>
-              </tr>
-            </thead>
-            <tbody>
-              {store.attendance.slice(0, 40).map((row) => (
-                <tr key={row.attendanceId}>
-                  <td>{row.attendanceDate}</td>
-                  <td>
-                    <StatusBadge status={row.status} />
-                  </td>
-                  <td>{row.studentId}</td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-        {view === 'payments' && (
-          <Table>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Amount</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {store.payments.map((row) => (
-                <tr key={row.paymentId}>
-                  <td>{row.studentId}</td>
-                  <td>{row.amount}</td>
-                  <td>
-                    <StatusBadge status={row.paymentStatus} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-        {view === 'enrollment' && (
-          <Table>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Parent</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {store.enrollmentApplications.map((row) => (
-                <tr key={row.applicationId}>
-                  <td>{row.studentFullname}</td>
-                  <td>{row.parentFullname}</td>
-                  <td>
-                    <StatusBadge status={row.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-        {view === 'reports' && (
-          <Card title="Snapshot">
-            Attendance {store.attendance.length} · Progress {store.reports.length} · Audit {store.auditLogs.length}
-          </Card>
-        )}
-      </main>
-    </div>
+        />
+      ) : null}
+      {view === 'teacher-workspace' && teacher ? (
+        <TeacherWorkspace store={store} teacher={teacher} onBack={() => setView('staff')} onSave={save} />
+      ) : null}
+      {view === 'programs' ? <ProgramsPage store={store} loading={loading} /> : null}
+      {view === 'classes' ? <ClassesPage store={store} loading={loading} /> : null}
+      {view === 'enrollment' ? <EnrollmentPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'pipeline' ? <PipelinePage store={store} loading={loading} onView={setView} /> : null}
+      {view === 'attendance' ? <AttendancePage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'makeup' ? <MakeupPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'certificates' ? <CertificatesPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'field-trips' ? <FieldTripsPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'forms' ? <FormsPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'progress' ? <ProgressPage store={store} loading={loading} /> : null}
+      {view === 'payments' ? <PaymentsPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'schedules' ? <SchedulesPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'calendar' ? <CalendarAdminPage store={store} loading={loading} onSave={save} /> : null}
+      {view === 'notifications' ? <NotificationsPage store={store} loading={loading} /> : null}
+      {view === 'announcements' ? <AnnouncementsPage store={store} loading={loading} user={user} onSave={save} /> : null}
+      {view === 'feedback' ? <FeedbackPage store={store} loading={loading} /> : null}
+      {view === 'chat' ? <GroupChatPage store={store} loading={loading} user={user} onSave={save} /> : null}
+      {view === 'modules' ? <ModulesPage store={store} loading={loading} /> : null}
+      {view === 'reports' ? <ReportsPage store={store} loading={loading} /> : null}
+      {view === 'settings' ? <SettingsPage store={store} loading={loading} /> : null}
+      {view === 'profile' ? <ProfilePage user={user} onView={setView} /> : null}
+    </Shell>
   );
 }

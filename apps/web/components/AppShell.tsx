@@ -1,17 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
-import { displayName, roleLabel } from '@hiraya/utils';
-import { appNav } from '@/lib/nav';
+import { displayName, MANAGEMENT_LANES, roleLabel } from '@hiraya/utils';
+import { appNav, navGroupForPath } from '@/lib/nav';
 import { useAuth } from './AuthProvider';
-import { Button } from '@hiraya/ui';
+import { Avatar, Button } from '@hiraya/ui';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, ready, logout } = useAuth();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const peopleLane = searchParams.get('lane');
   const router = useRouter();
+  const peopleHrefs = ['/app/students', '/app/parents', '/app/staff'];
 
   useEffect(() => {
     if (ready && !user) router.replace('/admin');
@@ -20,27 +23,69 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!ready || !user) return <div className="hlc-loading">Opening HIRAYA…</div>;
 
   const items = appNav(user.role);
+  const section = navGroupForPath(pathname, user.role);
+  const account = items.filter((item) => item.href === '/app/profile' || item.href === '/app/settings');
+  const main = items.filter((item) => item.href !== '/app/profile' && item.href !== '/app/settings');
+  const groups = new Map<string, typeof main>();
+  for (const item of main) {
+    const key = item.group || 'Main';
+    const list = groups.get(key) || [];
+    list.push(item);
+    groups.set(key, list);
+  }
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-mark" style={{ padding: '0.4rem 0.7rem 1rem', color: '#e8c547' }}>
           HIRAYA
+          <span className="app-sublabel" style={{ display: 'block', marginTop: 4, paddingLeft: 0, borderLeft: 0, color: '#f7f1e1', opacity: 0.82 }}>
+            Learning Center
+          </span>
         </div>
-        <p style={{ margin: '0 0.7rem 1rem', fontSize: 13, opacity: 0.85 }}>
-          {displayName(user)}
-          <br />
-          {roleLabel(user.role)}
-        </p>
-        {items.map((item) => (
-          <Link key={item.href} href={item.href} className={pathname === item.href ? 'active' : ''}>
-            {item.label}
-          </Link>
+        { [...groups.entries()].map(([group, links]) => (
+          <div key={group} className="nav-group">
+            <p>{group}</p>
+            {links.map((item) => {
+              const nested = item.group === 'Management' && peopleHrefs.includes(item.href);
+              const current = pathname === item.href;
+              return (
+                <div key={item.href} className="nav-item-block">
+                  <Link href={item.href} className={current && !peopleLane ? 'active' : current ? 'is-open' : ''}>
+                    {item.label}
+                  </Link>
+                  {nested ? (
+                    <div className="nav-sub">
+                      {MANAGEMENT_LANES.map((lane) => (
+                        <Link
+                          key={lane.id}
+                          href={`${item.href}?lane=${lane.id}`}
+                          className={current && peopleLane === lane.id ? 'active' : ''}
+                        >
+                          {lane.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         ))}
-      </aside>
-      <div>
-        <header className="topbar">
-          <strong>HIRAYA Learning Center</strong>
+        <div style={{ marginTop: 'auto', padding: '1rem 0.5rem 0' }}>
+          {account.map((item) => (
+            <Link key={item.href} href={item.href} className={pathname === item.href ? 'active' : ''}>
+              {item.label}
+            </Link>
+          ))}
+          <p style={{ margin: '0.6rem 0.7rem', fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Avatar name={displayName(user)} photo={user.profileImagePath} size={32} />
+            <span>
+              {displayName(user)}
+              <br />
+              {roleLabel(user.role)}
+            </span>
+          </p>
           <Button
             variant="ghost"
             onClick={async () => {
@@ -50,8 +95,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             Sign out
           </Button>
+        </div>
+      </aside>
+      <div>
+        <header className="topbar">
+          <div className="desk-topbar-brand">
+            <strong>HIRAYA Learning Center</strong>
+            <span className="desk-sublabel">{section}</span>
+          </div>
+          <span className="hlc-muted">Local hub</span>
         </header>
-        <main className="page">{children}</main>
+        <main className="page hlc-float-safe">{children}</main>
       </div>
     </div>
   );

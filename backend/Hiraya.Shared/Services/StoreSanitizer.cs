@@ -55,6 +55,10 @@ public static class StoreSanitizer
         copy.LearningModuleVersions = [];
         copy.LearningModules = copy.LearningModules.Where(m => m.Status == LearningModuleStatuses.Published).ToList();
         copy.WebsiteGallery = [];
+        copy.MakeupRequests = copy.MakeupRequests.Where(r => ids.Contains(r.StudentId)).ToList();
+        copy.CertificateRequests = copy.CertificateRequests.Where(r => ids.Contains(r.StudentId)).ToList();
+        copy.FormSubmissions = copy.FormSubmissions.Where(s => ids.Contains(s.StudentId)).ToList();
+        copy.StaffTasks = [];
         foreach (var student in copy.Students)
         {
             student.Notes = "";
@@ -62,6 +66,7 @@ public static class StoreSanitizer
         }
         foreach (var report in copy.Reports)
             report.History = [];
+        copy.Alerts = copy.Alerts.Where(a => a.RecipientId == actor.UserId).ToList();
         return copy;
     }
 
@@ -100,6 +105,10 @@ public static class StoreSanitizer
         copy.TeacherDuties = copy.TeacherDuties.Where(d => d.TeacherId == actor.UserId).ToList();
         copy.WebsiteGallery = [];
         copy.Alerts = copy.Alerts.Where(a => a.RecipientId == actor.UserId).ToList();
+        copy.MakeupRequests = copy.MakeupRequests.Where(r => ids.Contains(r.StudentId)).ToList();
+        copy.CertificateRequests = copy.CertificateRequests.Where(r => ids.Contains(r.StudentId)).ToList();
+        copy.FormSubmissions = copy.FormSubmissions.Where(s => ids.Contains(s.StudentId)).ToList();
+        copy.StaffTasks = copy.StaffTasks.Where(t => t.TeacherId == actor.UserId).ToList();
         return copy;
     }
 
@@ -202,6 +211,12 @@ public static class StoreSanitizer
         current.TeacherWorkShifts = current.TeacherWorkShifts.Where(s => s.TeacherId != actor.UserId)
             .Concat(incoming.TeacherWorkShifts.Where(s => s.TeacherId == actor.UserId))
             .ToList();
+        current.StaffTasks = current.StaffTasks.Where(t => t.TeacherId != actor.UserId)
+            .Concat(incoming.StaffTasks.Where(t => t.TeacherId == actor.UserId))
+            .ToList();
+        current.MakeupRequests = current.MakeupRequests.Where(r => !allowed.Contains(r.StudentId))
+            .Concat(incoming.MakeupRequests.Where(r => allowed.Contains(r.StudentId)))
+            .ToList();
         return current;
     }
 
@@ -240,7 +255,14 @@ public static class StoreSanitizer
 public sealed class LoginRequest
 {
     public string Login { get; set; } = "";
+    public string Username { get; set; } = "";
+    public string Email { get; set; } = "";
     public string Password { get; set; } = "";
+
+    public string ResolvedLogin =>
+        !string.IsNullOrWhiteSpace(Login) ? Login.Trim()
+        : !string.IsNullOrWhiteSpace(Username) ? Username.Trim()
+        : (Email ?? "").Trim();
 }
 
 public sealed class PasswordChangeRequest

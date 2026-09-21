@@ -28,7 +28,8 @@ export const publicDefaults: PublicSite = {
 export function crestSrc(site?: PublicSite | null): string {
   if (site?.hasLogo) {
     const stamp = encodeURIComponent(site.contentUpdatedAt || '');
-    return `${resolveApiBaseUrl(process.env.NEXT_PUBLIC_API_URL)}/api/public/logo?t=${stamp}`;
+    const base = process.env.NEXT_PUBLIC_API_URL || '';
+    return `${resolveApiBaseUrl(base)}/api/public/logo?t=${stamp}`;
   }
   return '/images/hiraya-crest.png';
 }

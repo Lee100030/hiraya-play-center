@@ -1,16 +1,32 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { useStore } from '@/components/StoreProvider';
-import { EmptyState, Loading, StatusBadge, Table } from '@hiraya/ui';
-import { displayName } from '@hiraya/utils';
+import { EmptyState, Loading, PageHeader, StatusBadge, Table } from '@hiraya/ui';
+import { displayName, laneLabel, parsePeopleLane, teacherInLane } from '@hiraya/utils';
+import { StaffMessageHost, UserMessageButton } from '@/components/StaffMessage';
+import { useState } from 'react';
 
 export default function StaffPage() {
-  const { store, loading } = useStore();
+  const { store, loading, save } = useStore();
+  const [messageTo, setMessageTo] = useState<{ label: string; hint?: string; recipientIds: string[] } | null>(null);
+  const lane = parsePeopleLane(useSearchParams().get('lane'));
   if (loading) return <Loading />;
-  const people = store.users.filter((u) => ['teacher', 'staff', 'admin', 'super_admin'].includes(u.role));
+  const people = store.users.filter(
+    (u) => ['teacher', 'staff', 'admin', 'super_admin'].includes(u.role) && teacherInLane(store, u.userId, lane),
+  );
   return (
     <>
-      <h1>Teachers & staff</h1>
+      <PageHeader
+        crumb="Teachers"
+        kicker="Management"
+        title={lane ? `Teachers · ${laneLabel(lane)}` : 'Teachers & staff'}
+        description={
+          lane
+            ? `Teachers assigned to ${laneLabel(lane)}.`
+            : 'Open a teacher to review status and assignments. Use the program sublabels to open a group.'
+        }
+      />
       {people.length === 0 ? (
         <EmptyState title="No staff records" />
       ) : (
@@ -22,6 +38,7 @@ export default function StaffPage() {
               <th>Email</th>
               <th>Specialty</th>
               <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -34,11 +51,19 @@ export default function StaffPage() {
                 <td>
                   <StatusBadge status={person.status} />
                 </td>
+                <td>
+                  <UserMessageButton
+                    user={person}
+                    hint="Sent to this teacher’s mobile Alerts tab."
+                    onOpen={setMessageTo}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
         </Table>
       )}
+      <StaffMessageHost store={store} save={save} target={messageTo} onClose={() => setMessageTo(null)} />
     </>
   );
 }

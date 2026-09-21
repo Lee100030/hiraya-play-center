@@ -52,6 +52,7 @@ public class CenterSettingsService
                 NotifyProgress = input.NotifyProgress,
                 ModuleAllowedExtensions = input.ModuleAllowedExtensions.Trim(),
                 ModuleMaxFileMb = input.ModuleMaxFileMb,
+                OpsJson = db.Settings.OpsJson,
                 UpdatedAt = DateTime.UtcNow.ToString("o")
             };
             AuditService.Append(db, actor, AuditModules.Settings, "update", "system", "settings",

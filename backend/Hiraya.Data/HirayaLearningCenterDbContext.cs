@@ -97,6 +97,7 @@ public class HirayaLearningCenterDbContext : DbContext
         });
 
         Key<EnrollmentApplication>(modelBuilder, "enrollment_applications", x => x.ApplicationId);
+        modelBuilder.Entity<EnrollmentApplication>().Property(x => x.ExtraJson).HasColumnType("longtext");
 
         Key<AttendanceRecord>(modelBuilder, "attendance", x => x.AttendanceId);
         modelBuilder.Entity<AttendanceRecord>(e =>
@@ -166,6 +167,7 @@ public class HirayaLearningCenterDbContext : DbContext
             e.Property(x => x.Mission).HasColumnType("text");
             e.Property(x => x.Vision).HasColumnType("text");
             e.Property(x => x.Values).HasColumnType("text");
+            e.Property(x => x.OpsJson).HasColumnType("longtext").IsRequired(false);
         });
 
         Key<LearningModule>(modelBuilder, "learning_modules", x => x.ModuleId);

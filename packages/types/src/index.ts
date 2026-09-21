@@ -111,6 +111,7 @@ export interface Student {
   status: string;
   enrollmentDate: string;
   notes: string;
+  nickname?: string;
 }
 
 export interface StudentOpsRecord {
@@ -204,6 +205,7 @@ export interface EnrollmentApplication {
   submittedAt: string;
   status: string;
   studentNumber?: string | null;
+  extraJson?: string;
 }
 
 export interface AttendanceRecord {
@@ -298,6 +300,9 @@ export interface Payment {
   recordedBy: string;
   notes: string;
   history: PaymentHistoryEntry[];
+  proofPath?: string;
+  packageName?: string;
+  invoiceNumber?: string;
 }
 
 export interface SystemAlert {
@@ -320,6 +325,7 @@ export interface NewsItem {
   isPublished: boolean;
   status: string;
   createdBy: string;
+  category?: string;
 }
 
 export interface TeacherRoleOption {
@@ -392,6 +398,7 @@ export interface CenterSettings {
   moduleAllowedExtensions: string;
   moduleMaxFileMb: number;
   updatedAt: string;
+  opsJson?: string;
 }
 
 export interface WebsiteGalleryItem {
@@ -454,6 +461,82 @@ export interface LearningModuleVersion {
   isCurrent: boolean;
 }
 
+export interface MakeupRequest {
+  requestId: string;
+  studentId: string;
+  program: string;
+  missedDate: string;
+  reason: string;
+  preferred1: string;
+  preferred2: string;
+  preferred3: string;
+  scheduledDate: string;
+  status: string;
+  notes: string;
+}
+
+export interface CertificateRequest {
+  requestId: string;
+  studentId: string;
+  program: string;
+  startDate: string;
+  completionDate: string;
+  certificateType: string;
+  status: string;
+  fileNote: string;
+}
+
+export interface FieldTripRsvp {
+  rsvpId: string;
+  parentId: string;
+  studentId: string;
+  response: string;
+  contact: string;
+  agreedGuidelines: boolean;
+}
+
+export interface FieldTrip {
+  tripId: string;
+  title: string;
+  tripDate: string;
+  place: string;
+  status: string;
+  rsvps: FieldTripRsvp[];
+}
+
+export interface CenterForm {
+  formId: string;
+  title: string;
+  fileNote: string;
+  status: string;
+}
+
+export interface FormSubmission {
+  submissionId: string;
+  formId: string;
+  studentId: string;
+  status: string;
+  submittedAt: string;
+}
+
+export interface CalendarEntry {
+  entryId: string;
+  title: string;
+  category: string;
+  startAt: string;
+  endAt: string;
+  notes: string;
+}
+
+export interface StaffTask {
+  taskId: string;
+  teacherId: string;
+  title: string;
+  dueDate: string;
+  status: string;
+  notes: string;
+}
+
 export interface HirayaDatabase {
   users: HirayaUser[];
   teacherProfiles: TeacherProfile[];
@@ -483,6 +566,13 @@ export interface HirayaDatabase {
   centerHolidays: CenterHoliday[];
   teacherDuties: TeacherDuty[];
   websiteGallery: WebsiteGalleryItem[];
+  makeupRequests: MakeupRequest[];
+  certificateRequests: CertificateRequest[];
+  fieldTrips: FieldTrip[];
+  centerForms: CenterForm[];
+  formSubmissions: FormSubmission[];
+  calendarEntries: CalendarEntry[];
+  staffTasks: StaffTask[];
   settings: CenterSettings;
 }
 
@@ -557,6 +647,13 @@ export const emptyStore = (): HirayaDatabase => ({
   centerHolidays: [],
   teacherDuties: [],
   websiteGallery: [],
+  makeupRequests: [],
+  certificateRequests: [],
+  fieldTrips: [],
+  centerForms: [],
+  formSubmissions: [],
+  calendarEntries: [],
+  staffTasks: [],
   settings: {
     settingsId: 'center',
     centerName: 'HIRAYA Learning Center',
@@ -585,5 +682,6 @@ export const emptyStore = (): HirayaDatabase => ({
     moduleAllowedExtensions: '',
     moduleMaxFileMb: 0,
     updatedAt: '',
+    opsJson: '',
   },
 });

@@ -7,12 +7,24 @@
     "scheme": "hiraya",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.hiraya.learningcenter" },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hiraya.learningcenter",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false
+        }
+      }
+    },
     "android": {
       "package": "com.hiraya.learningcenter",
-      "adaptiveIcon": { "backgroundColor": "#0B3D2E" }
+      "adaptiveIcon": { "backgroundColor": "#0B3D2E" },
+      "permissions": []
     },
     "plugins": ["expo-router", "expo-secure-store"],
+    "extra": {
+      "eas": {}
+    },
     "experiments": { "typedRoutes": true }
   }
 }

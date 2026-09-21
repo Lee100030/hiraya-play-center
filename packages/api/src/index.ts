@@ -1,10 +1,11 @@
 import { resolveApiBaseUrl, SESSION_HEADER } from '@hiraya/config';
-import type {
-  AuthSession,
-  EnrollmentApplyInput,
-  HirayaDatabase,
-  HirayaUser,
-  PublicSite,
+import {
+  emptyStore,
+  type AuthSession,
+  type EnrollmentApplyInput,
+  type HirayaDatabase,
+  type HirayaUser,
+  type PublicSite,
 } from '@hiraya/types';
 
 export class ApiError extends Error {
@@ -42,7 +43,10 @@ export class HirayaApi {
     const data = text ? JSON.parse(text) : null;
     if (!res.ok) {
       const message =
-        (data && (data.error || data.message || data.title)) || `Request failed (${res.status})`;
+        (data && (data.error || data.message || data.title)) ||
+        (res.status === 401
+          ? 'Username or password is incorrect.'
+          : `Request failed (${res.status})`);
       throw new ApiError(String(message), res.status, data);
     }
     return data as T;
@@ -61,7 +65,7 @@ export class HirayaApi {
     const res = await fetch(this.url('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, password }),
+      body: JSON.stringify({ login: login.trim(), password }),
     });
     const session = await this.parse<AuthSession>(res);
     await this.tokenStore.setToken?.(session.token);
@@ -99,7 +103,20 @@ export class HirayaApi {
 
   async getStore(): Promise<HirayaDatabase> {
     const res = await fetch(this.url('/api/store'), { headers: await this.headers(false) });
-    return this.parse<HirayaDatabase>(res);
+    const data = await this.parse<HirayaDatabase>(res);
+    const base = emptyStore();
+    return {
+      ...base,
+      ...data,
+      makeupRequests: data.makeupRequests || [],
+      certificateRequests: data.certificateRequests || [],
+      fieldTrips: data.fieldTrips || [],
+      centerForms: data.centerForms || [],
+      formSubmissions: data.formSubmissions || [],
+      calendarEntries: data.calendarEntries || [],
+      staffTasks: data.staffTasks || [],
+      settings: { ...base.settings, ...(data.settings || {}) },
+    };
   }
 
   async putStore(db: HirayaDatabase): Promise<HirayaDatabase> {
@@ -108,7 +125,9 @@ export class HirayaApi {
       headers: await this.headers(),
       body: JSON.stringify(db),
     });
-    return this.parse<HirayaDatabase>(res);
+    if (res.status === 204) return this.getStore();
+    await this.parse(res);
+    return this.getStore();
   }
 
   async getPublicSite(): Promise<PublicSite> {
@@ -155,5 +174,8 @@ export class HirayaApi {
 }
 
 export function createHirayaApi(tokenStore: TokenStore, baseUrl?: string): HirayaApi {
-  return new HirayaApi(tokenStore, baseUrl ? resolveApiBaseUrl(baseUrl) : resolveApiBaseUrl());
+  return new HirayaApi(
+    tokenStore,
+    baseUrl === undefined ? resolveApiBaseUrl() : resolveApiBaseUrl(baseUrl),
+  );
 }

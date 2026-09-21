@@ -1,0 +1,124 @@
+import { useMemo, type ReactNode } from 'react';
+import { Avatar, Button } from '@hiraya/ui';
+import { displayName, MANAGEMENT_LANES, roleLabel, type ManagementLaneId } from '@hiraya/utils';
+import type { HirayaUser } from '@hiraya/types';
+import { deskNav, MANAGEMENT_PEOPLE_VIEWS, type ViewId } from '../lib/views';
+import { TitleBar } from './TitleBar';
+
+export function Shell({
+  user,
+  view,
+  peopleLane,
+  error,
+  onView,
+  onLogout,
+  onRetry,
+  children,
+}: {
+  user: HirayaUser;
+  view: ViewId;
+  peopleLane?: ManagementLaneId | null;
+  error: string | null;
+  onView: (id: ViewId, lane?: ManagementLaneId | null) => void;
+  onLogout: () => void;
+  onRetry?: () => void;
+  children: ReactNode;
+}) {
+  const items = deskNav(user.role);
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof items>();
+    for (const item of items) {
+      const list = map.get(item.group) || [];
+      list.push(item);
+      map.set(item.group, list);
+    }
+    return [...map.entries()];
+  }, [items]);
+
+  return (
+    <div className="desk-app">
+      <TitleBar />
+      <div className="desk-shell">
+      <aside className="desk-nav">
+        <div className="desk-brand">
+          <img src="./images/hiraya-crest.png" alt="" width={48} height={48} />
+          <div>
+            <strong>HIRAYA</strong>
+            <span>Learning Center</span>
+          </div>
+        </div>
+        <nav>
+          {groups.map(([group, links]) => (
+            <div key={group} className="nav-group">
+              <p>{group}</p>
+              {links.map((item) => {
+                const nested = item.group === 'Management' && MANAGEMENT_PEOPLE_VIEWS.includes(item.id);
+                const current =
+                  view === item.id || (view === 'teacher-workspace' && item.id === 'staff');
+                return (
+                  <div key={item.id} className="nav-item-block">
+                    <button
+                      type="button"
+                      className={current && !peopleLane ? 'active' : current ? 'is-open' : ''}
+                      onClick={() => onView(item.id, null)}
+                    >
+                      {item.label}
+                    </button>
+                    {nested ? (
+                      <div className="nav-sub">
+                        {MANAGEMENT_LANES.map((lane) => (
+                          <button
+                            key={lane.id}
+                            type="button"
+                            className={current && peopleLane === lane.id ? 'active' : ''}
+                            onClick={() => onView(item.id, lane.id)}
+                          >
+                            {lane.label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+        <div className="desk-nav-foot">
+          <button type="button" className={view === 'profile' ? 'active' : ''} onClick={() => onView('profile')}>
+            <Avatar name={displayName(user)} photo={user.profileImagePath || undefined} size={32} />
+            <span>
+              <strong>{displayName(user)}</strong>
+              <small>{roleLabel(user.role)}</small>
+            </span>
+          </button>
+          <button type="button" onClick={() => onView('settings')}>
+            Settings
+          </button>
+          <Button variant="ghost" type="button" onClick={onLogout}>
+            Sign out
+          </Button>
+        </div>
+      </aside>
+      <div className="desk-main-wrap">
+        <header className="desk-topbar">
+          <div className="desk-topbar-brand">
+            <strong>HIRAYA Learning Center</strong>
+            <span className="desk-sublabel">
+              {items.find((item) => item.id === (view === 'teacher-workspace' ? 'staff' : view))?.group || 'Dashboard'}
+            </span>
+          </div>
+          {error ? (
+            <span className="desk-top-error">
+              {error} {onRetry ? <button type="button" onClick={onRetry}>Retry</button> : null}
+            </span>
+          ) : (
+            <span className="desk-live">Local hub · live store</span>
+          )}
+        </header>
+        <main className="desk-main hlc-float-safe">{children}</main>
+      </div>
+      </div>
+    </div>
+  );
+}

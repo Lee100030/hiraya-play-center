@@ -35,8 +35,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const save = useCallback(async (next: HirayaDatabase) => {
-    const saved = await api.putStore(next);
-    setStore(saved);
+    await api.putStore(next);
+    setStore(await api.getStore());
   }, []);
 
   useEffect(() => {

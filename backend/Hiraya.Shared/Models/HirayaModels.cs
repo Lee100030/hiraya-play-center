@@ -121,6 +121,7 @@ public class Student
     public string Status { get; set; } = "active";
     public string EnrollmentDate { get; set; } = "";
     public string Notes { get; set; } = "";
+    public string Nickname { get; set; } = "";
 }
 
 public class StudentOpsRecord
@@ -279,6 +280,7 @@ public class EnrollmentApplication
     public string SubmittedAt { get; set; } = "";
     public string Status { get; set; } = "pending_review";
     public string? StudentNumber { get; set; }
+    public string ExtraJson { get; set; } = "";
 }
 
 public class AttendanceRecord
@@ -310,8 +312,9 @@ public static class AttendanceStatuses
     public const string Late = "late";
     public const string Excused = "excused";
     public const string Leave = "leave";
+    public const string Makeup = "makeup";
 
-    public static readonly string[] ForStudents = [Present, Absent, Late, Excused];
+    public static readonly string[] ForStudents = [Present, Absent, Late, Excused, Makeup];
     public static readonly string[] ForEmployees = [Present, Absent, Late, Leave];
 
     public static bool IsPresentLike(string? status) =>
@@ -519,6 +522,9 @@ public class Payment
     public string RecordedBy { get; set; } = "";
     public string Notes { get; set; } = "";
     public List<PaymentHistoryEntry> History { get; set; } = new();
+    public string ProofPath { get; set; } = "";
+    public string PackageName { get; set; } = "";
+    public string InvoiceNumber { get; set; } = "";
 }
 
 public static class NotificationKinds
@@ -531,9 +537,10 @@ public static class NotificationKinds
     public const string Schedule = "schedule";
     public const string Announcement = "announcement";
     public const string LearningModule = "learning_module";
+    public const string StaffMessage = "staff_message";
 
     public static readonly string[] All =
-        [System, Enrollment, Attendance, Progress, Payment, Schedule, Announcement, LearningModule];
+        [System, Enrollment, Attendance, Progress, Payment, Schedule, Announcement, LearningModule, StaffMessage];
 
     public static string Label(string? kind) => kind switch
     {
@@ -544,6 +551,7 @@ public static class NotificationKinds
         Schedule => "Schedule",
         Announcement => "Announcement",
         LearningModule => "Learning module",
+        StaffMessage => "Staff message",
         _ => "General"
     };
 }
@@ -596,6 +604,7 @@ public class NewsItem
     public bool IsPublished { get; set; } = true;
     public string Status { get; set; } = "published";
     public string CreatedBy { get; set; } = "";
+    public string Category { get; set; } = "";
 }
 
 public class TeacherRoleOption
@@ -650,6 +659,13 @@ public class HirayaDatabase
     public List<CenterHoliday> CenterHolidays { get; set; } = new();
     public List<TeacherDuty> TeacherDuties { get; set; } = new();
     public List<WebsiteGalleryItem> WebsiteGallery { get; set; } = new();
+    public List<MakeupRequest> MakeupRequests { get; set; } = new();
+    public List<CertificateRequest> CertificateRequests { get; set; } = new();
+    public List<FieldTrip> FieldTrips { get; set; } = new();
+    public List<CenterForm> CenterForms { get; set; } = new();
+    public List<FormSubmission> FormSubmissions { get; set; } = new();
+    public List<CalendarEntry> CalendarEntries { get; set; } = new();
+    public List<StaffTask> StaffTasks { get; set; } = new();
     public CenterSettings Settings { get; set; } = new();
 }
 
@@ -707,6 +723,7 @@ public class CenterSettings
     public string ModuleAllowedExtensions { get; set; } = "";
     public int ModuleMaxFileMb { get; set; }
     public string UpdatedAt { get; set; } = "";
+    public string OpsJson { get; set; } = "";
 }
 
 public static class WebsitePublishStatuses
@@ -958,5 +975,147 @@ public static class StudentNames
             LastName = student.LastName,
             Fullname = ""
         });
+    }
+}
+
+public class MakeupRequest
+{
+    public string RequestId { get; set; } = "";
+    public string StudentId { get; set; } = "";
+    public string Program { get; set; } = "";
+    public string MissedDate { get; set; } = "";
+    public string Reason { get; set; } = "";
+    public string Preferred1 { get; set; } = "";
+    public string Preferred2 { get; set; } = "";
+    public string Preferred3 { get; set; } = "";
+    public string ScheduledDate { get; set; } = "";
+    public string Status { get; set; } = "pending";
+    public string Notes { get; set; } = "";
+}
+
+public class CertificateRequest
+{
+    public string RequestId { get; set; } = "";
+    public string StudentId { get; set; } = "";
+    public string Program { get; set; } = "";
+    public string StartDate { get; set; } = "";
+    public string CompletionDate { get; set; } = "";
+    public string CertificateType { get; set; } = "Completion";
+    public string Status { get; set; } = "received";
+    public string FileNote { get; set; } = "";
+}
+
+public class FieldTripRsvp
+{
+    public string RsvpId { get; set; } = "";
+    public string ParentId { get; set; } = "";
+    public string StudentId { get; set; } = "";
+    public string Response { get; set; } = "";
+    public string Contact { get; set; } = "";
+    public bool AgreedGuidelines { get; set; }
+}
+
+public class FieldTrip
+{
+    public string TripId { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string TripDate { get; set; } = "";
+    public string Place { get; set; } = "";
+    public string Status { get; set; } = "open";
+    public List<FieldTripRsvp> Rsvps { get; set; } = new();
+}
+
+public class CenterForm
+{
+    public string FormId { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string FileNote { get; set; } = "";
+    public string Status { get; set; } = "published";
+}
+
+public class FormSubmission
+{
+    public string SubmissionId { get; set; } = "";
+    public string FormId { get; set; } = "";
+    public string StudentId { get; set; } = "";
+    public string Status { get; set; } = "outstanding";
+    public string SubmittedAt { get; set; } = "";
+}
+
+public class CalendarEntry
+{
+    public string EntryId { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Category { get; set; } = "class";
+    public string StartAt { get; set; } = "";
+    public string EndAt { get; set; } = "";
+    public string Notes { get; set; } = "";
+}
+
+public class StaffTask
+{
+    public string TaskId { get; set; } = "";
+    public string TeacherId { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string DueDate { get; set; } = "";
+    public string Status { get; set; } = "open";
+    public string Notes { get; set; } = "";
+}
+
+public class HirayaOpsBundle
+{
+    public List<MakeupRequest> MakeupRequests { get; set; } = new();
+    public List<CertificateRequest> CertificateRequests { get; set; } = new();
+    public List<FieldTrip> FieldTrips { get; set; } = new();
+    public List<CenterForm> CenterForms { get; set; } = new();
+    public List<FormSubmission> FormSubmissions { get; set; } = new();
+    public List<CalendarEntry> CalendarEntries { get; set; } = new();
+    public List<StaffTask> StaffTasks { get; set; } = new();
+}
+
+public static class HirayaOpsStore
+{
+    private static readonly System.Text.Json.JsonSerializerOptions Json = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
+
+    public static void Unpack(HirayaDatabase db)
+    {
+        if (string.IsNullOrWhiteSpace(db.Settings?.OpsJson))
+            return;
+        try
+        {
+            var bundle = System.Text.Json.JsonSerializer.Deserialize<HirayaOpsBundle>(db.Settings.OpsJson, Json);
+            if (bundle is null)
+                return;
+            db.MakeupRequests = bundle.MakeupRequests ?? [];
+            db.CertificateRequests = bundle.CertificateRequests ?? [];
+            db.FieldTrips = bundle.FieldTrips ?? [];
+            db.CenterForms = bundle.CenterForms ?? [];
+            db.FormSubmissions = bundle.FormSubmissions ?? [];
+            db.CalendarEntries = bundle.CalendarEntries ?? [];
+            db.StaffTasks = bundle.StaffTasks ?? [];
+        }
+        catch
+        {
+            // Older settings rows may not carry ops JSON yet.
+        }
+    }
+
+    public static void Pack(HirayaDatabase db)
+    {
+        db.Settings ??= new CenterSettings();
+        db.Settings.OpsJson = System.Text.Json.JsonSerializer.Serialize(new HirayaOpsBundle
+        {
+            MakeupRequests = db.MakeupRequests ?? [],
+            CertificateRequests = db.CertificateRequests ?? [],
+            FieldTrips = db.FieldTrips ?? [],
+            CenterForms = db.CenterForms ?? [],
+            FormSubmissions = db.FormSubmissions ?? [],
+            CalendarEntries = db.CalendarEntries ?? [],
+            StaffTasks = db.StaffTasks ?? []
+        }, Json);
     }
 }

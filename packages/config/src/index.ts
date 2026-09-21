@@ -2,7 +2,8 @@ export const SESSION_HEADER = 'X-Hiraya-Session';
 export const SESSION_STORAGE_KEY = 'hiraya.session';
 
 export function resolveApiBaseUrl(explicit?: string): string {
-  if (explicit) return explicit.replace(/\/$/, '');
+  const trimmed = (explicit ?? '').trim();
+  if (trimmed) return trimmed.replace(/\/$/, '');
   const fromEnv =
     (typeof process !== 'undefined' &&
       (process.env.NEXT_PUBLIC_API_URL ||
@@ -16,6 +17,8 @@ export function resolveApiBaseUrl(explicit?: string): string {
 export const brand = {
   name: 'HIRAYA Learning Center',
   shortName: 'HIRAYA',
+  appSubtitle: 'Desktop',
+  windowTitle: 'HIRAYA Desktop',
   green: '#0B3D2E',
   greenDeep: '#041009',
   gold: '#D4AF37',

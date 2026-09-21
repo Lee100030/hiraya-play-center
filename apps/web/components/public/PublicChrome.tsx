@@ -6,6 +6,7 @@ import { ContactSection } from '@/components/public/ContactSection';
 import { EnrollmentCta } from '@/components/public/EnrollmentCta';
 import { EnrollmentProvider } from '@/components/public/enrollment';
 import { Hero } from '@/components/public/Hero';
+import { HiringSection } from '@/components/public/HiringSection';
 import { ProgramsSection } from '@/components/public/ProgramsSection';
 import { SiteFooter } from '@/components/public/SiteFooter';
 import { SiteHeader } from '@/components/public/SiteHeader';
@@ -63,6 +64,7 @@ export function PublicChrome({
             <Hero site={site} />
             <AboutSection site={site} />
             <ProgramsSection site={site} />
+            <HiringSection />
             <EnrollmentCta message={site.welcomeMessage || site.description} />
             <ContactSection site={site} />
           </>

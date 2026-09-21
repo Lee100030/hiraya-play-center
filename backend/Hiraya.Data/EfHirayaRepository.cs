@@ -105,6 +105,7 @@ public class EfHirayaRepository : IHirayaRepository
             WebsiteGallery = await db.WebsiteGallery.AsNoTracking().ToListAsync(ct),
             Settings = await db.Settings.AsNoTracking().FirstOrDefaultAsync(ct) ?? new CenterSettings()
         };
+        HirayaOpsStore.Unpack(data);
         FamilyAccess.EnsureLegacyLinks(data);
         PermissionCatalog.EnsureRows(data);
         EnsureRoles(data);
@@ -115,6 +116,7 @@ public class EfHirayaRepository : IHirayaRepository
     private async Task SaveUnlockedAsync(HirayaDatabase incoming, CancellationToken ct)
     {
         var data = Clone(incoming);
+        HirayaOpsStore.Pack(data);
         EnsureRoles(data);
         EnsureRooms(data);
         PermissionCatalog.EnsureRows(data);
