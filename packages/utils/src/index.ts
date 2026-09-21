@@ -185,6 +185,46 @@ export function parentInLane(store: HirayaDatabase, parentId: string, lane?: Man
   return childrenOfParent(store, parentId).some((student) => studentInLane(student, lane));
 }
 
+export const STAFF_MESSAGE_KIND = 'staff_message';
+
+export function mobileRecipientIdsForStudent(store: HirayaDatabase, student: Student): string[] {
+  const ids = new Set<string>();
+  if (student.parentId) ids.add(student.parentId);
+  for (const link of store.parentStudents) {
+    if (link.studentId === student.studentId && link.isActive) ids.add(link.parentId);
+  }
+  return [...ids].filter((id) => store.users.some((user) => user.userId === id && user.role === 'parent'));
+}
+
+export function appendStaffMessages(
+  store: HirayaDatabase,
+  recipientIds: string[],
+  message: string,
+  title = 'Message from HIRAYA',
+): HirayaDatabase {
+  const text = message.trim();
+  const subject = title.trim() || 'Message from HIRAYA';
+  const unique = [...new Set(recipientIds.filter(Boolean))];
+  if (!text || unique.length === 0) return store;
+  return {
+    ...store,
+    alerts: [
+      ...store.alerts,
+      ...unique.map((recipientId) => ({
+        alertId: newId('al'),
+        kind: STAFF_MESSAGE_KIND,
+        title: subject,
+        message: text,
+        recipientId,
+        href: 'alerts',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        read: false,
+      })),
+    ],
+  };
+}
+
 export function teacherInLane(store: HirayaDatabase, userId: string, lane?: ManagementLaneId | null): boolean {
   if (!lane) return true;
   const profile = store.teacherProfiles.find((row) => row.userId === userId);

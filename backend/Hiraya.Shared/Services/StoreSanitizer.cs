@@ -66,6 +66,7 @@ public static class StoreSanitizer
         }
         foreach (var report in copy.Reports)
             report.History = [];
+        copy.Alerts = copy.Alerts.Where(a => a.RecipientId == actor.UserId).ToList();
         return copy;
     }
 

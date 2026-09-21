@@ -537,9 +537,10 @@ public static class NotificationKinds
     public const string Schedule = "schedule";
     public const string Announcement = "announcement";
     public const string LearningModule = "learning_module";
+    public const string StaffMessage = "staff_message";
 
     public static readonly string[] All =
-        [System, Enrollment, Attendance, Progress, Payment, Schedule, Announcement, LearningModule];
+        [System, Enrollment, Attendance, Progress, Payment, Schedule, Announcement, LearningModule, StaffMessage];
 
     public static string Label(string? kind) => kind switch
     {
@@ -550,6 +551,7 @@ public static class NotificationKinds
         Schedule => "Schedule",
         Announcement => "Announcement",
         LearningModule => "Learning module",
+        StaffMessage => "Staff message",
         _ => "General"
     };
 }

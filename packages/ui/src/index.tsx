@@ -1,6 +1,8 @@
 import type {
   ButtonHTMLAttributes,
+  FormEvent,
   InputHTMLAttributes,
+  MouseEvent,
   ReactNode,
   SelectHTMLAttributes,
   TableHTMLAttributes,
@@ -102,6 +104,79 @@ export function PageHeader({
       </div>
       {actions ? <div className="hlc-toolbar">{actions}</div> : null}
     </header>
+  );
+}
+
+export function MessageIconButton({
+  label = 'Message on mobile',
+  onClick,
+}: {
+  label?: string;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button type="button" className="hlc-msg-btn" aria-label={label} title={label} onClick={onClick}>
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2m0 4-8 5-8-5V6l8 5 8-5z"
+        />
+      </svg>
+    </button>
+  );
+}
+
+export function MessageComposer({
+  toLabel,
+  toHint,
+  busy,
+  error,
+  onClose,
+  onSend,
+}: {
+  toLabel: string;
+  toHint?: string;
+  busy?: boolean;
+  error?: string;
+  onClose: () => void;
+  onSend: (payload: { title: string; message: string }) => void;
+}) {
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    onSend({
+      title: String(form.get('title') || ''),
+      message: String(form.get('message') || ''),
+    });
+  }
+
+  return (
+    <Modal
+      title={`Message ${toLabel}`}
+      onClose={onClose}
+      busy={busy}
+      actions={
+        <>
+          <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="hlc-staff-message" disabled={busy}>
+            {busy ? 'Sending…' : 'Send to mobile'}
+          </Button>
+        </>
+      }
+    >
+      <p className="hlc-muted">{toHint || 'This appears in their mobile Alerts tab.'}</p>
+      {error ? <Alert>{error}</Alert> : null}
+      <form id="hlc-staff-message" className="form-grid" onSubmit={submit}>
+        <Field label="Subject">
+          <Input name="title" defaultValue="Message from HIRAYA" />
+        </Field>
+        <Field label="Message">
+          <Textarea name="message" rows={5} required placeholder="Write the note for their phone." />
+        </Field>
+      </form>
+    </Modal>
   );
 }
 

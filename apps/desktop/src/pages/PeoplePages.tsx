@@ -7,6 +7,8 @@ import {
   Field,
   Input,
   Loading,
+  MessageComposer,
+  MessageIconButton,
   Modal,
   PageHeader,
   Select,
@@ -14,10 +16,54 @@ import {
   Table,
   emptyCell,
 } from '@hiraya/ui';
-import { displayName, newId, roleLabel, studentDisplay, CENTER_PROGRAMS, childrenOfParent, laneLabel, parentInLane, studentInLane, teacherInLane, type ManagementLaneId } from '@hiraya/utils';
+import { displayName, newId, roleLabel, studentDisplay, CENTER_PROGRAMS, appendStaffMessages, childrenOfParent, laneLabel, mobileRecipientIdsForStudent, parentInLane, studentInLane, teacherInLane, type ManagementLaneId } from '@hiraya/utils';
 import type { HirayaDatabase, HirayaUser, Student } from '@hiraya/types';
 import type { ViewId } from '../lib/views';
 import { StaffTasksBlock } from './AdminPhase2';
+
+type MessageTarget = { label: string; hint?: string; recipientIds: string[] };
+
+function StaffMessageHost({
+  store,
+  onSave,
+  target,
+  onClose,
+}: {
+  store: HirayaDatabase;
+  onSave: (next: HirayaDatabase) => Promise<void>;
+  target: MessageTarget;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  return (
+    <MessageComposer
+      toLabel={target.label}
+      toHint={target.hint}
+      busy={busy}
+      error={error}
+      onClose={onClose}
+      onSend={(payload) => {
+        void (async () => {
+          if (!target.recipientIds.length) {
+            setError('No mobile account is linked to receive this.');
+            return;
+          }
+          setBusy(true);
+          setError('');
+          try {
+            await onSave(appendStaffMessages(store, target.recipientIds, payload.message, payload.title));
+            onClose();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not send');
+          } finally {
+            setBusy(false);
+          }
+        })();
+      }}
+    />
+  );
+}
 
 export function StudentsPage({
   store,
@@ -37,6 +83,7 @@ export function StudentsPage({
   const [error, setError] = useState('');
   const [profile, setProfile] = useState<Student | null>(null);
   const [tab, setTab] = useState<'schedule' | 'attendance' | 'payments' | 'documents' | 'certificates' | 'notes'>('schedule');
+  const [messageTo, setMessageTo] = useState<MessageTarget | null>(null);
 
   const rows = useMemo(
     () =>
@@ -139,18 +186,31 @@ export function StudentsPage({
       ) : (
         <div className="hlc-gallery">
           {rows.map((row) => (
-            <button
+            <div
               key={row.studentId}
-              type="button"
               className={`hlc-card hlc-person-card${selected.includes(row.studentId) ? ' is-selected' : ''}`}
-              onClick={() => setProfile(row)}
-              onDoubleClick={() => setEditing(row)}
             >
-              <Avatar name={studentDisplay(row)} />
-              <h3>{studentDisplay(row)}</h3>
-              <p>{emptyCell(row.program)}</p>
-              <StatusBadge status={row.status} />
-            </button>
+              <button
+                type="button"
+                className="hlc-person-main"
+                onClick={() => setProfile(row)}
+                onDoubleClick={() => setEditing(row)}
+              >
+                <Avatar name={studentDisplay(row)} />
+                <h3>{studentDisplay(row)}</h3>
+                <p>{emptyCell(row.program)}</p>
+                <StatusBadge status={row.status} />
+              </button>
+              <MessageIconButton
+                onClick={() =>
+                  setMessageTo({
+                    label: studentDisplay(row),
+                    hint: 'Students do not have app logins. This is sent to the linked parent’s Alerts tab.',
+                    recipientIds: mobileRecipientIdsForStudent(store, row),
+                  })
+                }
+              />
+            </div>
           ))}
         </div>
       )}
@@ -218,9 +278,20 @@ export function StudentsPage({
           title={studentDisplay(profile)}
           onClose={() => setProfile(null)}
           actions={
-            <Button type="button" variant="ghost" onClick={() => setProfile(null)}>
-              Close
-            </Button>
+            <>
+              <MessageIconButton
+                onClick={() =>
+                  setMessageTo({
+                    label: studentDisplay(profile),
+                    hint: 'Students do not have app logins. This is sent to the linked parent’s Alerts tab.',
+                    recipientIds: mobileRecipientIdsForStudent(store, profile),
+                  })
+                }
+              />
+              <Button type="button" variant="ghost" onClick={() => setProfile(null)}>
+                Close
+              </Button>
+            </>
           }
         >
           <div className="desk-split">
@@ -313,6 +384,9 @@ export function StudentsPage({
           {tab === 'notes' ? <p>{emptyCell(profile.notes)}</p> : null}
         </Modal>
       ) : null}
+      {messageTo ? (
+        <StaffMessageHost store={store} onSave={onSave} target={messageTo} onClose={() => setMessageTo(null)} />
+      ) : null}
     </>
   );
 }
@@ -320,14 +394,16 @@ export function StudentsPage({
 export function ParentsPage({
   store,
   loading,
+  onSave,
   lane,
 }: {
   store: HirayaDatabase;
   loading: boolean;
-  onSave?: (next: HirayaDatabase) => Promise<void>;
+  onSave: (next: HirayaDatabase) => Promise<void>;
   lane?: ManagementLaneId | null;
 }) {
   const [query, setQuery] = useState('');
+  const [messageTo, setMessageTo] = useState<MessageTarget | null>(null);
   const rows = store.users.filter(
     (u) =>
       u.role === 'parent' &&
@@ -359,6 +435,7 @@ export function ParentsPage({
               <th>Email</th>
               <th>Linked children</th>
               <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -373,11 +450,25 @@ export function ParentsPage({
                 <td>
                   <StatusBadge status={row.status} />
                 </td>
+                <td>
+                  <MessageIconButton
+                    onClick={() =>
+                      setMessageTo({
+                        label: displayName(row),
+                        hint: 'Sent to this parent’s mobile Alerts tab.',
+                        recipientIds: [row.userId],
+                      })
+                    }
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
         </Table>
       )}
+      {messageTo ? (
+        <StaffMessageHost store={store} onSave={onSave} target={messageTo} onClose={() => setMessageTo(null)} />
+      ) : null}
     </>
   );
 }
@@ -401,6 +492,7 @@ export function TeachersPage({
   );
   const [profile, setProfile] = useState<HirayaUser | null>(null);
   const [busy, setBusy] = useState(false);
+  const [messageTo, setMessageTo] = useState<MessageTarget | null>(null);
   if (loading) return <Loading />;
 
   async function setActive(row: HirayaUser, active: boolean) {
@@ -434,13 +526,24 @@ export function TeachersPage({
       ) : (
         <div className="hlc-gallery">
           {people.map((person) => (
-            <button key={person.userId} type="button" className="hlc-card hlc-person-card" onClick={() => setProfile(person)}>
-              <Avatar name={displayName(person)} photo={person.profileImagePath} />
-              <h3>{displayName(person)}</h3>
-              <p>{roleLabel(person.role)}</p>
-              <p>{emptyCell(store.teacherProfiles.find((p) => p.userId === person.userId)?.specialty)}</p>
-              <StatusBadge status={person.status} />
-            </button>
+            <div key={person.userId} className="hlc-card hlc-person-card">
+              <button type="button" className="hlc-person-main" onClick={() => setProfile(person)}>
+                <Avatar name={displayName(person)} photo={person.profileImagePath} />
+                <h3>{displayName(person)}</h3>
+                <p>{roleLabel(person.role)}</p>
+                <p>{emptyCell(store.teacherProfiles.find((p) => p.userId === person.userId)?.specialty)}</p>
+                <StatusBadge status={person.status} />
+              </button>
+              <MessageIconButton
+                onClick={() =>
+                  setMessageTo({
+                    label: displayName(person),
+                    hint: 'Sent to this teacher’s mobile Alerts tab.',
+                    recipientIds: [person.userId],
+                  })
+                }
+              />
+            </div>
           ))}
         </div>
       )}
@@ -451,6 +554,15 @@ export function TeachersPage({
           busy={busy}
           actions={
             <>
+              <MessageIconButton
+                onClick={() =>
+                  setMessageTo({
+                    label: displayName(profile),
+                    hint: 'Sent to this teacher’s mobile Alerts tab.',
+                    recipientIds: [profile.userId],
+                  })
+                }
+              />
               <Button type="button" variant="ghost" onClick={() => setProfile(null)}>
                 Close
               </Button>
@@ -478,6 +590,9 @@ export function TeachersPage({
             </Button>
           </div>
         </Modal>
+      ) : null}
+      {messageTo && onSave ? (
+        <StaffMessageHost store={store} onSave={onSave} target={messageTo} onClose={() => setMessageTo(null)} />
       ) : null}
     </>
   );

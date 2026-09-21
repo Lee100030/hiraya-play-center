@@ -4,9 +4,12 @@ import { useSearchParams } from 'next/navigation';
 import { useStore } from '@/components/StoreProvider';
 import { EmptyState, Loading, PageHeader, StatusBadge, Table } from '@hiraya/ui';
 import { childrenOfParent, displayName, laneLabel, parentInLane, parsePeopleLane, studentDisplay } from '@hiraya/utils';
+import { StaffMessageHost, UserMessageButton } from '@/components/StaffMessage';
+import { useState } from 'react';
 
 export default function ParentsPage() {
-  const { store, loading } = useStore();
+  const { store, loading, save } = useStore();
+  const [messageTo, setMessageTo] = useState<{ label: string; hint?: string; recipientIds: string[] } | null>(null);
   const lane = parsePeopleLane(useSearchParams().get('lane'));
   if (loading) return <Loading />;
   const parents = store.users.filter((u) => u.role === 'parent' && parentInLane(store, u.userId, lane));
@@ -32,6 +35,7 @@ export default function ParentsPage() {
               <th>Email</th>
               <th>Children</th>
               <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -46,11 +50,19 @@ export default function ParentsPage() {
                 <td>
                   <StatusBadge status={parent.status} />
                 </td>
+                <td>
+                  <UserMessageButton
+                    user={parent}
+                    hint="Sent to this parent’s mobile Alerts tab."
+                    onOpen={setMessageTo}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
         </Table>
       )}
+      <StaffMessageHost store={store} save={save} target={messageTo} onClose={() => setMessageTo(null)} />
     </>
   );
 }

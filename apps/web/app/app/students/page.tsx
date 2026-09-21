@@ -2,6 +2,7 @@
 
 import { useStore } from '@/components/StoreProvider';
 import { Button, EmptyState, Field, Input, Loading, PageHeader, Select, StatusBadge, Table } from '@hiraya/ui';
+import { StaffMessageHost, StudentMessageButton } from '@/components/StaffMessage';
 import { newId, studentDisplay, laneLabel, parsePeopleLane, studentInLane } from '@hiraya/utils';
 import type { Student } from '@hiraya/types';
 import { FormEvent, useMemo, useState } from 'react';
@@ -11,6 +12,7 @@ export default function StudentsPage() {
   const { store, loading, save } = useStore();
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Student | null>(null);
+  const [messageTo, setMessageTo] = useState<{ label: string; hint?: string; recipientIds: string[] } | null>(null);
   const lane = parsePeopleLane(useSearchParams().get('lane'));
 
   const rows = useMemo(
@@ -124,6 +126,7 @@ export default function StudentsPage() {
                   <StatusBadge status={row.status} />
                 </td>
                 <td>
+                  <StudentMessageButton store={store} student={row} onOpen={setMessageTo} />
                   <Button variant="ghost" type="button" onClick={() => setEditing(row)}>
                     Edit
                   </Button>
@@ -133,6 +136,7 @@ export default function StudentsPage() {
           </tbody>
         </Table>
       )}
+      <StaffMessageHost store={store} save={save} target={messageTo} onClose={() => setMessageTo(null)} />
     </>
   );
 }

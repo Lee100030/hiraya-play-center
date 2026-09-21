@@ -229,6 +229,7 @@
 }
 
 .hlc-person-card {
+  position: relative;
   cursor: pointer;
   text-align: left;
   width: 100%;
@@ -237,6 +238,45 @@
 }
 
 .hlc-person-card h3 { margin: 0; font-size: 1.1rem; }
+
+.hlc-person-main {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0 2.2rem 0 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hlc-msg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--hlc-border);
+  border-radius: 999px;
+  background: #fffef8;
+  color: var(--hlc-green);
+  cursor: pointer;
+}
+
+.hlc-person-card .hlc-msg-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.hlc-msg-btn:hover,
+.hlc-msg-btn:focus-visible {
+  background: rgba(212, 175, 55, 0.2);
+  color: #0b3d2e;
+}
 
 .hlc-float-safe { padding-bottom: 72px; }
 
