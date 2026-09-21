@@ -42,7 +42,8 @@ function createWindow() {
         submenu: [
           {
             label: 'Open public website',
-            click: () => shell.openExternal('http://127.0.0.1:3000'),
+            click: () =>
+              shell.openExternal(process.env.HIRAYA_PUBLIC_URL || 'https://www.hirayalearningcenter.app'),
           },
         ],
       },

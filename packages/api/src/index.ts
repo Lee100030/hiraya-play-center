@@ -155,5 +155,8 @@ export class HirayaApi {
 }
 
 export function createHirayaApi(tokenStore: TokenStore, baseUrl?: string): HirayaApi {
-  return new HirayaApi(tokenStore, baseUrl ? resolveApiBaseUrl(baseUrl) : resolveApiBaseUrl());
+  return new HirayaApi(
+    tokenStore,
+    baseUrl === undefined ? resolveApiBaseUrl() : resolveApiBaseUrl(baseUrl),
+  );
 }
