@@ -240,7 +240,14 @@ public static class StoreSanitizer
 public sealed class LoginRequest
 {
     public string Login { get; set; } = "";
+    public string Username { get; set; } = "";
+    public string Email { get; set; } = "";
     public string Password { get; set; } = "";
+
+    public string ResolvedLogin =>
+        !string.IsNullOrWhiteSpace(Login) ? Login.Trim()
+        : !string.IsNullOrWhiteSpace(Username) ? Username.Trim()
+        : (Email ?? "").Trim();
 }
 
 public sealed class PasswordChangeRequest

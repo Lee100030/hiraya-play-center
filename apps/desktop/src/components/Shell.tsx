@@ -36,8 +36,11 @@ export function Shell({
     <div className="desk-shell">
       <aside className="desk-nav">
         <div className="desk-brand">
-          <strong>HIRAYA</strong>
-          <span>Learning Center</span>
+          <img src="./images/hiraya-crest.png" alt="" width={48} height={48} />
+          <div>
+            <strong>HIRAYA</strong>
+            <span>Learning Center</span>
+          </div>
         </div>
         <nav>
           {groups.map(([group, links]) => (
@@ -74,13 +77,16 @@ export function Shell({
       </aside>
       <div className="desk-main-wrap">
         <header className="desk-topbar">
-          <strong>HIRAYA operations</strong>
+          <div>
+            <p className="hlc-kicker" style={{ margin: 0 }}>Super Admin desk</p>
+            <strong>HIRAYA Learning Center</strong>
+          </div>
           {error ? (
             <span className="desk-top-error">
               {error} {onRetry ? <button type="button" onClick={onRetry}>Retry</button> : null}
             </span>
           ) : (
-            <span>Local API · live store</span>
+            <span className="desk-live">Local hub · live store</span>
           )}
         </header>
         <main className="desk-main hlc-float-safe">{children}</main>

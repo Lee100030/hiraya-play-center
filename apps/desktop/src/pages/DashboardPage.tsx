@@ -44,7 +44,7 @@ export function DashboardPage({
       <PageHeader
         kicker="Overview"
         title={`Good day, ${displayName(user)}`}
-        description={`${roleLabel(user.role)} · live counts from the local hub.`}
+        description={`${roleLabel(user.role)} · HIRAYA Super Admin desk · live counts from the local hub.`}
       />
       <div className="grid-cards">
         {metrics.map(([label, value]) => (

@@ -29,12 +29,29 @@ h1, h2, h3 { font-family: var(--hlc-font-serif); color: var(--hlc-green); }
 }
 
 .desk-brand {
-  padding: 1.1rem 1rem 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.1rem 1rem 0.85rem;
   letter-spacing: 0.18em;
 }
 
-.desk-brand strong { display: block; color: #e8c547; }
+.desk-brand img {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+}
+
+.desk-brand strong { display: block; color: #e8c547; font-family: var(--hlc-font-serif); font-size: 1.35rem; letter-spacing: 0.12em; }
 .desk-brand span { font-size: 0.75rem; opacity: 0.8; letter-spacing: 0.04em; }
+
+.desk-nav .hlc-btn-ghost {
+  color: #f7f1e1;
+  border-color: rgba(212, 175, 55, 0.45);
+  width: 100%;
+}
+
+.desk-live { color: var(--hlc-muted); font-size: 0.85rem; }
 
 .nav-group { padding: 0.4rem 0.7rem 0.6rem; }
 .nav-group p {
@@ -88,7 +105,85 @@ h1, h2, h3 { font-family: var(--hlc-font-serif); color: var(--hlc-green); }
 
 .desk-main { padding: 1.25rem 1.4rem; overflow: auto; }
 
-.desk-login { max-width: 420px; margin: 12vh auto; }
+.login-stage {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 48px 20px;
+  background:
+    radial-gradient(ellipse 70% 55% at 18% 8%, rgba(212, 175, 55, 0.34), transparent 55%),
+    linear-gradient(180deg, #020806 0%, #0b3d2e 42%, #041009 100%);
+}
+
+.login-glass {
+  width: min(400px, 100%);
+  padding: 32px;
+  border-radius: 28px;
+  background: rgba(247, 241, 225, 0.14);
+  border: 1px solid rgba(247, 241, 225, 0.38);
+  backdrop-filter: blur(22px);
+  color: #f7f1e1;
+  text-align: center;
+}
+
+.login-glass img {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 12px;
+  display: block;
+}
+
+.login-glass h1 {
+  color: #f7f1e1;
+  margin: 0 0 8px;
+}
+
+.login-glass p {
+  color: rgba(247, 241, 225, 0.88);
+}
+
+.login-glass input {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 999px;
+  border: 1px solid rgba(247, 241, 225, 0.42);
+  background: rgba(4, 16, 9, 0.28);
+  color: #f7f1e1;
+  padding: 0 18px;
+  font: inherit;
+}
+
+.login-glass label {
+  display: block;
+  text-align: left;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+
+.login-gradient {
+  width: 100%;
+  min-height: 50px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 700;
+  background: linear-gradient(90deg, #d4af37 0%, #0b3d2e 100%);
+  cursor: pointer;
+}
+
+.login-gradient:disabled { opacity: 0.6; cursor: wait; }
+
+.login-hint {
+  margin: 16px 0 0;
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+.login-glass .hlc-alert-danger {
+  background: rgba(196, 69, 54, 0.22);
+  color: #ffd7d2;
+  border: 1px solid rgba(255, 215, 210, 0.35);
+}
 
 .grid-cards {
   display: grid;

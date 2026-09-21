@@ -191,9 +191,9 @@ app.MapPost("/api/auth/login", async (LoginRequest body, PortalAuthService auth,
 {
     try
     {
-        var session = await auth.AuthenticateAsync(body.Login, body.Password);
+        var session = await auth.AuthenticateAsync(body.ResolvedLogin, body.Password);
         if (session?.User is null)
-            return Results.Unauthorized();
+            return Results.Json(new { error = "Username or password is incorrect." }, statusCode: StatusCodes.Status401Unauthorized);
         var db = await repo.LoadAsync();
         var live = db.Users.FirstOrDefault(u => u.UserId == session.User.UserId);
         var token = SessionTokens.Issue(

@@ -2,7 +2,8 @@ export const SESSION_HEADER = 'X-Hiraya-Session';
 export const SESSION_STORAGE_KEY = 'hiraya.session';
 
 export function resolveApiBaseUrl(explicit?: string): string {
-  if (explicit !== undefined && explicit !== null) return explicit.replace(/\/$/, '');
+  const trimmed = (explicit ?? '').trim();
+  if (trimmed) return trimmed.replace(/\/$/, '');
   const fromEnv =
     (typeof process !== 'undefined' &&
       (process.env.NEXT_PUBLIC_API_URL ||

@@ -42,7 +42,10 @@ export class HirayaApi {
     const data = text ? JSON.parse(text) : null;
     if (!res.ok) {
       const message =
-        (data && (data.error || data.message || data.title)) || `Request failed (${res.status})`;
+        (data && (data.error || data.message || data.title)) ||
+        (res.status === 401
+          ? 'Username or password is incorrect.'
+          : `Request failed (${res.status})`);
       throw new ApiError(String(message), res.status, data);
     }
     return data as T;
@@ -61,7 +64,7 @@ export class HirayaApi {
     const res = await fetch(this.url('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, password }),
+      body: JSON.stringify({ login: login.trim(), password }),
     });
     const session = await this.parse<AuthSession>(res);
     await this.tokenStore.setToken?.(session.token);

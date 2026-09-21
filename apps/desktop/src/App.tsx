@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Field, Input } from '@hiraya/ui';
+import { Alert } from '@hiraya/ui';
 import { emptyStore, type HirayaDatabase, type HirayaUser } from '@hiraya/types';
 import { Shell } from './components/Shell';
 import { DashboardPage } from './pages/DashboardPage';
@@ -75,41 +75,55 @@ export default function App() {
 
   if (!user) {
     return (
-      <form
-        className="desk-login hlc-card"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setBusy(true);
-          setError(null);
-          try {
-            const session = await api.login(login, password);
-            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
-            setUser(session.user);
-            setPassword('');
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'Sign-in failed');
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <p className="hlc-kicker">Staff entrance</p>
-        <h1>HIRAYA Desktop</h1>
-        <p>Sign in against the local Hiraya.Api. Passwords are not stored in this app.</p>
-        {error ? <Alert>{error}</Alert> : null}
-        <Field label="Username or email">
-          <Input value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" required />
-        </Field>
-        <div style={{ height: 12 }} />
-        <Field label="Password">
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-        </Field>
-        <div style={{ marginTop: 16 }}>
-          <Button type="submit" disabled={busy}>
-            {busy ? 'Signing in…' : 'Open workspace'}
-          </Button>
-        </div>
-      </form>
+      <main className="login-stage">
+        <form
+          className="login-glass"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError(null);
+            try {
+              const session = await api.login(login, password);
+              localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
+              setUser(session.user);
+              setPassword('');
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Sign-in failed');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <img src="./images/hiraya-crest.png" alt="HIRAYA Learning Center crest" width={80} height={80} />
+          <p className="hlc-kicker">Staff entrance</p>
+          <h1>HIRAYA Super Admin</h1>
+          <p>Private desk for center directors. Passwords stay on the local hub.</p>
+          {error ? <Alert>{error}</Alert> : null}
+          <label>
+            Username or email
+            <input
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              autoComplete="username"
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
+          <button className="login-gradient" type="submit" disabled={busy}>
+            {busy ? 'Signing in…' : 'Continue'}
+          </button>
+          <p className="login-hint">Local Super Admin: admin · Admin123</p>
+        </form>
+      </main>
     );
   }
 

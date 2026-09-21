@@ -3,6 +3,13 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 5173, strictPort: true, fs: { allow: ['../..'] } },
+  server: {
+    port: 5173,
+    strictPort: true,
+    fs: { allow: ['../..'] },
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:5188', changeOrigin: true },
+    },
+  },
   base: './',
 });
