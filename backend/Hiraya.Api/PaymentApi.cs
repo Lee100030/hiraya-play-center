@@ -173,58 +173,16 @@ public static class PaymentApi
         if (!TryDeliveryAddress(teacher, out var to, out var addressError))
             throw new InvalidOperationException(addressError);
 
-        var center = string.IsNullOrWhiteSpace(db.Settings.CenterName) ? "Hiraya Kids Learning Center" : db.Settings.CenterName.Trim();
         var name = DisplayName(teacher);
-        var amount = payment.Amount.ToString("N2");
-        var paid = payment.AmountPaid.ToString("N2");
-        var date = DateLabel(payment.PaymentDate, payment.PaidAt);
-        var status = string.IsNullOrWhiteSpace(payment.PaymentStatus) ? "pending" : payment.PaymentStatus.Trim();
-        var method = string.IsNullOrWhiteSpace(payment.PaymentMethod) ? "cash" : payment.PaymentMethod.Trim();
-        var notes = string.IsNullOrWhiteSpace(payment.Notes) ? "—" : payment.Notes.Trim();
         var account = (payment.AccountNumber ?? "").Trim();
         var fromAccount = (payment.FromAccountNumber ?? "").Trim();
         var accountLine = AccountSentence(fromAccount, account);
         var receipt = ReceiptAttachment(paths, payment);
         var receiptLine = receipt is null ? "" : " The receipt is attached.";
-        var subject = $"{center} · Your salary is on your account · {date}";
-        var text = string.Join('\n', new[]
-        {
-            center,
-            $"Good day, {name}. Your salary of ₱{amount} for {date} is now on your Hiraya account.{accountLine}{receiptLine}",
-            "",
-            $"Teacher: {name}",
-            $"Email: {to}",
-            $"Payment date: {date}",
-            $"Amount: ₱{amount}",
-            $"Amount paid: ₱{paid}",
-            $"Method: {method}",
-            $"Status: {status}",
-            $"Sent from: {(string.IsNullOrWhiteSpace(fromAccount) ? "—" : fromAccount)}",
-            $"Paid to: {(string.IsNullOrWhiteSpace(account) ? "—" : account)}",
-            $"Notes: {notes}",
-            "",
-            $"Reference: {payment.PaymentId}",
-            "",
-            $"This notice was sent by {center}."
-        });
-        var html = $"""
-            <div style="font-family:Segoe UI,Arial,sans-serif;color:#0b1f14;line-height:1.5">
-              <h2 style="margin:0 0 8px">{System.Net.WebUtility.HtmlEncode(center)}</h2>
-              <p style="margin:0 0 16px">Good day, {System.Net.WebUtility.HtmlEncode(name)}. Your salary of ₱{amount} for {System.Net.WebUtility.HtmlEncode(date)} is now on your Hiraya account.{System.Net.WebUtility.HtmlEncode(accountLine)}{System.Net.WebUtility.HtmlEncode(receiptLine)}</p>
-              <table style="border-collapse:collapse;width:100%;max-width:520px">
-                <tr><td style="padding:6px 0;color:#4a5c54">Teacher</td><td style="padding:6px 0"><strong>{System.Net.WebUtility.HtmlEncode(name)}</strong></td></tr>
-                <tr><td style="padding:6px 0;color:#4a5c54">Payment date</td><td style="padding:6px 0">{System.Net.WebUtility.HtmlEncode(date)}</td></tr>
-                <tr><td style="padding:6px 0;color:#4a5c54">Amount</td><td style="padding:6px 0">₱{amount}</td></tr>
-                <tr><td style="padding:6px 0;color:#4a5c54">Amount paid</td><td style="padding:6px 0">₱{paid}</td></tr>
-                <tr><td style="padding:6px 0;color:#4a5c54">Method</td><td style="padding:6px 0">{System.Net.WebUtility.HtmlEncode(method)}</td></tr>
-                <tr><td style="padding:6px 0;color:#4a5c54">Status</td><td style="padding:6px 0">{System.Net.WebUtility.HtmlEncode(status)}</td></tr>
-                <tr><td style="padding:6px 0;color:#4a5c54">Sent from</td><td style="padding:6px 0">{System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(fromAccount) ? "—" : fromAccount)}</td></tr>
-                <tr><td style="padding:6px 0;color:#4a5c54">Paid to</td><td style="padding:6px 0">{System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(account) ? "—" : account)}</td></tr>
-                <tr><td style="padding:6px 0;color:#4a5c54">Notes</td><td style="padding:6px 0">{System.Net.WebUtility.HtmlEncode(notes)}</td></tr>
-              </table>
-              <p style="margin:16px 0 0;color:#4a5c54;font-size:12px">Reference: {System.Net.WebUtility.HtmlEncode(payment.PaymentId)}</p>
-            </div>
-            """;
+        var salary = BuildSalaryNotice(db, name, to, payment, account, fromAccount, accountLine, receiptLine);
+        var subject = salary.Subject;
+        var text = salary.Text;
+        var html = salary.Html;
 
         var emailed = false;
         if (email.IsConfigured)
@@ -238,8 +196,7 @@ public static class PaymentApi
                 "SMTP is not configured. Set Smtp settings (or HIRAYA_SMTP_HOST / HIRAYA_SMTP_USER / HIRAYA_SMTP_PASSWORD), or use Open email draft instead.");
         }
 
-        var notifyMessage =
-            $"Good day, {name}. Your salary of ₱{amount} for {date} is now on your Hiraya account. Amount released: ₱{paid}.{accountLine} Status: {status}.";
+        var notifyMessage = salary.NotifyMessage;
 
         await repo.MutateAsync(async live =>
         {
@@ -248,7 +205,7 @@ public static class PaymentApi
                 teacher.UserId,
                 notifyMessage,
                 NotificationKinds.Payment,
-                "Salary on your account",
+                salary.NotifyTitle,
                 "payments");
             AuditService.Append(live, actor, AuditModules.Payments, "payslip",
                 "payment", payment.PaymentId, $"Sent payslip to {to} for {name}.");
@@ -296,27 +253,32 @@ public static class PaymentApi
         var accountText = AccountSentence(fromAccount, account);
         var receipt = ReceiptAttachment(paths, ReceiptPayment(db, student.StudentId));
         var receiptText = receipt is null ? "" : " The receipt is attached.";
-        var title = due > 0 ? "Remaining balance" : "Account settled";
+        var title = due > 0 ? "A balance is still open" : "The account is settled";
         var message = due > 0
-            ? $"Good day. This is {center}. {child} has a remaining balance of ₱{amount}.{dueText}{accountText}{receivedText}{receiptText} You can also see this balance on your Hiraya account."
-            : $"Good day. This is {center}. {child} has no remaining balance.{accountText}{receiptText} The account is settled, and you can see this on your Hiraya account.";
-        var subject = $"{center} · {title} · {child}";
-        var text = string.Join('\n', new[]
+            ? $"Good day. This is {center}. {child} has a remaining balance of ₱{amount}.{dueText}{accountText}{receivedText}{receiptText} This is not a receipt for the full tuition."
+            : $"Good day. This is {center}. {child} has no remaining balance.{accountText}{receiptText} The account is settled.";
+        var mail = new HirayaEmailMessage
         {
-            center,
-            title,
-            "",
-            message,
-            "",
-            "Sign in to the Hiraya app to see this on your account."
-        });
-        var html = $"""
-            <div style="font-family:Segoe UI,Arial,sans-serif;color:#0b1f14;line-height:1.5">
-              <h2 style="margin:0 0 8px">{System.Net.WebUtility.HtmlEncode(center)}</h2>
-              <p>{System.Net.WebUtility.HtmlEncode(message)}</p>
-              <p style="color:#4a5c54">This notice is also on your Hiraya account.</p>
-            </div>
-            """;
+            CenterName = center,
+            Headline = title,
+            Intro = message,
+            Rows =
+            [
+                new("Student", child),
+                new("Status", due > 0 ? "Balance still open" : "Settled"),
+                new("Remaining balance", due > 0 ? $"₱{amount}" : "₱0.00"),
+                new("Due", string.IsNullOrWhiteSpace(dueAt) ? "" : DateLabel(dueAt, "")),
+                new("Sent from", fromAccount),
+                new("Paid to", account),
+                new("Received by", received)
+            ],
+            ActionLabel = "View payment details",
+            ActionUrl = HirayaEmailLayout.PublicUrl(db.Settings.Website),
+            Contact = HirayaEmailLayout.ContactFrom(db.Settings)
+        };
+        var subject = $"{center} · {title} · {child}";
+        var text = HirayaEmailLayout.Plain(mail);
+        var html = HirayaEmailLayout.Html(mail);
 
         var emailedTo = new List<string>();
         string? emailError = null;
@@ -397,26 +359,18 @@ public static class PaymentApi
         teacher = db.Users.FirstOrDefault(u => string.Equals(u.UserId, payment.StudentId, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException("Teacher account not found.");
 
-        var center = CenterName(db);
         var name = DisplayName(teacher);
-        var paid = payment.AmountPaid.ToString("N2");
-        var amount = payment.Amount.ToString("N2");
-        var date = DateLabel(payment.PaymentDate, payment.PaidAt);
-        var status = string.IsNullOrWhiteSpace(payment.PaymentStatus) ? "pending" : payment.PaymentStatus.Trim();
         var account = (payment.AccountNumber ?? "").Trim();
         var fromAccount = (payment.FromAccountNumber ?? "").Trim();
         var accountLine = AccountSentence(fromAccount, account);
         var receipt = ReceiptAttachment(paths, payment);
         var receiptLine = receipt is null ? "" : " The receipt is attached.";
-        var message = $"Good day, {name}. Your salary of ₱{amount} for {date} is now on your Hiraya account. Amount released: ₱{paid}.{accountLine}{receiptLine} Status: {status}.";
-        var subject = $"{center} · Your salary is on your account";
-        var text = string.Join('\n', new[] { center, "Salary on your account", "", message });
-        var html = $"""
-            <div style="font-family:Segoe UI,Arial,sans-serif;color:#0b1f14;line-height:1.5">
-              <h2 style="margin:0 0 8px">{System.Net.WebUtility.HtmlEncode(center)}</h2>
-              <p>{System.Net.WebUtility.HtmlEncode(message)}</p>
-            </div>
-            """;
+        var delivery = TryDeliveryAddress(teacher, out var knownTo, out _) ? knownTo : "";
+        var salary = BuildSalaryNotice(db, name, delivery, payment, account, fromAccount, accountLine, receiptLine);
+        var message = salary.NotifyMessage;
+        var subject = salary.Subject;
+        var text = salary.Text;
+        var html = salary.Html;
 
         var emailed = false;
         var to = "";
@@ -441,7 +395,7 @@ public static class PaymentApi
 
         await repo.MutateAsync(async live =>
         {
-            NotificationService.Push(live, teacher.UserId, message, NotificationKinds.Payment, "Salary on your account", "payments");
+            NotificationService.Push(live, teacher.UserId, message, NotificationKinds.Payment, salary.NotifyTitle, "payments");
             AuditService.Append(live, actor, AuditModules.Payments, "payment-notice",
                 "payment", payment.PaymentId, $"Notified {name} on their account.");
             await Task.CompletedTask;
@@ -619,6 +573,55 @@ public static class PaymentApi
         return (named?.ReceivedBy ?? "").Trim();
     }
 
+    private sealed record SalaryMail(string Subject, string Text, string Html, string NotifyTitle, string NotifyMessage);
+
+    private static SalaryMail BuildSalaryNotice(
+        HirayaDatabase db,
+        string name,
+        string email,
+        Payment payment,
+        string account,
+        string fromAccount,
+        string accountLine,
+        string receiptLine)
+    {
+        var date = DateLabel(payment.PaymentDate, payment.PaidAt);
+        var copy = SalaryNotice.Describe(name, date, payment.Amount, payment.AmountPaid, payment.PaymentStatus, accountLine, receiptLine);
+        var owed = Math.Max(0, payment.Amount - payment.AmountPaid);
+        var center = CenterName(db);
+        var when = HirayaEmailLayout.Shown(date);
+        var mail = new HirayaEmailMessage
+        {
+            CenterName = center,
+            Headline = copy.Headline,
+            Intro = copy.Intro,
+            Rows =
+            [
+                new("Teacher", name),
+                new("Email", email),
+                new("Payment date", date),
+                new("Amount", $"₱{payment.Amount:N2}"),
+                new("Amount paid", $"₱{payment.AmountPaid:N2}"),
+                new("Still owed", $"₱{owed:N2}"),
+                new("Method", string.IsNullOrWhiteSpace(payment.PaymentMethod) ? "" : payment.PaymentMethod.Trim()),
+                new("Status", copy.Status),
+                new("Sent from", fromAccount),
+                new("Paid to", account),
+                new("Notes", payment.Notes)
+            ],
+            Reference = payment.PaymentId,
+            ActionLabel = "View payment details",
+            ActionUrl = HirayaEmailLayout.PublicUrl(db.Settings.Website),
+            Contact = HirayaEmailLayout.ContactFrom(db.Settings)
+        };
+        return new SalaryMail(
+            $"{center} · {copy.SubjectPhrase} · {when}",
+            HirayaEmailLayout.Plain(mail),
+            HirayaEmailLayout.Html(mail),
+            copy.NotifyTitle,
+            copy.Intro);
+    }
+
     private static string CenterName(HirayaDatabase db) =>
         string.IsNullOrWhiteSpace(db.Settings.CenterName) ? "Hiraya Kids Learning Center" : db.Settings.CenterName.Trim();
 
@@ -648,7 +651,7 @@ public static class PaymentApi
         if (raw.Length >= 10) raw = raw[..10];
         if (DateTime.TryParse(raw, out var date))
             return date.ToString("MMM d, yyyy");
-        return string.IsNullOrWhiteSpace(raw) ? "—" : raw;
+        return string.IsNullOrWhiteSpace(raw) ? "" : raw;
     }
 
     private static async Task SaveReceiptAsync(

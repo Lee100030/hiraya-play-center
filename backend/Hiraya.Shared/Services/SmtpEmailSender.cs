@@ -44,7 +44,19 @@ public sealed class SmtpEmailSender : IEmailSender
             message.MessageId = MimeUtils.GenerateMessageId(identityDomain);
         var body = new BodyBuilder { TextBody = textBody ?? "" };
         if (!string.IsNullOrWhiteSpace(htmlBody))
+        {
             body.HtmlBody = htmlBody;
+            if (htmlBody.Contains("cid:" + HirayaEmailLayout.CrestContentId, StringComparison.Ordinal))
+            {
+                var crest = HirayaEmailLayout.CrestBytes();
+                if (crest.Length > 0)
+                {
+                    var linked = body.LinkedResources.Add("hiraya-crest.png", crest, new ContentType("image", "png"));
+                    linked.ContentId = HirayaEmailLayout.CrestContentId;
+                    linked.ContentDisposition = new ContentDisposition(ContentDisposition.Inline);
+                }
+            }
+        }
         if (attachment is not null && File.Exists(attachment.Path))
         {
             var mime = string.IsNullOrWhiteSpace(attachment.ContentType) ? "application/octet-stream" : attachment.ContentType;

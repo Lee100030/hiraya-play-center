@@ -7,26 +7,35 @@ public static class InvitationEmail
         string parentName,
         string activateUrl,
         DateTimeOffset expiresAt,
-        bool reset)
+        bool reset,
+        HirayaEmailContact? contact = null)
     {
-        var center = string.IsNullOrWhiteSpace(centerName) ? "Hiraya Kids Learning Center" : centerName.Trim();
+        var center = Center(centerName);
         var name = string.IsNullOrWhiteSpace(parentName) ? "there" : parentName.Trim();
         var when = expiresAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
         var subject = reset
-            ? $"{center}: reset your parent portal access"
-            : $"{center}: activate your parent portal account";
+            ? $"{center} · Reset your parent portal access"
+            : $"{center} · Activate your parent portal account";
+        var headline = reset ? "Reset your parent portal access" : "Activate your parent portal account";
         var intro = reset
-            ? "An administrator reset access for your parent portal account. Create a new password using the link below."
-            : "An administrator created a parent portal account for you. Activate it by creating a password using the link below.";
-        var text =
-            $"Hello {name},\n\n{intro}\n\n{activateUrl}\n\nThis link can be used once and expires on {when}.\nIf you did not expect this message, contact {center}.\n";
-        var html =
-            $"<p>Hello {System.Net.WebUtility.HtmlEncode(name)},</p>" +
-            $"<p>{System.Net.WebUtility.HtmlEncode(intro)}</p>" +
-            $"<p><a href=\"{System.Net.WebUtility.HtmlEncode(activateUrl)}\">Activate your account</a></p>" +
-            $"<p>This link can be used once and expires on {System.Net.WebUtility.HtmlEncode(when)}.</p>" +
-            $"<p>If you did not expect this message, contact {System.Net.WebUtility.HtmlEncode(center)}.</p>";
-        return (subject, text, html);
+            ? $"Hello {name}. An administrator reset access for your parent portal account. Create a new password with the button below. This message does not contain a password."
+            : $"Hello {name}. An administrator created a parent portal account for you. Activate it by creating a password with the button below. This message does not contain a password.";
+        var message = new HirayaEmailMessage
+        {
+            CenterName = center,
+            Headline = headline,
+            Intro = intro,
+            Rows =
+            [
+                new("Parent", name),
+                new("Status", reset ? "Password reset requested" : "Waiting for activation"),
+                new("Link expires", when)
+            ],
+            ActionLabel = reset ? "Create a new password" : "Activate your account",
+            ActionUrl = string.IsNullOrWhiteSpace(activateUrl) ? null : activateUrl.Trim(),
+            Contact = contact
+        };
+        return (subject, HirayaEmailLayout.Plain(message), HirayaEmailLayout.Html(message));
     }
 
     public static (string Subject, string Text, string Html) EnrollmentAccepted(
@@ -36,45 +45,45 @@ public static class InvitationEmail
         string program,
         string? activateUrl,
         DateTimeOffset? expiresAt,
-        bool needsActivation = false)
+        bool needsActivation = false,
+        HirayaEmailContact? contact = null)
     {
-        var center = string.IsNullOrWhiteSpace(centerName) ? "Hiraya Kids Learning Center" : centerName.Trim();
+        var center = Center(centerName);
         var parent = string.IsNullOrWhiteSpace(parentName) ? "there" : parentName.Trim();
         var student = string.IsNullOrWhiteSpace(studentName) ? "your child" : studentName.Trim();
-        var lane = string.IsNullOrWhiteSpace(program) ? "the selected program" : program.Trim();
-        var subject = $"{center}: enrollment accepted for {student}";
-        var status =
-            $"{student}'s enrollment application has been accepted for {lane}. " +
-            "This is not a payment receipt. Tuition is still paid at the learning center, and the remaining balance is tuition minus approved payments.";
-        var next = needsActivation
-            ? (string.IsNullOrWhiteSpace(activateUrl)
-                ? "Next step: a parent portal account was created and is waiting for a one-time password setup link. This email does not include a password. You cannot sign in until that link is sent from the public site address."
-                : "Next step: set your parent portal password with the one-time link below. The link does not contain a password.")
-            : "Next step: sign in to the parent portal with the account you already use. You will see only your own child or children.";
+        var lane = string.IsNullOrWhiteSpace(program) ? "" : program.Trim();
+        var subject = $"{center} · Enrollment accepted for {student}";
+        var intro = needsActivation
+            ? $"Hello {parent}. {student}'s enrollment application has been accepted. This is not a payment receipt. Tuition is still paid at the learning center."
+            : $"Hello {parent}. {student}'s enrollment application has been accepted. This is not a payment receipt. Tuition is still paid at the learning center, and you can sign in with the parent account you already use.";
         var when = expiresAt.HasValue
-            ? $"This link can be used once and expires on {expiresAt.Value.ToLocalTime():MMM d, yyyy h:mm tt}."
+            ? expiresAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
             : "";
-        var text =
-            $"Hello {parent},\n\n{status}\n\nParent: {parent}\nStudent: {student}\nProgram: {lane}\nStatus: accepted, payment still due at the center\n\n{next}\n" +
-            (string.IsNullOrWhiteSpace(activateUrl) ? "" : $"\n{activateUrl}\n{when}\n") +
-            $"\nIf you did not expect this message, contact {center}.\n";
-        var link = string.IsNullOrWhiteSpace(activateUrl)
-            ? ""
-            : $"<p><a href=\"{System.Net.WebUtility.HtmlEncode(activateUrl)}\">Set your parent portal password</a></p>" +
-              $"<p>{System.Net.WebUtility.HtmlEncode(when)}</p>";
-        var html =
-            $"<p>Hello {System.Net.WebUtility.HtmlEncode(parent)},</p>" +
-            $"<p>{System.Net.WebUtility.HtmlEncode(status)}</p>" +
-            "<ul>" +
-            $"<li>Parent: {System.Net.WebUtility.HtmlEncode(parent)}</li>" +
-            $"<li>Student: {System.Net.WebUtility.HtmlEncode(student)}</li>" +
-            $"<li>Program: {System.Net.WebUtility.HtmlEncode(lane)}</li>" +
-            "<li>Status: accepted, payment still due at the center</li>" +
-            "</ul>" +
-            $"<p>{System.Net.WebUtility.HtmlEncode(next)}</p>" +
-            link +
-            $"<p>If you did not expect this message, contact {System.Net.WebUtility.HtmlEncode(center)}.</p>";
-        return (subject, text, html);
+        var rows = new List<HirayaEmailRow>
+        {
+            new("Parent", parent),
+            new("Student", student),
+            new("Program", lane),
+            new("Status", "Accepted. Tuition is still due at the center.")
+        };
+        if (needsActivation)
+            rows.Add(new("Next step", string.IsNullOrWhiteSpace(activateUrl)
+                ? "A one-time password link is still being prepared. You cannot sign in until that link is sent."
+                : "Set your parent portal password with the button below. The link does not contain a password."));
+        if (!string.IsNullOrWhiteSpace(when))
+            rows.Add(new("Link expires", when));
+
+        var message = new HirayaEmailMessage
+        {
+            CenterName = center,
+            Headline = "Enrollment accepted",
+            Intro = intro,
+            Rows = rows,
+            ActionLabel = string.IsNullOrWhiteSpace(activateUrl) ? null : "Set your parent portal password",
+            ActionUrl = string.IsNullOrWhiteSpace(activateUrl) ? null : activateUrl.Trim(),
+            Contact = contact
+        };
+        return (subject, HirayaEmailLayout.Plain(message), HirayaEmailLayout.Html(message));
     }
 
     public static (string Subject, string Text, string Html) TeacherInterview(
@@ -82,42 +91,57 @@ public static class InvitationEmail
         string applicantName,
         string when,
         string place,
-        string instructions)
+        string instructions,
+        HirayaEmailContact? contact = null)
     {
-        var center = string.IsNullOrWhiteSpace(centerName) ? "Hiraya Kids Learning Center" : centerName.Trim();
+        var center = Center(centerName);
         var name = string.IsNullOrWhiteSpace(applicantName) ? "there" : applicantName.Trim();
-        var subject = $"{center}: interview scheduled";
-        var body =
-            $"Your teacher application is now at the interview stage. This is not a job offer.\n\n" +
-            $"Applicant: {name}\nWhen: {when}\nWhere: {place}\n{instructions}";
-        var text = $"Hello {name},\n\n{body}\n\nIf you did not apply, contact {center}.\n";
-        var html =
-            $"<p>Hello {System.Net.WebUtility.HtmlEncode(name)},</p>" +
-            $"<p>{System.Net.WebUtility.HtmlEncode("Your teacher application is now at the interview stage. This is not a job offer.")}</p>" +
-            "<ul>" +
-            $"<li>Applicant: {System.Net.WebUtility.HtmlEncode(name)}</li>" +
-            $"<li>When: {System.Net.WebUtility.HtmlEncode(when)}</li>" +
-            $"<li>Where: {System.Net.WebUtility.HtmlEncode(place)}</li>" +
-            $"</ul><p>{System.Net.WebUtility.HtmlEncode(instructions)}</p>" +
-            $"<p>If you did not apply, contact {System.Net.WebUtility.HtmlEncode(center)}.</p>";
-        return (subject, text, html);
+        var subject = $"{center} · Interview scheduled";
+        var message = new HirayaEmailMessage
+        {
+            CenterName = center,
+            Headline = "Interview scheduled",
+            Intro = $"Hello {name}. Your teacher application is now at the interview stage. This is not a job offer.",
+            Rows =
+            [
+                new("Applicant", name),
+                new("When", when),
+                new("Where", place),
+                new("Instructions", instructions),
+                new("Status", "Interview scheduled. Not accepted yet.")
+            ],
+            Contact = contact
+        };
+        return (subject, HirayaEmailLayout.Plain(message), HirayaEmailLayout.Html(message));
     }
 
     public static (string Subject, string Text, string Html) ApplicationReceived(
         string centerName,
         string applicantName,
         string subjectLine,
-        string body)
+        string body,
+        HirayaEmailContact? contact = null)
     {
-        var center = string.IsNullOrWhiteSpace(centerName) ? "Hiraya Kids Learning Center" : centerName.Trim();
+        var center = Center(centerName);
         var name = string.IsNullOrWhiteSpace(applicantName) ? "there" : applicantName.Trim();
-        var subject = $"{center}: {subjectLine}";
-        var text = $"Hello {name},\n\n{body}\n\nThis message is not an acceptance.\nIf you did not submit this, contact {center}.\n";
-        var html =
-            $"<p>Hello {System.Net.WebUtility.HtmlEncode(name)},</p>" +
-            $"<p>{System.Net.WebUtility.HtmlEncode(body)}</p>" +
-            "<p>This message is not an acceptance.</p>" +
-            $"<p>If you did not submit this, contact {System.Net.WebUtility.HtmlEncode(center)}.</p>";
-        return (subject, text, html);
+        var line = string.IsNullOrWhiteSpace(subjectLine) ? "we received your application" : subjectLine.Trim();
+        var headline = char.ToUpperInvariant(line[0]) + line[1..];
+        var subject = $"{center} · {headline}";
+        var message = new HirayaEmailMessage
+        {
+            CenterName = center,
+            Headline = headline,
+            Intro = $"Hello {name}. {body.Trim()} This message is not an acceptance.",
+            Rows =
+            [
+                new("Applicant", name),
+                new("Status", "Waiting for review")
+            ],
+            Contact = contact
+        };
+        return (subject, HirayaEmailLayout.Plain(message), HirayaEmailLayout.Html(message));
     }
+
+    private static string Center(string? centerName) =>
+        string.IsNullOrWhiteSpace(centerName) ? "Hiraya Kids Learning Center" : centerName.Trim();
 }

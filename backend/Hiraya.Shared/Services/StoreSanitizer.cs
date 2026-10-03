@@ -343,6 +343,7 @@ public static class StoreSanitizer
         OverlayStudentSessions(current, incoming, null);
         StudentTuition.Enforce(previous, current);
         WorkflowOps.ConsumeNewPresentAttendance(previous, current, actor);
+        SessionNoticeMail.QueueSessionChanges(previous, current);
         current.Alerts = current.Alerts.Where(a => a.RecipientId != actor.UserId)
             .Concat(incoming.Alerts.Where(a => a.RecipientId == actor.UserId))
             .ToList();

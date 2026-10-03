@@ -11,14 +11,17 @@ public class EfHirayaRepository : IHirayaRepository
 {
     private readonly IDbContextFactory<HirayaLearningCenterDbContext> _factory;
     private readonly ILogger<EfHirayaRepository> _logger;
+    private readonly IEmailSender _email;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public EfHirayaRepository(
         IDbContextFactory<HirayaLearningCenterDbContext> factory,
-        ILogger<EfHirayaRepository> logger)
+        ILogger<EfHirayaRepository> logger,
+        IEmailSender email)
     {
         _factory = factory;
         _logger = logger;
+        _email = email;
     }
 
     public bool UsingFirebase => false;
@@ -66,20 +69,33 @@ public class EfHirayaRepository : IHirayaRepository
 
     public async Task<HirayaDatabase> ApplyClientPatchAsync(StorePatchRequest patch, HirayaUser actor, CancellationToken ct = default)
     {
+        HirayaDatabase merged;
+        List<SessionParentMail> notices;
         await _gate.WaitAsync(ct);
         try
         {
             var current = await LoadUnlockedAsync(ct);
             var edited = Clone(current);
             StorePatch.Apply(edited, patch);
-            var merged = StoreSanitizer.MergeStoreWrite(current, edited, actor);
-            await SaveChangedAsync(current, merged, ct);
-            return merged;
+            SessionNoticeMail.Begin();
+            try
+            {
+                merged = StoreSanitizer.MergeStoreWrite(current, edited, actor);
+                await SaveChangedAsync(current, merged, ct);
+                notices = SessionNoticeMail.Take();
+            }
+            finally
+            {
+                SessionNoticeMail.Clear();
+            }
         }
         finally
         {
             _gate.Release();
         }
+
+        await SessionNoticeMail.SendAsync(notices, _email, _logger, ct);
+        return merged;
     }
 
     public Task SetItemAsync<T>(string collection, string id, T item, CancellationToken ct = default) =>

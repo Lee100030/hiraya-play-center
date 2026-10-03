@@ -478,8 +478,20 @@ app.MapPut("/api/store", async (HttpRequest request, HirayaDatabase incoming, IH
     try
     {
         var current = await repo.LoadAsync(ct);
-        var merged = StoreSanitizer.MergeStoreWrite(current, incoming, actor);
-        await repo.SaveAsync(merged, ct);
+        SessionNoticeMail.Begin();
+        HirayaDatabase merged;
+        List<SessionParentMail> notices;
+        try
+        {
+            merged = StoreSanitizer.MergeStoreWrite(current, incoming, actor);
+            await repo.SaveAsync(merged, ct);
+            notices = SessionNoticeMail.Take();
+        }
+        finally
+        {
+            SessionNoticeMail.Clear();
+        }
+        await SessionNoticeMail.SendAsync(notices, app.Services.GetRequiredService<IEmailSender>(), logs.CreateLogger("Hiraya.Api"), ct);
         return Results.Json(StoreSanitizer.VisibleTo(merged, actor), JsonDefaults.Options);
     }
     catch (UnauthorizedAccessException ex)

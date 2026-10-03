@@ -352,7 +352,8 @@ public class ParentAccountService
                 notice.Program,
                 string.IsNullOrWhiteSpace(activateUrl) ? null : activateUrl,
                 string.IsNullOrWhiteSpace(activateUrl) ? null : expires,
-                notice.ParentNeedsActivation);
+                notice.ParentNeedsActivation,
+                await ContactAsync());
             try
             {
                 await _email!.SendAsync(notice.ParentEmail, subject, text, html);
@@ -385,7 +386,7 @@ public class ParentAccountService
         if (!CanSendMail() || string.IsNullOrWhiteSpace(email))
             return;
         var center = await CenterNameAsync();
-        var (subject, text, html) = InvitationEmail.TeacherInterview(center, name, when, place, instructions);
+        var (subject, text, html) = InvitationEmail.TeacherInterview(center, name, when, place, instructions, await ContactAsync());
         try
         {
             await _email!.SendAsync(email.Trim(), subject, text, html);
@@ -401,7 +402,7 @@ public class ParentAccountService
         if (!CanSendMail() || string.IsNullOrWhiteSpace(email))
             return;
         var center = await CenterNameAsync();
-        var (subject, text, html) = InvitationEmail.ApplicationReceived(center, name, subjectLine, body);
+        var (subject, text, html) = InvitationEmail.ApplicationReceived(center, name, subjectLine, body, await ContactAsync());
         try
         {
             await _email!.SendAsync(email.Trim(), subject, text, html);
@@ -440,7 +441,7 @@ public class ParentAccountService
                 : DateTimeOffset.UtcNow.Add(InvitationTokens.DefaultLifetime);
             var center = await CenterNameAsync();
             var (subject, text, html) = InvitationEmail.ParentActivation(
-                center, invite.Parent.Fullname, url, expires, reset);
+                center, invite.Parent.Fullname, url, expires, reset, await ContactAsync());
             try
             {
                 await _email.SendAsync(invite.Parent.Email, subject, text, html);
@@ -462,6 +463,19 @@ public class ParentAccountService
             EmailSent = sent,
             EmailError = sent ? null : emailError
         };
+    }
+
+    private async Task<HirayaEmailContact> ContactAsync()
+    {
+        try
+        {
+            var db = await _repository.LoadAsync();
+            return HirayaEmailLayout.ContactFrom(db.Settings);
+        }
+        catch
+        {
+            return HirayaEmailLayout.ContactFrom(null);
+        }
     }
 
     private async Task<string> CenterNameAsync()

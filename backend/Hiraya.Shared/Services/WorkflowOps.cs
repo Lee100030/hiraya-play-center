@@ -93,28 +93,6 @@ public static class WorkflowOps
             CreatedAt = DateTime.UtcNow.ToString("o")
         });
 
-        if (package.RemainingSessions <= 2)
-        {
-            var parentIds = db.ParentStudents
-                .Where(l => l.IsActive && l.StudentId == studentId)
-                .Select(l => l.ParentId);
-            foreach (var parentId in parentIds)
-            {
-                var related = package.PackageId;
-                if (db.Alerts.Any(a => a.RecipientId == parentId && a.RelatedRecordId == related && a.Kind == NotificationKinds.Session))
-                    continue;
-                NotificationService.Push(
-                    db,
-                    parentId,
-                    $"Remaining sessions for a linked child: {package.RemainingSessions}.",
-                    NotificationKinds.Session,
-                    "Session package",
-                    "/sessions");
-                var alert = db.Alerts.LastOrDefault(a => a.RecipientId == parentId);
-                if (alert != null)
-                    alert.RelatedRecordId = related;
-            }
-        }
         return true;
     }
 
@@ -266,6 +244,7 @@ public static class WorkflowOps
         }
 
         ConsumeNewPresentAttendance(before, after, actor);
+        SessionNoticeMail.QueueSessionChanges(before, after);
     }
 
     public static void ConsumeNewPresentAttendance(HirayaDatabase before, HirayaDatabase after, HirayaUser actor)
@@ -357,6 +336,7 @@ public static class WorkflowOps
         }
 
         ConsumeNewPresentAttendance(before, after, actor);
+        SessionNoticeMail.QueueSessionChanges(before, after);
     }
 
     private static void NotifyParentsForSchedule(HirayaDatabase db, Schedule schedule)

@@ -16,13 +16,13 @@
         "id": "clients",
         "label": "All three apps",
         "focus": ["website", "desktop", "mobile", "api"],
-        "note": "Website, desktop, and mobile each call Hiraya.Api. None of them open the database."
+        "note": "Website, desktop, and the Expo APK each call Hiraya.Api. None open the database."
       },
       {
         "id": "mail",
         "label": "Mail",
         "focus": ["api", "brevo"],
-        "note": "Brevo is the SMTP host. Sending stays off until the SMTP login and key are saved."
+        "note": "Brevo accepts SMTP. Gmail does not show it until the school domain is authenticated."
       }
     ]
   },
@@ -49,8 +49,8 @@
       "id": "mobile",
       "type": "frontend",
       "label": "Mobile",
-      "sublabel": "Expo",
-      "tag": "phone",
+      "sublabel": "Expo Android APK",
+      "tag": "expo.dev",
       "pos": [475, 540],
       "size": [180, 72]
     },
@@ -76,8 +76,8 @@
       "id": "brevo",
       "type": "external",
       "label": "Brevo",
-      "sublabel": "SMTP, mail off",
-      "tag": "not sending",
+      "sublabel": "SMTP :587",
+      "tag": "sending",
       "pos": [860, 540],
       "size": [200, 72]
     }
@@ -126,8 +126,7 @@
       "id": "api-to-brevo",
       "from": "api",
       "to": "brevo",
-      "label": "SMTP, mail off",
-      "variant": "dashed"
+      "label": "SMTP STARTTLS"
     }
   ],
   "cards": [
@@ -135,8 +134,8 @@
       "dot": "cyan",
       "title": "Apps",
       "items": [
-        "The public website, desktop, and mobile call Hiraya.Api",
-        "None of the apps open Neon directly"
+        "Website, desktop, and mobile call Hiraya.Api",
+        "The expo.dev APK calls the same API"
       ]
     },
     {
@@ -151,8 +150,8 @@
       "dot": "amber",
       "title": "Mail",
       "items": [
-        "Brevo is the SMTP host",
-        "Sending stays off until the SMTP login and key are saved"
+        "Brevo SMTP is on, port 587",
+        "Gmail needs a verified school domain"
       ]
     }
   ]
