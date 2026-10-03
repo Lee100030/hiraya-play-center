@@ -86,6 +86,7 @@ export default function AdminStudentsPage() {
     return api.studentPhotoUrl(row.studentId, row.profileImagePath);
   }
 
+  // Profile-dialog uploads stay on this helper. The student form uses the imported saveStudentPhoto.
   async function uploadPickedStudentPhoto(row: Student, file: File) {
     setPhotoBusy(true);
     try {
