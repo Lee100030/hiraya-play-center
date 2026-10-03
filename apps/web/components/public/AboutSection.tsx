@@ -20,6 +20,12 @@ export function AboutSection({ site }: { site: PublicSite }) {
             {site.mission}
           </p>
         ) : null}
+        {site.vision ? (
+          <p>
+            <strong>Vision. </strong>
+            {site.vision}
+          </p>
+        ) : null}
         <p>
           <Link href="/about" className="btn-hero">
             Learn more

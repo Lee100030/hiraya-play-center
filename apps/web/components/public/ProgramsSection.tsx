@@ -18,7 +18,7 @@ export function ProgramsSection({
         <Heading>Our programs</Heading>
         <p>Choose a program that is right for your child — playgroup, nursery through grade school, tutorial, or ABA therapy.</p>
       </header>
-      {loading || !site.programs.length ? (
+      {!site.programs.length ? (
         <p className="programs-empty">{loading ? 'Loading programs…' : 'Programs will be available soon.'}</p>
       ) : (
         <div className="programs-grid">

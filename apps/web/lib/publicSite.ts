@@ -24,15 +24,17 @@ export const publicDefaults: PublicSite = {
   hasLogo: false,
   contentUpdatedAt: '',
   programs: [
-    { programId: 'prg_playgroup', name: 'Playgroup', description: 'Playgroup for ages 1.5–8, Monday to Sunday, with paper work, obstacle courses, and life-skills activities.' },
-    { programId: 'prg_tiny_tots', name: 'Tiny Tots', description: 'Playgroup for ages 1.5–2.5. Monday to Sunday, 10:00 AM–11:30 AM.' },
-    { programId: 'prg_bright_buds', name: 'Bright Buds', description: 'Playgroup for ages 2.6–3.9. Monday to Sunday, 12:30 PM–2:00 PM.' },
-    { programId: 'prg_rising_stars', name: 'Rising Stars', description: 'Playgroup for ages 4–8. Monday to Sunday, 2:30 PM–4:00 PM.' },
-    { programId: 'prg_preschool', name: 'Pre-school', description: 'Nursery, Pre-Kindergarten, Kindergarten, and Grades 1–3. Monday to Friday, 8:00 AM–10:30 AM. School year 2026–2027.' },
-    { programId: 'prg_kinder', name: 'Kinder', description: 'Kindergarten, Monday to Friday, 8:00 AM–10:30 AM. School readiness through academics and social-emotional growth.' },
-    { programId: 'prg_g1', name: 'Grade 1', description: 'Grade 1, Monday to Friday, 8:00 AM–10:30 AM. Literacy, numeracy, critical thinking, and independent learning.' },
-    { programId: 'prg_tutorial', name: 'Tutorial Session', description: 'Tutorial for ages 4–12. Academic readiness, homework assistance, and skill reinforcement. Enrollment is subject to slot availability.' },
+    { programId: 'prg_10mo', name: '10-Months Program', description: 'Ten-month playgroup for families who want long-term learning, foundational skills, and school readiness, with continuous guidance. Unlimited sessions.' },
+    { programId: 'prg_3mo', name: '3-Months Program', description: 'Three-month playgroup for children who already have other activities and still want consistent participation and skill development.' },
     { programId: 'prg_aba', name: 'ABA Therapy', description: 'ABA therapy for ages 2–12. Behavior, communication, social interaction, and daily living skills. Enrollment is subject to slot availability.' },
+    { programId: 'prg_bright_buds', name: 'Bright Buds', description: 'Bright Buds playgroup for ages 2.6–3.9 years. Monday to Sunday, 12:30 PM–2:00 PM. Play-based guided activities, including paper work, obstacle courses, and life skills.' },
+    { programId: 'prg_mujeeckyssopg9', name: 'Grade 1', description: 'Grade 1 for school year 2026–2027. Monday to Friday, 8:00 AM–10:30 AM. Literacy, numeracy, critical thinking, and independent learning. Grade 2 meets at the same time.' },
+    { programId: 'prg_muiob5a3v1ry4e', name: 'Kinder', description: 'Kindergarten for school year 2026–2027. Monday to Friday, 8:00 AM–10:30 AM. School readiness through academics and social-emotional growth, with phonics, early reading, and basic math.' },
+    { programId: 'prg_playgroup', name: 'Playgroup', description: 'Playgroup for children ages 1.5–8. Monday to Sunday: Tiny Tots 10:00 AM–11:30 AM, Bright Buds 12:30 PM–2:00 PM, and Rising Stars 2:30 PM–4:00 PM.' },
+    { programId: 'prg_preschool', name: 'Pre-school', description: 'Nursery, Pre-Kindergarten, Kindergarten, and Grades 1–3 for school year 2026–2027. Monday to Friday, 8:00 AM–10:30 AM.' },
+    { programId: 'prg_rising_stars', name: 'Rising Stars', description: 'Rising Stars playgroup for ages 4–8 years. Monday to Sunday, 2:30 PM–4:00 PM. Play-based guided activities, including paper work, obstacle courses, and life skills.' },
+    { programId: 'prg_tiny_tots', name: 'Tiny Tots', description: 'Tiny Tots playgroup for ages 1.5–2.5 years. Monday to Sunday, 10:00 AM–11:30 AM. Play-based guided activities, including paper work, obstacle courses, and life skills.' },
+    { programId: 'prg_tutorial', name: 'Tutorial Session', description: 'Tutorial for ages 4–12. Academic readiness, homework assistance, and skill reinforcement. Enrollment is subject to slot availability.' },
   ],
 };
 
@@ -54,7 +56,10 @@ export function withPublicFallback(site?: Partial<PublicSite> | null): PublicSit
   const merged: PublicSite = {
     ...publicDefaults,
     ...site,
-    programs: site?.programs?.length ? site.programs : [],
+    programs: site?.programs?.length ? site.programs : publicDefaults.programs,
+    mission: site?.mission?.trim() ? site.mission : publicDefaults.mission,
+    vision: site?.vision?.trim() ? site.vision : publicDefaults.vision,
+    values: site?.values?.trim() ? site.values : publicDefaults.values,
   };
   if (!merged.website?.trim()) merged.website = HIRAYA_FACEBOOK_URL;
   return merged;
