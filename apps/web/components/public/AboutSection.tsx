@@ -12,7 +12,7 @@ export function AboutSection({ site }: { site: PublicSite }) {
         <h2>{site.aboutTitle || 'About HIRAYA'}</h2>
         <p>
           {site.description ||
-            'HIRAYA Learning Center is a safe and supportive place where children can grow, learn, and develop their skills.'}
+            'Hiraya Kids Learning Center is a safe and supportive place where children can grow, learn, and develop their skills.'}
         </p>
         {site.mission ? (
           <p>
@@ -28,10 +28,10 @@ export function AboutSection({ site }: { site: PublicSite }) {
       </header>
       <div className="about-visual">
         {src.startsWith('/') ? (
-          <Image src="/images/hiraya-crest.png" alt="HIRAYA Learning Center crest" width={220} height={220} />
+          <Image src="/images/hiraya-crest.png" alt="Hiraya Kids Learning Center crest" width={220} height={220} />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="HIRAYA Learning Center crest" />
+          <img src={src} alt="Hiraya Kids Learning Center crest" />
         )}
       </div>
     </section>

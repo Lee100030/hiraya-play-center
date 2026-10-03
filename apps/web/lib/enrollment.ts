@@ -19,6 +19,7 @@ export function ageFromBirthdate(value: string) {
 export function enrollmentStatusLabel(status?: string) {
   const value = (status || '').toLowerCase();
   if (value === 'pending_review' || value === 'pending') return 'Pending';
+  if (value === 'interview') return 'Interview';
   if (value === 'approved') return 'Approved';
   if (value === 'rejected') return 'Rejected';
   if (value === 'cancelled' || value === 'canceled') return 'Cancelled';

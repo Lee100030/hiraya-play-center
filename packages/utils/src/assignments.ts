@@ -8,6 +8,29 @@ function personName(user?: { fullname?: string; firstName?: string; lastName?: s
 
 const LIVE_ENROLLMENT = new Set(['active', 'pending', 'approved']);
 
+export function packedTeacherIds(packed?: string | null) {
+  return (packed || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+export function scheduleAssignedTo(schedule: { teacherId?: string }, teacherId?: string) {
+  if (!teacherId) return false;
+  return packedTeacherIds(schedule.teacherId).includes(teacherId);
+}
+
+export function openTaskCountForTeacher(store: HirayaDatabase, teacherId: string) {
+  return (store.staffTasks || []).filter((item) => {
+    const assigned = (item.teacherIds || '')
+      .split(',')
+      .map((id) => id.trim())
+      .includes(teacherId);
+    if (!assigned) return false;
+    return !['completed', 'cancelled'].includes((item.status || '').toLowerCase());
+  }).length;
+}
+
 export function assignedStudentsForTeacher(store: HirayaDatabase, teacherId: string) {
   const ids = new Set(
     store.enrollments
@@ -20,6 +43,34 @@ export function assignedStudentsForTeacher(store: HirayaDatabase, teacherId: str
       .map((row) => row.studentId),
   );
   return store.students.filter((student) => ids.has(student.studentId));
+}
+
+/** Teachers linked to the given students via enrollment or class assignment. */
+export function teachersForStudents(store: HirayaDatabase, studentIds: string[]) {
+  const allowed = new Set((studentIds || []).map((id) => (id || '').trim()).filter(Boolean));
+  if (!allowed.size) return [];
+  const teacherIds = new Set<string>();
+  for (const row of store.enrollments || []) {
+    if (!allowed.has(row.studentId)) continue;
+    if (!LIVE_ENROLLMENT.has((row.status || '').toLowerCase())) continue;
+    if (row.teacherId) teacherIds.add(row.teacherId);
+    const cls = store.classes.find((item) => item.classId === row.classId);
+    if (cls?.teacherId) teacherIds.add(cls.teacherId);
+  }
+  for (const schedule of store.schedules || []) {
+    if (schedule.studentId && allowed.has(schedule.studentId)) {
+      for (const id of packedTeacherIds(schedule.teacherId)) teacherIds.add(id);
+    }
+  }
+  return store.users
+    .filter((user) => {
+      if (!teacherIds.has(user.userId)) return false;
+      const role = (user.role || '').toLowerCase();
+      if (role !== 'teacher' && role !== 'staff') return false;
+      const status = (user.status || 'active').toLowerCase();
+      return status === 'active' || status === 'pending';
+    })
+    .sort((a, b) => personName(a).localeCompare(personName(b), undefined, { sensitivity: 'base' }));
 }
 
 export function programsForTeacher(store: HirayaDatabase, teacherId: string) {

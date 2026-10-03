@@ -1,22 +1,26 @@
 'use client';
 
+import { AdminProfileFact, AdminProfileModal } from '@/components/admin/AdminProfileModal';
 import { AdminModal } from '@/components/admin/AdminModal';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { AdminTable } from '@/components/admin/AdminTable';
 import { useStore } from '@/components/StoreProvider';
 import { ProfilePhotoField, saveAccountPhoto } from '@/components/admin/ProfilePhotoField';
 import { api } from '@/lib/api';
-import { Button, EmptyState, Field, FieldLegend, Input, Loading, Select, StatusBadge, emptyCell } from '@hiraya/ui';
-import { displayName, studentDisplay } from '@hiraya/utils';
+import { Button, EmptyState, Field, FieldLegend, Input, Loading, PersonAvatar, Select, StatusBadge, emptyCell } from '@hiraya/ui';
+import { displayName, laneLabel, parentInLane, parsePeopleLane, roleLabel, studentDisplay } from '@hiraya/utils';
 import type { HirayaUser } from '@hiraya/types';
 import { FormEvent, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 export default function ParentsPage() {
   const { store, loading, refresh } = useStore();
+  const lane = parsePeopleLane(useSearchParams().get('lane'), store);
   const [editing, setEditing] = useState<HirayaUser | null | 'new'>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const parents = store.users.filter((u) => u.role === 'parent');
+  const [viewing, setViewing] = useState<HirayaUser | null>(null);
+  const parents = store.users.filter((u) => u.role === 'parent' && parentInLane(store, u.userId, lane));
   const current = editing && editing !== 'new' ? editing : null;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -72,8 +76,12 @@ export default function ParentsPage() {
     <>
       <AdminPageHeader
         kicker="Management"
-        title="Parent management"
-        description="Add, edit, and link children. Parents sign in on mobile; children do not."
+        title={lane ? `Parent management · ${laneLabel(lane)}` : 'Parent management'}
+        description={
+          lane
+            ? `Guardians with children in ${laneLabel(lane)}.`
+            : 'Add, edit, and link children. Parents sign in on mobile; children do not.'
+        }
         actions={
           <button type="button" className="dash-action dash-action-primary" onClick={() => setEditing('new')}>
             + Add Parent
@@ -85,7 +93,12 @@ export default function ParentsPage() {
       <AdminTable
         rows={parents}
         rowKey={(row) => row.userId}
+        preferCards
+        selectable
+        onRefresh={() => void refresh()}
+        cardName={(row) => displayName(row)}
         empty={<EmptyState title="No parents found" hint="Add a parent or guardian account, then link their children." />}
+        onRowOpen={(row) => setViewing(row)}
         columns={[
           { key: 'name', header: 'Name', sortValue: (row) => displayName(row), render: (row) => displayName(row) },
           { key: 'email', header: 'Email', sortValue: (row) => row.email, render: (row) => emptyCell(row.email) },
@@ -132,17 +145,78 @@ export default function ParentsPage() {
             ),
           },
         ]}
-        renderCard={(row) => (
-          <article className="admin-stack-card">
-            <h3>{displayName(row)}</h3>
-            <p>{row.email}</p>
-            <StatusBadge status={row.status} />
-            <button type="button" className="dash-action" onClick={() => setEditing(row)}>
-              Edit
-            </button>
-          </article>
-        )}
+        renderCard={(row) => {
+          const n = store.parentStudents.filter((l) => l.parentId === row.userId && l.isActive).length;
+          return (
+            <article className="people-card">
+              <PersonAvatar
+                name={displayName(row)}
+                photo={row.profileImagePath ? api.profileMediaUrl(row.userId, row.updatedAt || row.profileImagePath) : undefined}
+                size="lg"
+              />
+              <h3>{displayName(row)}</h3>
+              <p className="people-card-role">{roleLabel(row.role)}</p>
+              <p className="people-card-stat">{n ? `${n} linked children` : 'No children linked'}</p>
+            </article>
+          );
+        }}
       />
+
+      {viewing ? (
+        <AdminProfileModal
+          title="Parent profile"
+          name={displayName(viewing)}
+          subtitle={roleLabel(viewing.role)}
+          status={viewing.status}
+          photo={viewing.profileImagePath ? api.profileMediaUrl(viewing.userId, viewing.updatedAt || viewing.profileImagePath) : undefined}
+          active={viewing.status === 'active'}
+          onToggleActive={(next) => {
+            void setActive(viewing, next);
+            setViewing({ ...viewing, status: next ? 'active' : 'deactivated' });
+          }}
+          onClose={() => setViewing(null)}
+          actions={
+            <>
+              <Button type="button" variant="ghost" onClick={() => setViewing(null)}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setEditing(viewing);
+                  setViewing(null);
+                }}
+              >
+                Link child
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setEditing(viewing);
+                  setViewing(null);
+                }}
+              >
+                Edit
+              </Button>
+            </>
+          }
+        >
+          <AdminProfileFact label="Email">{emptyCell(viewing.email)}</AdminProfileFact>
+          <AdminProfileFact label="Phone">{emptyCell(viewing.phone)}</AdminProfileFact>
+          <AdminProfileFact label="Children">
+            {emptyCell(
+              store.parentStudents
+                .filter((l) => l.parentId === viewing.userId && l.isActive)
+                .map((link) => {
+                  const student = store.students.find((s) => s.studentId === link.studentId);
+                  return student ? studentDisplay(student) : link.studentId;
+                })
+                .join(', '),
+            )}
+          </AdminProfileFact>
+        </AdminProfileModal>
+      ) : null}
 
       {editing ? (
         <AdminModal title={current ? `Edit ${displayName(current)}` : 'Add parent'} onClose={() => setEditing(null)}>

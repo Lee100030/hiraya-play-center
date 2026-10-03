@@ -7,7 +7,7 @@ export function PublicHeader() {
   return (
     <header className="public-nav">
       <Link href="/" className="brand-mark">
-        HIRAYA Learning Center
+        Hiraya Kids Learning Center
       </Link>
       <nav className="public-links">
         {publicNav.map((item) => (

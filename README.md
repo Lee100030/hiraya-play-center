@@ -1,8 +1,8 @@
-# HIRAYA Learning Center — multi-platform clients
+# Hiraya Kids Learning Center — multi-platform clients
 
-This repository is the **React / Next.js / Expo / Electron** frontend for HIRAYA Learning Center. It talks to the existing **ASP.NET Core API** and **MySQL** database. The original .NET MAUI Hybrid app in `C:\Users\LEE\source\repos\Hiraya` is unchanged.
+This repository is the **React / Next.js / Expo / Electron** frontend for Hiraya Kids Learning Center. It talks to the existing **ASP.NET Core API** and **MySQL** database. The original .NET MAUI Hybrid app in `C:\Users\LEE\source\repos\Hiraya` is unchanged.
 
-**Current mode: local only.** Do not `git push`, Vercel deploy, or DigitalOcean publish until the project owner asks.
+**Hosting:** GitHub stores the code. Vercel hosts the website. **Database:** Aiven MySQL is the cloud database. Everyday work on this PC still uses XAMPP through Hiraya.Api.
 
 ## Local first
 
@@ -18,7 +18,19 @@ This repository is the **React / Next.js / Expo / Electron** frontend for HIRAYA
 | **Website** | `apps/web` | Vercel (Next.js). Root Directory must be `apps/web`. |
 | **Desktop app** | `apps/desktop` | Electron on Windows. Not deployed on Vercel. |
 | **Mobile** | `apps/mobile` | Expo / Android. Not deployed on Vercel. |
-| **Central API** | `backend/Hiraya.Api` | One hub for website, desktop, and mobile. MySQL `hiraya_learning_center`. `http://0.0.0.0:5188` |
+| **Central API** | `backend/Hiraya.Api` | Local hub for this PC, desktop, and mobile. Local MySQL `hiraya_learning_center` on port 5188. |
+
+### How GitHub, Vercel, and Aiven connect
+
+DigitalOcean and Render are not part of this project. Do not follow `.do/app.yaml` or `render.yaml`.
+
+1. GitHub repo `Johnleelugnasin30/hiraya-play-center` is the source Vercel builds.
+2. Vercel hosts the Next.js website only. Desktop and mobile stay off Vercel.
+3. On the Vercel project, set the **server** environment variable `HIRAYA_MYSQL` to the Aiven service URI. Optional: `HIRAYA_MYSQL_CA` with the Aiven CA certificate text so the certificate is verified.
+4. Do not put that URI in GitHub, and do not use a name that starts with `NEXT_PUBLIC_`, `VITE_`, or `EXPO_PUBLIC_`. The browser must never receive it.
+5. On Vercel there is no local API, so the website health check, public catalog, enrollment, and teacher application use Aiven directly.
+6. On this PC, Hiraya.Api is still preferred. The website uses Aiven only when that API is not configured.
+7. Do not import the local XAMPP database into Aiven.
 
 ### Vercel (website only)
 
@@ -26,22 +38,7 @@ This repository is the **React / Next.js / Expo / Electron** frontend for HIRAYA
 2. Set **Root Directory** to `apps/web`.
 3. Framework preset: **Next.js**.
 4. Do not choose `apps/desktop` or `apps/mobile`.
-5. Set the **server** env `HIRAYA_MYSQL` to the Aiven Service URI (not `NEXT_PUBLIC_…`). Public enrollment on the live site uses this. Do not set `NEXT_PUBLIC_API_URL` unless a hosted ASP.NET API exists.
-
-### DigitalOcean / Render (optional full API)
-
-The public site stays on Vercel. A full `Hiraya.Api` host is optional if `HIRAYA_MYSQL` is set on Vercel.
-
-1. Create an account at [cloud.digitalocean.com](https://cloud.digitalocean.com).
-2. **Create** → **Apps** → GitHub repo `Johnleelugnasin30/hiraya-play-center`, branch `main`.
-3. Set **Region** to **Singapore**.
-4. Resource type: **Dockerfile** (repo root `Dockerfile`). HTTP port `8080`.
-5. Add a **MySQL 8** database in the same app (Singapore). Attach it so `DATABASE_URL` / `HIRAYA_MYSQL` is injected.
-6. Set encrypted env `HIRAYA_SESSION_SECRET` to a long random string (not the local development secret).
-7. After the app URL is live (example `https://hiraya-api-xxxxx.ondigitalocean.app`), add Vercel env `NEXT_PUBLIC_API_URL` to that URL and redeploy the website.
-8. Change the seeded `admin` password immediately.
-
-App spec: `.do/app.yaml`. Health check: `/api/health`.
+5. Set server env `HIRAYA_MYSQL` to the Aiven service URI. Do not set `HIRAYA_API_INTERNAL` unless a public Hiraya.Api address exists.
 
 Local commands:
 

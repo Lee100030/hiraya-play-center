@@ -1,13 +1,27 @@
-import type { HirayaDatabase, HirayaUser, NewsItem, Schedule, SessionPackage, StaffTask } from '@hiraya/types';
-import { displayName, isAdmin, newId, studentDisplay, completeOneSession, normalizeSessionPackage } from '@hiraya/utils';
-import { Field, Input, Select, Textarea } from '@hiraya/ui';
-import { FormEvent, useState } from 'react';
+import type { HirayaDatabase, HirayaUser, NewsItem, Schedule, SessionPackage, StaffTask, SystemAlert } from '@hiraya/types';
+import { displayName, feedbackLaneLabel, formatDate, formatDateTime, isAdmin, laneLabel, newId, parseFeedbackLane, sessionLeftFor, staffDisplayRole, studentDisplay, studentInLane, compareStudentNames, completeOneSession, normalizeSessionPackage, placeStudentSessionPackage, studentSessionPackage, type ManagementLaneId } from '@hiraya/utils';
+import { Button, Field, Input, PhotoCardPicker, Select, Textarea } from '@hiraya/ui';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { DeskModal } from '../components/DeskModal';
+import { LaneSessionPackage } from '../components/LaneSessionPackage';
 import { EditorModal, FormSection } from '../components/EditorModal';
 import { RecordTable, StatusCell, assigned } from '../components/RecordTable';
+import { api } from '../lib/api';
 import { PAGE_COPY } from '../lib/views';
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function teacherPeople(store: HirayaDatabase) {
+  return store.users
+    .filter((item) => item.role === 'teacher')
+    .map((item) => ({
+      id: item.userId,
+      name: displayName(item),
+      photo: item.profileImagePath ? api.profileMediaUrl(item.userId, item.updatedAt || item.profileImagePath) : undefined,
+      role: staffDisplayRole(item.role, store.teacherProfiles.find((row) => row.userId === item.userId)?.specialty),
+    }));
 }
 
 function localInput(value?: string) {
@@ -47,7 +61,7 @@ export function SchedulesManagePage({
       scheduleType: 'classSession',
       classId: String(form.get('classId') || ''),
       studentId: String(form.get('studentId') || ''),
-      teacherId: String(form.get('teacherId') || ''),
+      teacherId: form.getAll('teacherIds').map(String).filter(Boolean).join(','),
       programId: String(form.get('programId') || ''),
       startAt: start ? new Date(start).toISOString() : nowIso(),
       endAt: end ? new Date(end).toISOString() : nowIso(),
@@ -56,7 +70,7 @@ export function SchedulesManagePage({
       status: String(form.get('status') || 'confirmed'),
     };
     if (!next.title || !next.teacherId) {
-      setError('Title and teacher are required.');
+      setError('Title and at least one teacher are required.');
       return;
     }
     setBusy(true);
@@ -110,7 +124,14 @@ export function SchedulesManagePage({
           {
             key: 'teacher',
             header: 'Teacher',
-            render: (row) => assigned(displayName(store.users.find((item) => item.userId === row.teacherId))),
+            render: (row) =>
+              assigned(
+                (row.teacherId || '')
+                  .split(',')
+                  .map((id) => displayName(store.users.find((item) => item.userId === id.trim())))
+                  .filter(Boolean)
+                  .join(', '),
+              ),
           },
           {
             key: 'class',
@@ -135,17 +156,13 @@ export function SchedulesManagePage({
           <Field label="Title" required>
             <Input name="title" defaultValue={current?.title} required />
           </Field>
-          <Field label="Teacher" required>
-            <Select name="teacherId" defaultValue={current?.teacherId || ''}>
-              <option value="">Select teacher</option>
-              {store.users
-                .filter((item) => item.role === 'teacher')
-                .map((item) => (
-                  <option key={item.userId} value={item.userId}>
-                    {displayName(item)}
-                  </option>
-                ))}
-            </Select>
+          <Field label="Teachers" required hint="Tap a photo card to assign. You can pick more than one.">
+            <PhotoCardPicker
+              key={current?.scheduleId || 'new-schedule'}
+              name="teacherIds"
+              people={teacherPeople(store)}
+              defaultSelected={(current?.teacherId || '').split(',').filter(Boolean)}
+            />
           </Field>
           <Field label="Program">
             <Select name="programId" defaultValue={current?.programId || ''}>
@@ -333,16 +350,13 @@ export function TasksManagePage({
           <Field label="Due date">
             <Input name="dueAt" type="date" defaultValue={(current?.dueAt || '').slice(0, 10)} />
           </Field>
-          <Field label="Teachers" required>
-            <select name="teacherIds" multiple defaultValue={current?.teacherIds.split(',').filter(Boolean)} style={{ minHeight: 96 }}>
-              {store.users
-                .filter((item) => item.role === 'teacher')
-                .map((item) => (
-                  <option key={item.userId} value={item.userId}>
-                    {displayName(item)}
-                  </option>
-                ))}
-            </select>
+          <Field label="Teachers" required hint="Tap a photo card to assign. You can pick more than one.">
+            <PhotoCardPicker
+              key={current?.taskId || 'new-task'}
+              name="teacherIds"
+              people={teacherPeople(store)}
+              defaultSelected={(current?.teacherIds || '').split(',').filter(Boolean)}
+            />
           </Field>
           <Field label="Related class">
             <Select name="classId" defaultValue={current?.classId || ''}>
@@ -516,16 +530,23 @@ export function SessionsManagePage({
   store,
   saveStore,
   onRefresh,
+  lane,
 }: {
   store: HirayaDatabase;
   saveStore: (next: HirayaDatabase) => Promise<void>;
   onRefresh?: () => Promise<void> | void;
+  lane?: ManagementLaneId | null;
 }) {
   const [editing, setEditing] = useState<SessionPackage | 'new' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const current = editing && editing !== 'new' ? editing : null;
-  const rows = store.sessionPackages || [];
+  const studentOptions = store.students.filter((item) => studentInLane(store, item, lane)).sort(compareStudentNames);
+  const rows = studentOptions.map((student) => {
+    const pack = sessionLeftFor(store, student.studentId);
+    const latest = studentSessionPackage(store, student.studentId);
+    return { student, pack, latest };
+  });
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
@@ -551,10 +572,7 @@ export function SessionsManagePage({
     setBusy(true);
     setError(null);
     try {
-      await saveStore({
-        ...store,
-        sessionPackages: current ? rows.map((item) => (item.packageId === next.packageId ? next : item)) : [...rows, next],
-      });
+      await saveStore(placeStudentSessionPackage(store, next));
       setEditing(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save package');
@@ -563,36 +581,55 @@ export function SessionsManagePage({
     }
   }
 
-  async function completeOne(row: SessionPackage) {
+  async function completeOne(row: { latest: SessionPackage | null; student: { studentId: string } }) {
+    if (!row.latest) {
+      window.alert('Add a session package for this student first.');
+      return;
+    }
     try {
-      await saveStore(completeOneSession(store, row.packageId));
+      await saveStore(completeOneSession(store, row.latest.packageId));
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Could not complete session');
     }
   }
 
+  function openEdit(row: (typeof rows)[number]) {
+    if (row.latest) {
+      setEditing(row.latest);
+      return;
+    }
+    setEditing('new');
+  }
+
   return (
     <>
+      {lane ? <LaneSessionPackage store={store} lane={lane} saveStore={saveStore} /> : null}
       <RecordTable
-        title={PAGE_COPY.sessions.title}
-        description={PAGE_COPY.sessions.description}
+        title={lane ? `Session management · ${laneLabel(lane, store)}` : PAGE_COPY.sessions.title}
+        description={
+          lane
+            ? `Sessions left for each learner in ${laneLabel(lane, store)}.`
+            : 'See how many sessions each student has left. Remaining = total − used, never below zero.'
+        }
         rows={rows}
-        rowKey={(row) => row.packageId}
-        search={(row, q) => `${row.studentId} ${row.status}`.toLowerCase().includes(q)}
-        searchPlaceholder="Filter this list of packages"
-        emptyTitle="No session packages"
-        emptyHint="Create a package with a total session count for a student."
-        statusOf={(row) => row.status}
+        rowKey={(row) => row.student.studentId}
+        search={(row, q) =>
+          `${studentDisplay(row.student)} ${row.student.studentId} ${row.pack.remaining}`.toLowerCase().includes(q)
+        }
+        searchPlaceholder="Filter by student name"
+        emptyTitle="No students in this list"
+        emptyHint="Add learners in Student management, or pick another program lane."
+        statusOf={(row) => row.latest?.status || (row.pack.hasPackage ? 'active' : 'none')}
         crud={{
           addLabel: '+ Add Package',
           onAdd: () => setEditing('new'),
-          onEdit: (row) => setEditing(row),
+          onEdit: (row) => openEdit(row),
           onRefresh,
           singleActions: [
             {
               icon: 'check',
               label: 'Complete session',
-              needOneMessage: 'Please select only one package to complete a session.',
+              needOneMessage: 'Please select only one student to complete a session.',
               onClick: (row) => void completeOne(row),
             },
           ],
@@ -601,15 +638,31 @@ export function SessionsManagePage({
           {
             key: 'student',
             header: 'Student',
-            render: (row) => {
-              const student = store.students.find((item) => item.studentId === row.studentId);
-              return assigned(student ? studentDisplay(student) : row.studentId);
-            },
+            render: (row) => assigned(studentDisplay(row.student)),
           },
-          { key: 'total', header: 'Total', render: (row) => String(row.totalSessions) },
-          { key: 'used', header: 'Used', render: (row) => String(row.usedSessions) },
-          { key: 'left', header: 'Remaining', render: (row) => String(row.remainingSessions) },
-          { key: 'status', header: 'Status', render: (row) => <StatusCell value={row.status} /> },
+          {
+            key: 'left',
+            header: 'Sessions left',
+            render: (row) =>
+              row.pack.hasPackage
+                ? `${row.pack.remaining} session${row.pack.remaining === 1 ? '' : 's'} left`
+                : 'No package',
+          },
+          {
+            key: 'used',
+            header: 'Used',
+            render: (row) => (row.pack.hasPackage ? String(row.pack.used) : '—'),
+          },
+          {
+            key: 'total',
+            header: 'Total',
+            render: (row) => (row.pack.hasPackage ? String(row.pack.total) : '—'),
+          },
+          {
+            key: 'status',
+            header: 'Status',
+            render: (row) => <StatusCell value={row.latest?.status || (row.pack.hasPackage ? 'active' : 'none')} />,
+          },
         ]}
       />
       {editing ? (
@@ -633,11 +686,27 @@ export function SessionsManagePage({
           <Field label="Student" required>
             <Select name="studentId" defaultValue={current?.studentId || ''} required>
               <option value="">Select student</option>
-              {store.students.map((item) => (
-                <option key={item.studentId} value={item.studentId}>
-                  {studentDisplay(item)}
-                </option>
-              ))}
+              {studentOptions.map((item) => {
+                const left = sessionLeftFor(store, item.studentId);
+                return (
+                  <option key={item.studentId} value={item.studentId}>
+                    {studentDisplay(item)}
+                    {left.hasPackage ? ` · ${left.remaining} sessions left` : ''}
+                  </option>
+                );
+              })}
+              {current?.studentId && !studentOptions.some((item) => item.studentId === current.studentId)
+                ? (() => {
+                    const student = store.students.find((item) => item.studentId === current.studentId);
+                    return student ? (
+                      <option key={student.studentId} value={student.studentId}>
+                        {studentDisplay(student)}
+                      </option>
+                    ) : (
+                      <option value={current.studentId}>{current.studentId}</option>
+                    );
+                  })()
+                : null}
             </Select>
           </Field>
           <Field label="Program">
@@ -673,6 +742,193 @@ export function SessionsManagePage({
           </Field>
           </FormSection>
         </EditorModal>
+      ) : null}
+    </>
+  );
+}
+
+function isFeedbackAlert(row: SystemAlert) {
+  const href = (row.href || '').trim().toLowerCase();
+  if (href === 'feedback') return true;
+  const title = (row.title || '').toLowerCase();
+  return title.includes('feedback');
+}
+
+function feedbackKind(row: SystemAlert) {
+  const title = (row.title || '').toLowerCase();
+  if (title.includes('teacher')) return 'teacher' as const;
+  if (title.includes('center') || title.includes('parent')) return 'parent' as const;
+  return 'other' as const;
+}
+
+function feedbackParts(message: string) {
+  const text = (message || '').trim();
+  const rated = text.match(/^(.+?) rated (.+?) (\d)\/5:\s*([\s\S]*)$/);
+  if (rated) return { from: rated[1].trim(), about: rated[2].trim(), rating: rated[3], body: rated[4].trim() };
+  const sent = text.match(/^(.+?) sent feedback for (.+?):\s*([\s\S]*)$/);
+  if (sent) return { from: sent[1].trim(), about: sent[2].trim(), rating: '', body: sent[3].trim() };
+  return { from: '', about: '', rating: '', body: text };
+}
+
+function feedbackPreview(message: string) {
+  const text = feedbackParts(message).body.replace(/\s+/g, ' ').trim();
+  if (text.length <= 96) return text || '—';
+  return `${text.slice(0, 96)}…`;
+}
+
+export function FeedbackManagePage({
+  store,
+  user,
+  saveStore,
+  lane,
+}: {
+  store: HirayaDatabase;
+  user: HirayaUser;
+  saveStore: (next: HirayaDatabase) => Promise<void>;
+  lane?: string | null;
+}) {
+  const feedbackLane = parseFeedbackLane(lane);
+  const forTeachers = feedbackLane === 'teachers';
+  const [open, setOpen] = useState<SystemAlert | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setOpen(null);
+  }, [feedbackLane]);
+
+  const rows = useMemo(() => {
+    return store.alerts
+      .filter((row) => row.recipientId === user.userId && isFeedbackAlert(row))
+      .filter((row) => {
+        const kind = feedbackKind(row);
+        return forTeachers ? kind === 'teacher' : kind !== 'teacher';
+      })
+      .slice()
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  }, [store.alerts, user.userId, forTeachers]);
+
+  async function markRead(alert: SystemAlert) {
+    if (alert.read) return;
+    const now = new Date().toISOString();
+    setBusy(true);
+    try {
+      await saveStore({
+        ...store,
+        alerts: store.alerts.map((item) =>
+          item.alertId === alert.alertId ? { ...item, read: true, status: 'read', readAt: now } : item,
+        ),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openFeedback(row: SystemAlert) {
+    setOpen(row);
+    if (!row.read) {
+      try {
+        await markRead(row);
+        setOpen({ ...row, read: true, status: 'read', readAt: new Date().toISOString() });
+      } catch {
+        /* keep modal open even if mark-read fails */
+      }
+    }
+  }
+
+  async function markAllRead() {
+    const unread = rows.filter((row) => !row.read);
+    if (!unread.length) return;
+    const now = new Date().toISOString();
+    const ids = new Set(unread.map((row) => row.alertId));
+    setBusy(true);
+    try {
+      await saveStore({
+        ...store,
+        alerts: store.alerts.map((item) =>
+          ids.has(item.alertId) ? { ...item, read: true, status: 'read', readAt: now } : item,
+        ),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <RecordTable
+        title={feedbackLaneLabel(feedbackLane)}
+        description={
+          forTeachers
+            ? 'Feedback parents send from the mobile app about a teacher.'
+            : 'Feedback parents send from the mobile app about Hiraya Kids Learning Center.'
+        }
+        rows={rows}
+        rowKey={(row) => row.alertId}
+        search={(row, q) => `${row.title} ${row.message}`.toLowerCase().includes(q)}
+        searchPlaceholder={forTeachers ? 'Search teacher feedback' : 'Search parent feedback'}
+        emptyTitle={forTeachers ? 'No teacher feedback yet' : 'No parent feedback yet'}
+        emptyHint={
+          forTeachers
+            ? 'When a parent rates a teacher, it appears in this list.'
+            : 'When a parent writes about the center, it appears in this list.'
+        }
+        statusOf={(row) => (row.read ? 'read' : 'unread')}
+        onRowOpen={openFeedback}
+        actions={
+          rows.some((row) => !row.read) ? (
+            <Button type="button" variant="ghost" disabled={busy} onClick={() => void markAllRead()}>
+              Mark all read
+            </Button>
+          ) : null
+        }
+        columns={[
+          {
+            key: 'from',
+            header: 'From',
+            render: (row) => feedbackParts(row.message).from || 'Parent',
+          },
+          ...(forTeachers
+            ? [
+                {
+                  key: 'teacher',
+                  header: 'Teacher',
+                  render: (row: SystemAlert) => feedbackParts(row.message).about || 'Teacher',
+                },
+              ]
+            : []),
+          { key: 'msg', header: 'Message', render: (row) => feedbackPreview(row.message) },
+          {
+            key: 'rating',
+            header: 'Rating',
+            render: (row) => {
+              const rating = feedbackParts(row.message).rating;
+              return rating ? `${rating}/5` : '—';
+            },
+          },
+          { key: 'status', header: 'Status', render: (row) => <StatusCell value={row.read ? 'read' : 'unread'} /> },
+          { key: 'date', header: 'Received', render: (row) => formatDate(row.createdAt) },
+        ]}
+      />
+      {open ? (
+        <DeskModal
+          title={open.title || 'Feedback'}
+          size="wide"
+          onClose={() => setOpen(null)}
+          actions={
+            <Button type="button" onClick={() => setOpen(null)}>
+              Close
+            </Button>
+          }
+        >
+          <div className="feedback-read">
+            <p className="feedback-read-meta">
+              <StatusCell value={open.read ? 'read' : 'unread'} />
+              <span>{forTeachers ? 'Teacher feedback' : 'Parent feedback'}</span>
+              <span>{formatDateTime(open.createdAt)}</span>
+            </p>
+            <pre className="feedback-read-body">{open.message || '—'}</pre>
+          </div>
+        </DeskModal>
       ) : null}
     </>
   );

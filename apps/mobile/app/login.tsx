@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppButton, Body, Caption, Field, Kicker, Title } from '../src/components/ui';
-import { apiBaseUrl, useAuth } from '../src/auth';
+import { apiBaseUrl, consumeSessionNotice, useAuth } from '../src/auth';
 import { friendlyError } from '../src/selectors';
 import { colors, fonts, space } from '../src/theme';
 
@@ -41,6 +41,11 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    const notice = consumeSessionNotice();
+    if (notice) setError(notice);
+  }, []);
+
   if (ready && user) return <Redirect href="/(tabs)/home" />;
 
   async function onSubmit() {
@@ -54,7 +59,7 @@ export default function LoginScreen() {
       await login(identifier.trim(), password, remember);
       router.replace('/(tabs)/home');
     } catch (err) {
-      setError(friendlyError(err, 'Could not sign in. Check your details and try again.'));
+      setError(friendlyError(err, 'Could not sign in. Check your details and try again.', 'login'));
     } finally {
       setBusy(false);
     }
@@ -94,7 +99,7 @@ export default function LoginScreen() {
           <Image
             source={require('../assets/hiraya-crest.png')}
             style={{ width: layout.logo, height: layout.logo, marginBottom: space.md }}
-            accessibilityLabel="HIRAYA Learning Center"
+            accessibilityLabel="Hiraya Kids Learning Center"
           />
           <Kicker style={[styles.kicker, layout.wide && styles.alignStart]}>Hiraya Kids Learning Center</Kicker>
           <Title
@@ -189,7 +194,7 @@ export default function LoginScreen() {
 
         {__DEV__ ? (
           <Caption style={styles.devNote}>
-            Dev · {apiBaseUrl}
+            Dev · API {apiBaseUrl}{'\n'}Teachers / parents only · same Wi-Fi as this PC
           </Caption>
         ) : null}
       </ScrollView>

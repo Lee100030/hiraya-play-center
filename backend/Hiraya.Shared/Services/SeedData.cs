@@ -295,34 +295,7 @@ public static class SeedData
                     ]
                 }
             ],
-            Schedules =
-            [
-                new Schedule
-                {
-                    ScheduleId = "sch_001",
-                    Title = "Kinder A · Morning class",
-                    Kind = ScheduleKinds.ClassSession,
-                    ScheduleType = ScheduleKinds.ClassSession,
-                    ClassId = "cls_kinder_a",
-                    StudentId = "",
-                    TeacherId = "usr_teacher_001",
-                    StartAt = DateTime.SpecifyKind(DateTime.Today.AddDays(1).AddHours(9), DateTimeKind.Local).ToUniversalTime().ToString("o"),
-                    EndAt = DateTime.SpecifyKind(DateTime.Today.AddDays(1).AddHours(11), DateTimeKind.Local).ToUniversalTime().ToString("o"),
-                    Room = "Room 1",
-                    Notes = "",
-                    Status = "confirmed"
-                },
-                new Schedule
-                {
-                    ScheduleId = "sch_holiday_001",
-                    Title = "National holiday",
-                    Kind = ScheduleKinds.Holiday,
-                    ScheduleType = ScheduleKinds.Holiday,
-                    StartAt = DateTime.SpecifyKind(DateTime.Today.AddDays(10), DateTimeKind.Local).ToUniversalTime().ToString("o"),
-                    EndAt = DateTime.SpecifyKind(DateTime.Today.AddDays(10).AddHours(23), DateTimeKind.Local).ToUniversalTime().ToString("o"),
-                    Status = "confirmed"
-                }
-            ],
+            Schedules = [],
             TeacherWorkShifts = CreateSampleWorkShifts(),
             TeacherRoleOptions = TeacherRoleCatalog.Defaults
                 .Select((name, i) => new TeacherRoleOption
@@ -335,7 +308,7 @@ public static class SeedData
                 new NewsItem
                 {
                     NewsId = "news_001",
-                    Title = "Welcome to HIRAYA Learning Center",
+                    Title = "Welcome to Hiraya Kids Learning Center",
                     Body = "HLCMS is ready to support daily operations, learning programs, and family partnership.",
                     PublishedAt = DateTime.UtcNow.AddDays(-2).ToString("o"),
                     IsPublished = true,
@@ -409,7 +382,7 @@ public static class SeedData
                     AlertId = "al_001",
                     Kind = NotificationKinds.System,
                     Title = "Welcome",
-                    Message = "Welcome to HIRAYA Learning Center Management System.",
+                    Message = "Welcome to Hiraya Kids Learning Center Management System.",
                     RecipientId = SuperAdminId,
                     Href = "",
                     Status = "active",
@@ -420,7 +393,7 @@ public static class SeedData
                 {
                     AlertId = "al_002",
                     Kind = NotificationKinds.Announcement,
-                    Title = "Welcome to HIRAYA Learning Center",
+                    Title = "Welcome to Hiraya Kids Learning Center",
                     Message = "HLCMS is ready to support daily operations, learning programs, and family partnership.",
                     RecipientId = "usr_parent_001",
                     Href = "announcements",
@@ -482,15 +455,18 @@ public static class SeedData
             ],
             Settings = new CenterSettings
             {
-                CenterName = "HIRAYA Learning Center",
+                CenterName = "Hiraya Kids Learning Center",
                 Address = "Local development center",
                 Phone = "09170000000",
                 Email = "hello@hiraya.local",
                 TimeZone = "Asia/Manila",
-                BusinessHours = "Monday–Friday, 8:00–17:00",
-                Description = "Child care, therapy, and family connection — growing together with care.",
-                WelcomeTitle = "Welcome to HIRAYA Learning Center",
-                WelcomeMessage = "We provide a safe and supportive learning environment where children can grow, learn, and develop their skills."
+                BusinessHours = "Playgroup daily · Nursery–Grade 2 weekdays 8:00–10:30",
+                Description = "At Hiraya Kids Learning Center, every child learns through meaningful play, exploration, and hands-on experiences. Isang Hiraya para sa mga bata.",
+                WelcomeTitle = "Welcome to Hiraya Kids Learning Center",
+                WelcomeMessage = "Every child learns best through meaningful play, exploration, and hands-on experiences. School year 2026–2027.",
+                Mission = "To create a joyful, inclusive, and enriching learning environment that nurtures the whole child—mind, body, and spirit—through play, creativity, and meaningful experiences.",
+                Vision = "To be a trusted early childhood learning center that inspires young learners to grow into compassionate, capable, and confident individuals who contribute positively to their community and the world.",
+                Values = "Child-centered learning, holistic development, inclusivity and respect, love for learning, community and collaboration, integrity and responsibility, and care for the world."
             }
         };
         CenterOperationsCatalog.Ensure(db);
@@ -530,22 +506,9 @@ public static class SeedData
     public static bool TryCanonicalSeedPassword(string login, string password, out string canonical)
     {
         canonical = "";
-        var key = (login ?? "").Trim();
-        if (key.Contains('@'))
-            key = key.Split('@')[0];
-        var typed = password ?? "";
-        canonical = key.ToLowerInvariant() switch
-        {
-            "admin" or "ops" => "Admin123",
-            "teacher" => "Teacher123",
-            "staff" => "Staff123",
-            "parent" => "Parent123",
-            _ => ""
-        };
-        if (canonical.Length == 0)
-            return false;
-        return string.Equals(typed, canonical, StringComparison.Ordinal) ||
-               string.Equals(typed, canonical, StringComparison.OrdinalIgnoreCase);
+        _ = login;
+        _ = password;
+        return false;
     }
 
     public static HirayaUser? FindSeedUser(string login)

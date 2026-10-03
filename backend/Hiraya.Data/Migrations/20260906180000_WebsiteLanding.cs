@@ -17,7 +17,7 @@ namespace Hiraya.Data.Migrations
                 type: "varchar(191)",
                 maxLength: 191,
                 nullable: false,
-                defaultValue: "Welcome to HIRAYA Learning Center")
+                defaultValue: "Welcome to Hiraya Kids Learning Center")
                 .Annotation("MySql:CharSet", "utf8mb4");
 
             migrationBuilder.AddColumn<string>(

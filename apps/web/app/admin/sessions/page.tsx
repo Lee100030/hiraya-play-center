@@ -1,21 +1,54 @@
 'use client';
 
 import { AdminModal } from '@/components/admin/AdminModal';
+import { LaneSessionPackage } from '@/components/admin/LaneSessionPackage';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { AdminTable } from '@/components/admin/AdminTable';
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/components/StoreProvider';
 import { Button, EmptyState, Field, Input, Loading, Select, StatusBadge, emptyCell } from '@hiraya/ui';
-import { completeOneSession, newId, normalizeSessionPackage, studentDisplay } from '@hiraya/utils';
-import type { SessionPackage } from '@hiraya/types';
-import { FormEvent, useState } from 'react';
+import {
+  completeOneSession,
+  compareStudentNames,
+  laneLabel,
+  newId,
+  normalizeSessionPackage,
+  parsePeopleLane,
+  placeStudentSessionPackage,
+  sessionLeftFor,
+  studentDisplay,
+  studentSessionPackage,
+  studentInLane,
+} from '@hiraya/utils';
+import type { SessionPackage, Student } from '@hiraya/types';
+import { FormEvent, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+
+type SessionRow = {
+  student: Student;
+  pack: ReturnType<typeof sessionLeftFor>;
+  latest: SessionPackage | null;
+};
 
 export default function AdminSessionsPage() {
   const { user } = useAuth();
   const { store, loading, save } = useStore();
+  const lane = parsePeopleLane(useSearchParams().get('lane'), store);
   const [editing, setEditing] = useState<SessionPackage | 'new' | null>(null);
   const [error, setError] = useState('');
-  const rows = store.sessionPackages || [];
+  const studentOptions = useMemo(
+    () => store.students.filter((item) => studentInLane(store, item, lane)).sort(compareStudentNames),
+    [store, lane],
+  );
+  const rows: SessionRow[] = useMemo(
+    () =>
+      studentOptions.map((student) => {
+        const pack = sessionLeftFor(store, student.studentId);
+        const latest = studentSessionPackage(store, student.studentId);
+        return { student, pack, latest };
+      }),
+    [studentOptions, store],
+  );
   const current = editing && editing !== 'new' ? editing : null;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -41,19 +74,28 @@ export default function AdminSessionsPage() {
       return;
     }
     setError('');
-    await save({
-      ...store,
-      sessionPackages: current ? rows.map((item) => (item.packageId === next.packageId ? next : item)) : [...rows, next],
-    });
+    await save(placeStudentSessionPackage(store, next));
     setEditing(null);
   }
 
-  async function completeOne(row: SessionPackage) {
+  async function completeOne(row: SessionRow) {
+    if (!row.latest) {
+      window.alert('Add a session package for this student first.');
+      return;
+    }
     try {
-      await save(completeOneSession(store, row.packageId, user?.userId || ''));
+      await save(completeOneSession(store, row.latest.packageId, user?.userId || ''));
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Could not complete session');
     }
+  }
+
+  function openEdit(row: SessionRow) {
+    if (row.latest) {
+      setEditing(row.latest);
+      return;
+    }
+    setEditing('new');
   }
 
   if (loading) return <Loading />;
@@ -61,41 +103,65 @@ export default function AdminSessionsPage() {
     <>
       <AdminPageHeader
         kicker="Management"
-        title="Session management"
-        description="Remaining sessions = total − used, never below zero. The same package is what parents see on mobile."
+        title={lane ? `Session management · ${laneLabel(lane, store)}` : 'Session management'}
+        description={
+          lane
+            ? `Sessions left for each learner in ${laneLabel(lane, store)}.`
+            : 'See how many sessions each student has left. Remaining = total − used, never below zero.'
+        }
         actions={
           <button type="button" className="dash-action dash-action-primary" onClick={() => setEditing('new')}>
             + Add Package
           </button>
         }
       />
+      {lane ? <LaneSessionPackage lane={lane} /> : null}
       <AdminTable
         rows={rows}
-        rowKey={(row) => row.packageId}
-        empty={<EmptyState title="No session packages" hint="Create a package with a total session count for a student." />}
+        rowKey={(row) => row.student.studentId}
+        empty={<EmptyState title="No students in this list" hint="Add learners in Student management, or pick another program lane." />}
         columns={[
           {
             key: 'student',
             header: 'Student',
-            sortValue: (row) => {
-              const student = store.students.find((item) => item.studentId === row.studentId);
-              return student ? studentDisplay(student) : row.studentId;
-            },
-            render: (row) => {
-              const student = store.students.find((item) => item.studentId === row.studentId);
-              return student ? studentDisplay(student) : emptyCell(row.studentId);
-            },
+            sortValue: (row) => studentDisplay(row.student),
+            render: (row) => studentDisplay(row.student),
           },
-          { key: 'remain', header: 'Remaining', sortValue: (row) => row.remainingSessions, render: (row) => String(row.remainingSessions) },
-          { key: 'used', header: 'Used', sortValue: (row) => row.usedSessions, render: (row) => String(row.usedSessions) },
-          { key: 'status', header: 'Status', sortValue: (row) => row.status, render: (row) => <StatusBadge status={row.status} /> },
+          {
+            key: 'left',
+            header: 'Sessions left',
+            sortValue: (row) => row.pack.remaining,
+            render: (row) =>
+              row.pack.hasPackage
+                ? `${row.pack.remaining} session${row.pack.remaining === 1 ? '' : 's'} left`
+                : emptyCell('No package'),
+          },
+          {
+            key: 'used',
+            header: 'Used',
+            sortValue: (row) => row.pack.used,
+            render: (row) => (row.pack.hasPackage ? String(row.pack.used) : emptyCell('')),
+          },
+          {
+            key: 'total',
+            header: 'Total',
+            sortValue: (row) => row.pack.total,
+            render: (row) => (row.pack.hasPackage ? String(row.pack.total) : emptyCell('')),
+          },
+          {
+            key: 'status',
+            header: 'Status',
+            sortValue: (row) => row.latest?.status || '',
+            render: (row) =>
+              row.latest ? <StatusBadge status={row.latest.status} /> : emptyCell(row.pack.hasPackage ? 'active' : ''),
+          },
           {
             key: 'actions',
             header: 'Actions',
             render: (row) => (
               <div className="icon-actions">
-                <button type="button" className="table-action" onClick={() => setEditing(row)}>
-                  Edit
+                <button type="button" className="table-action" onClick={() => openEdit(row)}>
+                  {row.latest ? 'Edit' : 'Add package'}
                 </button>
                 <button type="button" className="table-action" onClick={() => void completeOne(row)}>
                   Complete one
@@ -104,15 +170,25 @@ export default function AdminSessionsPage() {
             ),
           },
         ]}
-        renderCard={(row) => {
-          const student = store.students.find((item) => item.studentId === row.studentId);
-          return (
-            <article className="admin-stack-card">
-              <h3>{student ? studentDisplay(student) : row.studentId}</h3>
-              <StatusBadge status={row.status} />
-            </article>
-          );
-        }}
+        renderCard={(row) => (
+          <article className="admin-stack-card">
+            <h3>{studentDisplay(row.student)}</h3>
+            <p>
+              {row.pack.hasPackage
+                ? `${row.pack.remaining} session${row.pack.remaining === 1 ? '' : 's'} left`
+                : 'No package yet'}
+            </p>
+            {row.latest ? <StatusBadge status={row.latest.status} /> : null}
+            <div className="icon-actions">
+              <button type="button" className="icon-btn" onClick={() => openEdit(row)}>
+                {row.latest ? 'Edit' : 'Add package'}
+              </button>
+              <button type="button" className="icon-btn" onClick={() => void completeOne(row)}>
+                Complete one
+              </button>
+            </div>
+          </article>
+        )}
       />
       {editing ? (
         <AdminModal title={current ? 'Edit package' : 'Add package'} onClose={() => setEditing(null)}>
@@ -121,11 +197,27 @@ export default function AdminSessionsPage() {
             <Field label="Student" required>
               <Select name="studentId" defaultValue={current?.studentId || ''} required>
                 <option value="">Select</option>
-                {store.students.map((item) => (
-                  <option key={item.studentId} value={item.studentId}>
-                    {studentDisplay(item)}
-                  </option>
-                ))}
+                {studentOptions.map((item) => {
+                  const left = sessionLeftFor(store, item.studentId);
+                  return (
+                    <option key={item.studentId} value={item.studentId}>
+                      {studentDisplay(item)}
+                      {left.hasPackage ? ` · ${left.remaining} sessions left` : ''}
+                    </option>
+                  );
+                })}
+                {current?.studentId && !studentOptions.some((item) => item.studentId === current.studentId)
+                  ? (() => {
+                      const student = store.students.find((item) => item.studentId === current.studentId);
+                      return student ? (
+                        <option key={student.studentId} value={student.studentId}>
+                          {studentDisplay(student)}
+                        </option>
+                      ) : (
+                        <option value={current.studentId}>{current.studentId}</option>
+                      );
+                    })()
+                  : null}
               </Select>
             </Field>
             <Field label="Program">

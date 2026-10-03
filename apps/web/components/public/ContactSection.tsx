@@ -118,7 +118,7 @@ export function ContactSection({ site, standalone = false }: { site: PublicSite;
           <div className="map-embed">
             {addressReady ? (
               <iframe
-                title="HIRAYA Learning Center location"
+                title="Hiraya Kids Learning Center location"
                 src={`https://maps.google.com/maps?q=${mapQuery}&z=16&hl=en&output=embed`}
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"

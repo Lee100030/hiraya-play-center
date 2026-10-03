@@ -21,7 +21,7 @@ import { adminAnnouncements, formatWhen } from '../../src/selectors';
 import { isMobileTeacher } from '../../src/rbac';
 import { colors, fonts, space } from '../../src/theme';
 
-const KINDS = ['all', 'enrollment', 'schedule', 'attendance', 'progress', 'payment', 'announcement'] as const;
+const KINDS = ['all', 'enrollment', 'schedule', 'task', 'attendance', 'progress', 'payment', 'announcement'] as const;
 
 function kindMeta(kind?: string): { icon: keyof typeof Ionicons.glyphMap; tint: string } {
   const key = (kind || '').toLowerCase();
@@ -30,6 +30,7 @@ function kindMeta(kind?: string): { icon: keyof typeof Ionicons.glyphMap; tint: 
   if (key.includes('progress')) return { icon: 'trending-up-outline', tint: colors.greenMid };
   if (key.includes('payment')) return { icon: 'card-outline', tint: colors.warn };
   if (key.includes('schedule')) return { icon: 'calendar-outline', tint: colors.green };
+  if (key.includes('task')) return { icon: 'checkbox-outline', tint: colors.gold };
   if (key.includes('enroll')) return { icon: 'people-outline', tint: colors.gold };
   return { icon: 'notifications-outline', tint: colors.greenMid };
 }
@@ -59,10 +60,13 @@ export default function NotificationsTab() {
   async function markRead(ids: string[]) {
     setLocalRead((current) => [...new Set([...current, ...ids])]);
     try {
-      await api.putStore({
-        ...store,
-        alerts: store.alerts.map((item) => (ids.includes(item.alertId) ? { ...item, read: true } : item)),
-      });
+      await api.putStore(
+        {
+          ...store,
+          alerts: store.alerts.map((item) => (ids.includes(item.alertId) ? { ...item, read: true } : item)),
+        },
+        store,
+      );
       await refresh();
     } catch {
       /* keep local read */

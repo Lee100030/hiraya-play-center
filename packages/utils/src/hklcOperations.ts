@@ -41,6 +41,7 @@ export type HklcNavId =
   | 'classes'
   | 'playgroup'
   | 'enrollment'
+  | 'teacherApplications'
   | 'attendance'
   | 'tutorial'
   | 'aba'
@@ -58,12 +59,14 @@ export type HklcNavId =
   | 'marketing'
   | 'notifications'
   | 'modules'
+  | 'programTuition'
   | 'reports'
   | 'settings'
   | 'tasks'
   | 'announcements'
   | 'sessions'
-  | 'messages';
+  | 'messages'
+  | 'feedback';
 
 export type HklcNavItem = {
   id: HklcNavId;
@@ -86,29 +89,27 @@ export const HKLC_NAV_GROUPS: HklcNavGroup[] = [
       { id: 'parents', label: 'Parent management', sheet: 'Enrollment Recoding', roles: ADMINS },
       { id: 'teachers', label: 'Teachers Management', sheet: 'HKLC Structure', roles: ADMINS },
       { id: 'modules', label: 'Module management', sheet: 'Curriculum Implementation and Monitoring', roles: CLASSROOM },
-      { id: 'calendar', label: 'Schedule management', sheet: 'HIRAYA CALENDAR', roles: CLASSROOM },
-      { id: 'tasks', label: 'Task management', sheet: "Teachers' Schedule", roles: CLASSROOM },
+      { id: 'programTuition', label: 'Program tuition management', sheet: 'Final audited cash payments', roles: ADMINS },
+      { id: 'calendar', label: 'Center calendar', sheet: 'HIRAYA CALENDAR', roles: CLASSROOM },
       { id: 'announcements', label: 'Announcement management', sheet: 'Weekly Template for posting', roles: ADMINS },
+      { id: 'feedback', label: 'Feedback', sheet: 'Weekly Template for posting', roles: ADMINS },
       { id: 'sessions', label: 'Session management', sheet: "Student's Sheet", roles: ADMINS },
     ],
   },
   {
     label: 'Enrollment',
-    items: [{ id: 'enrollment', label: 'Enrollment Recording', sheet: 'Enrollment Recoding', roles: OFFICE }],
-  },
-  {
-    label: 'Programs',
     items: [
-      { id: 'programs', label: 'Programs', sheet: '10 months program 2k27', roles: CLASSROOM },
-      { id: 'classes', label: 'Classes', sheet: 'PRESCHOOL', roles: CLASSROOM },
+      { id: 'enrollment', label: 'Enrollment Recording', sheet: 'Enrollment Recoding', roles: OFFICE },
+      { id: 'teacherApplications', label: 'Teacher applications', sheet: 'Enrollment Recoding', roles: OFFICE },
     ],
   },
   {
     label: 'Records',
     items: [
-      { id: 'attendance', label: 'Attendance', sheet: 'Operational Attendance Compliance', roles: CLASSROOM },
-      { id: 'progress', label: 'Progress', sheet: 'Monthly Milestone Approver', roles: CLASSROOM },
+      { id: 'attendance', label: 'Teachers Attendance record', sheet: 'Operational Attendance Compliance', roles: CLASSROOM },
+      { id: 'progress', label: 'Student progress', sheet: 'Monthly Milestone Approver', roles: CLASSROOM },
       { id: 'payments', label: 'Payments', sheet: 'Final audited cash payments', roles: [...OFFICE, UserRoles.Parent] },
+      { id: 'finance', label: 'Center Cash flow', sheet: 'Financial Report', roles: ADMINS },
       { id: 'notifications', label: 'Notifications', sheet: 'Weekly Template for posting', roles: EVERYONE },
       { id: 'marketing', label: 'Marketing site', sheet: 'Weekly Template for posting', roles: ADMINS },
       { id: 'reports', label: 'Reports', sheet: 'Financial Report', roles: CLASSROOM },

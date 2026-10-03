@@ -41,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div>
         <header className="topbar">
-          <strong>HIRAYA Learning Center</strong>
+          <strong>Hiraya Kids Learning Center</strong>
           <Button
             variant="ghost"
             onClick={async () => {

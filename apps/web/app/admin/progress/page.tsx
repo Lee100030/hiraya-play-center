@@ -50,7 +50,7 @@ export default function AdminProgressPage() {
     <>
       <AdminPageHeader
         kicker="Records"
-        title="Progress"
+        title="Student progress"
         description="Parents only see published progress for linked children."
         actions={
           <button type="button" className="dash-action dash-action-primary" onClick={() => setEditing('new')}>

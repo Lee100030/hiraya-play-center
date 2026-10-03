@@ -165,8 +165,33 @@
 
 .site-header-end {
   display: flex;
+  align-items: center;
+  gap: 10px;
   justify-self: end;
   z-index: 2;
+}
+
+.btn-header-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 241, 230, 0.75);
+  background: transparent;
+  color: var(--hk-cream);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.btn-header-outline:hover,
+.btn-header-outline:focus-visible {
+  background: rgba(245, 241, 230, 0.12);
+  outline: 2px solid var(--hk-gold-bright);
+  outline-offset: 2px;
 }
 
 .btn-hero {

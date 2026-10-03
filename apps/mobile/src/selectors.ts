@@ -1,5 +1,5 @@
 import type { AttendanceRecord, HirayaDatabase, HirayaUser, ProgressReport, Schedule, Student } from '@hiraya/types';
-import { displayName, studentDisplay } from '@hiraya/utils';
+import { displayName, localDateKey, packedTeacherIds, scheduleAssignedTo, studentDisplay, studentSessionAccount } from '@hiraya/utils';
 import { isMobileParent, isMobileTeacher } from './rbac';
 
 export function greetingPeriod() {
@@ -173,16 +173,35 @@ export function formatWhen(value?: string | null) {
   });
 }
 
-export function friendlyError(error: unknown, fallback = 'We could not load this right now. Check your connection and try again.') {
+export function friendlyError(
+  error: unknown,
+  fallback = 'We could not load this right now. Check your connection and try again.',
+  mode: 'general' | 'login' = 'general',
+) {
   const message = error instanceof Error ? error.message : '';
   const lower = message.toLowerCase();
-  if (lower.includes('teachers and parents only')) return message;
-  if (lower.includes('unauthorized') || lower.includes('401')) return 'Please sign in again to continue.';
-  if (lower.includes('invalid') || lower.includes('password') || lower.includes('sign-in') || lower.includes('credentials')) {
-    return 'Username or password is incorrect.';
+  const status = typeof error === 'object' && error && 'status' in error ? Number((error as { status?: number }).status) : 0;
+  if (lower.includes('teachers and parents only') || lower.includes('super administrator signs in')) return message;
+  if (status === 401 && mode !== 'login') return 'Your session expired. Sign in again.';
+  if (lower.includes('unauthorized') || lower.includes('401')) return 'Your session expired. Sign in again.';
+  if (
+    mode === 'login' &&
+    (lower.includes('incorrect') || lower.includes('invalid') || lower.includes('password') || lower.includes('sign-in') || lower.includes('credentials'))
+  ) {
+    return 'Username or password is incorrect. Teachers and parents use Desktop accounts. Admin signs in on Desktop or the website.';
   }
-  if (lower.includes('network') || lower.includes('failed to fetch') || lower.includes('timeout')) {
-    return 'Connection looks unstable. Try again when you have a signal.';
+  if (lower.includes('incorrect') || lower.includes('password') || lower.includes('credentials')) {
+    return message || 'Check the details and try again.';
+  }
+  if (
+    lower.includes('network') ||
+    lower.includes('failed to fetch') ||
+    lower.includes('timeout') ||
+    lower.includes('aborted') ||
+    lower.includes('network request failed') ||
+    lower.includes('could not connect')
+  ) {
+    return 'Cannot reach Hiraya.Api. Keep the phone on the same Wi-Fi as this PC, keep the API on port 5188, then reload Expo.';
   }
   if (message && message.length < 120 && !lower.includes('exception') && !lower.includes('sql')) return message;
   return fallback;
@@ -223,13 +242,49 @@ export function teacherName(store: HirayaDatabase, teacherId?: string) {
   return user ? displayName(user) : '';
 }
 
+export function dayCells(month: Date) {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const start = new Date(first);
+  const weekday = (first.getDay() + 6) % 7;
+  start.setDate(first.getDate() - weekday);
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return date;
+  });
+}
+
+export function assignedNames(store: HirayaDatabase, packed?: string) {
+  const names = packedTeacherIds(packed)
+    .map((id) => displayName(store.users.find((item) => item.userId === id)))
+    .filter(Boolean);
+  return names;
+}
+
+export function teacherDayBoard(store: HirayaDatabase, teacherId: string, day: string) {
+  const schedules = store.schedules
+    .filter((item) => localDateKey(item.startAt) === day && (item.status || '').toLowerCase() !== 'cancelled')
+    .filter((item) => {
+      const kind = (item.kind || item.scheduleType || '').toLowerCase();
+      if (kind.includes('task')) return packedTeacherIds(item.teacherId).includes(teacherId);
+      return (
+        scheduleAssignedTo(item, teacherId) ||
+        store.classes.some((cls) => cls.classId === item.classId && cls.teacherId === teacherId)
+      );
+    })
+    .sort((a, b) => (a.startAt || '').localeCompare(b.startAt || ''));
+  const tasks = staffTasksForTeacher(store, teacherId, day);
+  const holidays = (store.centerHolidays || []).filter((item) => localDateKey(item.date) === day);
+  return { schedules, tasks, holidays };
+}
+
 export function schedulesForDay(store: HirayaDatabase, day: string, student?: Student | null, teacherId?: string): Schedule[] {
   const classId = student ? classForStudent(store, student.studentId)?.classId : undefined;
   const teacherClasses = teacherId
     ? new Set(store.classes.filter((item) => item.teacherId === teacherId).map((item) => item.classId))
     : null;
-    return store.schedules
-    .filter((item) => (item.startAt || '').slice(0, 10) === day)
+  return store.schedules
+    .filter((item) => localDateKey(item.startAt) === day && (item.status || '').toLowerCase() !== 'cancelled')
     .filter((item) => {
       const kind = (item.kind || item.scheduleType || '').toLowerCase();
       const isTask = kind.includes('task');
@@ -237,7 +292,9 @@ export function schedulesForDay(store: HirayaDatabase, day: string, student?: St
         if (isTask) return false;
         return item.studentId === student.studentId || (classId && item.classId === classId);
       }
-      if (teacherClasses) return teacherClasses.has(item.classId) || item.teacherId === teacherId;
+      if (teacherClasses) {
+        return teacherClasses.has(item.classId) || packedTeacherIds(item.teacherId).includes(teacherId || '');
+      }
       return false;
     })
     .sort((a, b) => (a.startAt || '').localeCompare(b.startAt || ''));
@@ -301,6 +358,16 @@ export function isTeacherTask(item: { kind?: string; scheduleType?: string }) {
   return kind.includes('task');
 }
 
+export function staffTasksForTeacher(store: HirayaDatabase, teacherId?: string, day?: string) {
+  if (!teacherId) return [];
+  return (store.staffTasks || []).filter((row) => {
+    const assigned = packedTeacherIds(row.teacherIds).includes(teacherId);
+    if (!assigned || (row.status || '').toLowerCase() === 'cancelled') return false;
+    if (!day) return !['completed'].includes((row.status || '').toLowerCase());
+    return localDateKey(row.dueAt) === day;
+  });
+}
+
 export function teacherModules(store: HirayaDatabase, teacherId?: string) {
   const classIds = new Set(store.classes.filter((item) => item.teacherId === teacherId).map((item) => item.classId));
   return store.learningModules.filter((item) => {
@@ -329,18 +396,17 @@ export function remainingForStudent(store: HirayaDatabase, studentId?: string) {
   if (!studentId) {
     return { sessionsLeft: 0, daysLeft: 0, used: 0, total: 0, sessionsLabel: 'No child linked', daysLabel: 'Not provided' };
   }
-  const pack = (store.sessionPackages || [])
-    .filter((item) => item.studentId === studentId && item.status !== 'suspended')
-    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
-  if (pack) {
-    const remaining = Math.max(0, (pack.totalSessions || 0) - (pack.usedSessions || 0));
+  const account = studentSessionAccount(store, studentId);
+  if (account.hasPackage) {
+    const remaining = account.remaining;
+    const status = (store.sessionPackages || []).find((item) => item.packageId === account.packageId)?.status || 'active';
     return {
       sessionsLeft: remaining,
       daysLeft: remaining,
-      used: pack.usedSessions || 0,
-      total: pack.totalSessions || 0,
+      used: account.used,
+      total: account.total,
       sessionsLabel: remaining === 1 ? '1 session left' : `${remaining} sessions left`,
-      daysLabel: pack.status.replace(/_/g, ' ') || 'Package',
+      daysLabel: status.replace(/_/g, ' ') || 'Package',
       unit: 'session',
     };
   }

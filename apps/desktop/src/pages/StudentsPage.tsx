@@ -1,40 +1,134 @@
 import type { HirayaDatabase, HirayaUser, Student } from '@hiraya/types';
-import { confirmStudentPresentToday, displayName, isStudentHereToday, studentDayAttendance, studentDisplay } from '@hiraya/utils';
-import { Field, Input, Select } from '@hiraya/ui';
+import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, displayName, downloadStudentRecord, isStudentHereToday, laneLabel, paymentBalanceLabel, programForLane, programForStudent, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentPaymentBalance, studentTuitionFee, upsertStudentBalance, upsertStudentSessions, type ManagementLaneId } from '@hiraya/utils';
+import { Field, Input, ProgramSpecialtySelect, Select, Button } from '@hiraya/ui';
 import { FormEvent, useState } from 'react';
+import { DirectMessageModal } from '../components/DirectMessageModal';
+import { LaneSessionPackage } from '../components/LaneSessionPackage';
+import { DeskModal } from '../components/DeskModal';
 import { EditorModal, FormSection } from '../components/EditorModal';
+import { ProfileFact, ProfileModal } from '../components/ProfileModal';
+import { ProfilePhotoField, saveStudentPhoto } from '../components/ProfilePhotoField';
+import { StudentFilesPanel } from '../components/StudentFilesPanel';
 import { EmptyCell, NameCell, RecordTable, StatusCell, assigned } from '../components/RecordTable';
 import {
   ageFromBirthdate,
   parentOptions,
-  remainingSessionsFor,
   studentPlacement,
   studentRecord,
   withParentLink,
 } from '../lib/crud';
+import { api } from '../lib/api';
 import { PAGE_COPY } from '../lib/views';
 
 export function StudentsPage({
   store,
+  onStore,
   saveStore,
   onRefresh,
   actor,
+  lane,
 }: {
   store: HirayaDatabase;
+  onStore?: (next: HirayaDatabase) => void;
   saveStore: (next: HirayaDatabase) => Promise<void>;
   onRefresh?: () => Promise<void> | void;
   actor?: HirayaUser;
+  lane?: ManagementLaneId | null;
 }) {
   const [editing, setEditing] = useState<Student | null | 'new'>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [messaging, setMessaging] = useState<HirayaUser | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [programChoice, setProgramChoice] = useState('');
+  const [addingProgram, setAddingProgram] = useState(false);
+  const [newProgramName, setNewProgramName] = useState('');
+  const [newProgramNote, setNewProgramNote] = useState('');
+  const [programBusy, setProgramBusy] = useState(false);
   const current = editing && editing !== 'new' ? editing : null;
+  const rows = store.students.filter((row) => studentInLane(store, row, lane)).sort(compareStudentNames);
+  const viewing = openId ? store.students.find((row) => row.studentId === openId) : undefined;
+  const viewingParent = viewing ? store.users.find((item) => item.userId === viewing.parentId && item.role === 'parent') : undefined;
+  const viewingPlace = viewing ? studentPlacement(store, viewing.studentId) : undefined;
+  const viewingFileCount = viewing
+    ? (store.studentDocuments || []).filter((item) => item.studentId === viewing.studentId).length
+    : 0;
+  const editorSessions = sessionLeftFor(store, current?.studentId || '');
+  const suggestedPackage = editorSessions.hasPackage
+    ? 0
+    : programForStudent(store, current?.studentId || '')?.packageSessions ||
+      (lane ? programForLane(store, lane)?.packageSessions : 0) ||
+      0;
+  const editorBill = studentPaymentBalance(store, current?.studentId || '');
+
+  function studentPhoto(row?: Student) {
+    if (!row?.profileImagePath) return undefined;
+    return api.studentPhotoUrl(row.studentId, row.profileImagePath);
+  }
+
+  async function saveStudentPhoto(row: Student, file: File) {
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      onStore?.(await api.uploadStudentPhoto(row.studentId, file, file.name || 'photo.jpg'));
+      setNotice(`Photo saved for ${studentDisplay(row)}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save that photo.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function clearStudentPhoto(row: Student) {
+    if (!window.confirm(`Remove the photo for ${studentDisplay(row)}?`)) return;
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      onStore?.(await api.removeStudentPhoto(row.studentId));
+      setNotice(`Photo removed for ${studentDisplay(row)}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove that photo.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   async function persist(next: HirayaDatabase, message: string) {
     await saveStore(next);
     setNotice(message);
     setEditing(null);
+    setAddingProgram(false);
+  }
+
+  function openEditor(next: Student | 'new') {
+    setNotice(null);
+    setError(null);
+    setAddingProgram(false);
+    setNewProgramName('');
+    setNewProgramNote('');
+    setProgramChoice(next === 'new' ? '' : next.program || '');
+    setEditing(next);
+  }
+
+  async function saveCustomProgram() {
+    setProgramBusy(true);
+    setError(null);
+    try {
+      const result = addLearningProgram(store, newProgramName, newProgramNote);
+      if (result.created) await saveStore(result.store);
+      setProgramChoice(result.program.name);
+      setAddingProgram(false);
+      setNewProgramName('');
+      setNewProgramNote('');
+      setNotice(result.created ? `${result.program.name} was added to programs.` : `${result.program.name} is already on the program list.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add that program.');
+    } finally {
+      setProgramBusy(false);
+    }
   }
 
   async function markHereToday(row: Student) {
@@ -53,8 +147,14 @@ export function StudentsPage({
     setBusy(true);
     setError(null);
     try {
-      await saveStore(confirmStudentPresentToday(store, row.studentId, actor?.userId || ''));
-      setNotice(`${name} is marked as here today.`);
+      const next = confirmStudentPresentToday(store, row.studentId, actor?.userId || '');
+      await saveStore(next);
+      const left = sessionLeftFor(next, row.studentId);
+      setNotice(
+        left.hasPackage
+          ? `${name} is in class. ${left.remaining} session${left.remaining === 1 ? '' : 's'} left of ${left.total}.`
+          : `${name} is marked as here today. No session package is assigned yet.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not record attendance');
     } finally {
@@ -63,7 +163,8 @@ export function StudentsPage({
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    const form = new FormData(event.currentTarget);
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
     const birthdate = String(form.get('birthdate') || '');
     const parentId = String(form.get('parentId') || '');
     const slot = String(form.get('slot') || '').trim();
@@ -75,45 +176,83 @@ export function StudentsPage({
       birthdate,
       age: ageFromBirthdate(birthdate),
       gender: String(form.get('gender') || ''),
-      program: String(form.get('program') || ''),
+      program: resolveStudentProgramValue(String(form.get('specialty') || form.get('program') || programChoice || ''), store),
       contactNumber: String(form.get('contactNumber') || ''),
       address: String(form.get('address') || ''),
       parentId,
       status: String(form.get('status') || 'active'),
       notes: String(form.get('notes') || ''),
+      gradeLevel: resolveStudentProgramValue(
+        String(form.get('specialty') || form.get('program') || programChoice || current?.gradeLevel || ''),
+        store,
+      ),
     });
+    let working = store;
+    if (next.program) {
+      const ensured = addLearningProgram(working, next.program);
+      working = ensured.store;
+    }
     const students = current
-      ? store.students.map((item) => (item.studentId === next.studentId ? next : item))
-      : [...store.students, next];
+      ? working.students.map((item) => (item.studentId === next.studentId ? next : item))
+      : [...working.students, next];
     setBusy(true);
     setError(null);
     try {
       if (!parentId) throw new Error('Link a parent account. Children do not sign in; parents use the app.');
-      const ops = store.studentOps.filter((item) => item.studentId !== next.studentId);
-      const currentOps = store.studentOps.find((item) => item.studentId === next.studentId);
-      await persist(
-        {
-          ...store,
-          students,
-          studentOps: [
-            ...ops,
+      const ops = working.studentOps.filter((item) => item.studentId !== next.studentId);
+      const currentOps = working.studentOps.find((item) => item.studentId === next.studentId);
+      const parentStudents = parentId ? withParentLink(working, parentId, next.studentId) : working.parentStudents;
+      const remaining = String(form.get('sessionsRemaining') || '').trim();
+      const total = String(form.get('sessionsTotal') || '').trim();
+      const programId = working.programs.find((item) => item.name === next.program)?.programId || '';
+      await saveStore(
+        upsertStudentBalance(
+          upsertStudentSessions(
             {
-              studentId: next.studentId,
-              paymentStatus: currentOps?.paymentStatus || '',
-              collector: currentOps?.collector || '',
-              hasIdCard: currentOps?.hasIdCard || false,
-              hasFetcherId: currentOps?.hasFetcherId || false,
-              hasNametag: currentOps?.hasNametag || false,
-              feeAmount: currentOps?.feeAmount || 0,
-              laceAmount: currentOps?.laceAmount || 0,
-              currentSlot: slot,
-              package: currentOps?.package || '',
+              ...working,
+              students,
+              studentOps: [
+                ...ops,
+                {
+                  studentId: next.studentId,
+                  paymentStatus: currentOps?.paymentStatus || '',
+                  collector: currentOps?.collector || '',
+                  hasIdCard: currentOps?.hasIdCard || false,
+                  hasFetcherId: currentOps?.hasFetcherId || false,
+                  hasNametag: currentOps?.hasNametag || false,
+                  feeAmount: currentOps?.feeAmount || 0,
+                  tuitionFee: currentOps?.tuitionFee || 0,
+                  laceAmount: currentOps?.laceAmount || 0,
+                  currentSlot: slot,
+                  package: currentOps?.package || '',
+                },
+              ],
+              parentStudents,
             },
-          ],
-          parentStudents: parentId ? withParentLink(store, parentId, next.studentId) : store.parentStudents,
-        },
-        current ? 'Student saved.' : 'Student created.',
+            next.studentId,
+            remaining,
+            total,
+            programId,
+          ),
+          next.studentId,
+          String(form.get('paymentBalance') || '').trim(),
+          String(form.get('paymentStatus') || '').trim(),
+          actor?.userId || '',
+        ),
       );
+      try {
+        const withPhoto = await saveStudentPhoto(next.studentId, form, formEl);
+        if (withPhoto) onStore?.(withPhoto);
+        setNotice(current ? 'Student saved.' : 'Student created.');
+        setEditing(null);
+        setAddingProgram(false);
+      } catch (photoErr) {
+        setError(
+          photoErr instanceof Error
+            ? `Student saved, but the photo did not upload: ${photoErr.message}. Restart the HIRAYA API (port 5188), then edit this student and upload the photo again.`
+            : 'Student saved, but the photo did not upload. Restart the HIRAYA API and try the photo again.',
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save student');
     } finally {
@@ -160,6 +299,23 @@ export function StudentsPage({
     );
   }
 
+  async function setStudentStatus(row: Student, status: 'active' | 'inactive') {
+    if (status === 'inactive' && !window.confirm(`Set ${studentDisplay(row)} inactive?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await saveStore({
+        ...store,
+        students: store.students.map((item) => (item.studentId === row.studentId ? { ...item, status } : item)),
+      });
+      setNotice(status === 'active' ? `${studentDisplay(row)} is active.` : `${studentDisplay(row)} is inactive.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update student status');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       {notice ? (
@@ -172,10 +328,16 @@ export function StudentsPage({
           {error}
         </p>
       ) : null}
+      {lane ? <LaneSessionPackage store={store} lane={lane} saveStore={saveStore} /> : null}
       <RecordTable
-        title={PAGE_COPY.students.title}
-        description={PAGE_COPY.students.description}
-        rows={store.students}
+        kicker="Management"
+        title={lane ? `Student management · ${laneLabel(lane)}` : PAGE_COPY.students.title}
+        description={
+          lane
+            ? `Learners in ${laneLabel(lane)}.`
+            : PAGE_COPY.students.description
+        }
+        rows={rows}
         rowKey={(row) => row.studentId}
         search={(row, q) =>
           `${studentDisplay(row)} ${row.studentId} ${row.program} ${row.contactNumber}`.toLowerCase().includes(q)
@@ -186,18 +348,50 @@ export function StudentsPage({
         statusOf={(row) => row.status}
         crud={{
           addLabel: '+ Add Student',
-          onAdd: () => {
-            setNotice(null);
-            setEditing('new');
-          },
-          onEdit: (row) => {
-            setNotice(null);
-            setEditing(row);
-          },
+          onAdd: () => openEditor('new'),
+          onEdit: (row) => openEditor(row),
           onArchive: archiveRows,
           onDelete: removeRows,
           onRefresh,
           singleActions: [
+            {
+              label: 'Student record',
+              icon: 'file',
+              needOneMessage: 'Select one student to save their record.',
+              onClick: (row) => {
+                setNotice(null);
+                setError(null);
+                try {
+                  downloadStudentRecord(store, row.studentId);
+                  setNotice(`Saved a one-page record for ${studentDisplay(row)}.`);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Could not save the student record.');
+                }
+              },
+            },
+            {
+              label: 'Open profile',
+              icon: 'eye',
+              needOneMessage: 'Select one student to open.',
+              onClick: (row) => {
+                setNotice(null);
+                setOpenId(row.studentId);
+              },
+            },
+            {
+              label: 'Message parent',
+              icon: 'chat',
+              needOneMessage: 'Select one student to message their parent.',
+              onClick: (row) => {
+                const parent = store.users.find((item) => item.userId === row.parentId && item.role === 'parent');
+                if (!parent) {
+                  setNotice('No parent account is linked to this student.');
+                  return;
+                }
+                setNotice(null);
+                setMessaging(parent);
+              },
+            },
             {
               label: 'Here today',
               icon: 'check',
@@ -207,7 +401,7 @@ export function StudentsPage({
           ],
         }}
         columns={[
-          { key: 'name', header: 'Student name', render: (row) => <NameCell name={studentDisplay(row)} /> },
+          { key: 'name', header: 'Student name', render: (row) => <NameCell name={studentDisplay(row)} photo={studentPhoto(row)} /> },
           { key: 'number', header: 'Student number', render: (row) => assigned(row.studentId) },
           {
             key: 'parent',
@@ -256,12 +450,15 @@ export function StudentsPage({
           },
           {
             key: 'sessions',
-            header: 'Sessions remaining',
+            header: 'Sessions left',
             priority: 'secondary',
-            render: (row) => {
-              const left = remainingSessionsFor(store, row.studentId);
-              return left == null ? <EmptyCell /> : String(left);
-            },
+            render: (row) => sessionLeftLabel(store, row.studentId),
+          },
+          {
+            key: 'balance',
+            header: 'Remaining balance',
+            priority: 'secondary',
+            render: (row) => paymentBalanceLabel(store, row.studentId) || <EmptyCell />,
           },
           {
             key: 'enroll',
@@ -270,16 +467,155 @@ export function StudentsPage({
           },
           { key: 'status', header: 'Student status', render: (row) => <StatusCell value={row.status} /> },
         ]}
+        card={{
+          name: (row) => studentDisplay(row),
+          photo: (row) => studentPhoto(row),
+          role: () => 'Student',
+          stat: (row) => {
+            const place = studentPlacement(store, row.studentId);
+            const program = place.programName || row.program || 'Program not set';
+            const pack = sessionLeftFor(store, row.studentId);
+            const sessions = pack.hasPackage ? sessionLeftLabel(store, row.studentId) : '';
+            const balance = studentPaymentBalance(store, row.studentId).due > 0 ? paymentBalanceLabel(store, row.studentId) : '';
+            return [program, sessions && `Sessions: ${sessions}`, balance && `Balance: ${balance}`].filter(Boolean).join(' · ');
+          },
+        }}
+        onRowOpen={(row) => {
+          setNotice(null);
+          setFilesOpen(false);
+          setOpenId(row.studentId);
+        }}
       />
+      {viewing ? (
+        <ProfileModal
+          title="Student profile"
+          name={studentDisplay(viewing)}
+          photo={studentPhoto(viewing)}
+          subtitle={viewingPlace?.programName || viewing.program || 'Learner'}
+          status={viewing.status}
+          active={viewing.status === 'active'}
+          toggleBusy={busy}
+          photoEditable
+          photoBusy={photoBusy}
+          onPickPhoto={(file) => void saveStudentPhoto(viewing, file)}
+          onRemovePhoto={() => void clearStudentPhoto(viewing)}
+          onToggleActive={(next) => void setStudentStatus(viewing, next ? 'active' : 'inactive')}
+          onClose={() => {
+            setFilesOpen(false);
+            setOpenId(null);
+          }}
+          actions={
+            <div className="profile-modal-actions">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setFilesOpen(false);
+                  setOpenId(null);
+                }}
+              >
+                Close
+              </Button>
+              {viewingParent ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setFilesOpen(false);
+                    setOpenId(null);
+                    setMessaging(viewingParent);
+                  }}
+                >
+                  Message parent
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  try {
+                    downloadStudentRecord(store, viewing.studentId);
+                    setNotice(`Saved a one-page record for ${studentDisplay(viewing)}.`);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Could not save the student record.');
+                  }
+                }}
+              >
+                Student record
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setFilesOpen(true)}>
+                {viewingFileCount ? `View files (${viewingFileCount})` : 'View files'}
+              </Button>
+              {!isStudentHereToday(store, viewing.studentId) ? (
+                <Button type="button" variant="ghost" disabled={busy} onClick={() => void markHereToday(viewing)}>
+                  Here today
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                onClick={() => {
+                  setFilesOpen(false);
+                  setOpenId(null);
+                  openEditor(viewing);
+                }}
+              >
+                Edit
+              </Button>
+            </div>
+          }
+        >
+          <ProfileFact label="Sessions left">{sessionLeftLabel(store, viewing.studentId)}</ProfileFact>
+          <ProfileFact label="Remaining balance">{paymentBalanceLabel(store, viewing.studentId)}</ProfileFact>
+          <ProfileFact label="Student number">{assigned(viewing.studentId)}</ProfileFact>
+          <ProfileFact label="Parent / guardian">{assigned(viewingParent ? displayName(viewingParent) : '')}</ProfileFact>
+          <ProfileFact label="Program">{assigned(viewingPlace?.programName || viewing.program)}</ProfileFact>
+          <ProfileFact label="Class">{assigned(viewingPlace?.className)}</ProfileFact>
+          <ProfileFact label="Assigned teacher">{assigned(viewingPlace?.teacherName)}</ProfileFact>
+          <ProfileFact label="Today">
+            {assigned(
+              isStudentHereToday(store, viewing.studentId)
+                ? studentDayAttendance(store, viewing.studentId)?.status || 'present'
+                : studentDayAttendance(store, viewing.studentId)?.status,
+            )}
+          </ProfileFact>
+          <ProfileFact label="Contact">{assigned(viewing.contactNumber)}</ProfileFact>
+        </ProfileModal>
+      ) : null}
+      {viewing && filesOpen ? (
+        <DeskModal
+          title={`Files · ${studentDisplay(viewing)}`}
+          size="wide"
+          stacked
+          onClose={() => setFilesOpen(false)}
+          actions={
+            <Button type="button" variant="ghost" onClick={() => setFilesOpen(false)}>
+              Back to profile
+            </Button>
+          }
+        >
+          <StudentFilesPanel studentId={viewing.studentId} store={store} onStore={onStore} canEdit />
+        </DeskModal>
+      ) : null}
       {editing ? (
         <EditorModal
           title={current ? `Edit ${studentDisplay(current)}` : 'Add student'}
           error={error}
           busy={busy}
           submitLabel={current ? 'Save student' : 'Create student'}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            setAddingProgram(false);
+          }}
           onSubmit={onSubmit}
         >
+          <FormSection title="Profile photo">
+            <ProfilePhotoField
+              kind="student"
+              userId={current?.studentId}
+              hasPhoto={Boolean(current?.profileImagePath)}
+              cacheKey={current?.profileImagePath}
+            />
+          </FormSection>
           <FormSection title="Student info">
             <Field label="Last name" required>
               <Input name="lastName" defaultValue={current?.lastName} required />
@@ -314,15 +650,43 @@ export function StudentsPage({
             <Field label="Slot" optional>
               <Input name="slot" defaultValue={store.studentOps.find((item) => item.studentId === current?.studentId)?.currentSlot || ''} />
             </Field>
-            <Field label="Program" optional>
-              <Select name="program" defaultValue={current?.program || ''}>
-                <option value="">Select program</option>
-                {store.programs.map((program) => (
-                  <option key={program.programId} value={program.name}>
-                    {program.name}
-                  </option>
-                ))}
-              </Select>
+            <Field
+              label="Program"
+              optional
+              hint="Sets this learner’s lane. Parent management and Session management follow this same program."
+            >
+              <ProgramSpecialtySelect name="specialty" value={programChoice || current?.program || lane || ''} store={store} />
+            </Field>
+            <Field label="Sessions left" optional hint="Saved on this student’s package. Marking Here today uses one session.">
+              <Input
+                name="sessionsRemaining"
+                type="number"
+                min={0}
+                defaultValue={editorSessions.hasPackage ? editorSessions.remaining : suggestedPackage || ''}
+                placeholder="10"
+              />
+            </Field>
+            <Field label="Sessions in package" optional>
+              <Input
+                name="sessionsTotal"
+                type="number"
+                min={0}
+                defaultValue={editorSessions.hasPackage ? editorSessions.total : suggestedPackage || ''}
+                placeholder="10"
+              />
+            </Field>
+            <Field label="Tuition fee" optional hint="Total amount required. Remaining balance is this fee minus total paid.">
+              <Input
+                name="paymentBalance"
+                type="number"
+                min={0}
+                step="0.01"
+                defaultValue={studentTuitionFee(store, current?.studentId || '')}
+                placeholder="0"
+              />
+            </Field>
+            <Field label="Payment status" optional hint="Calculated from tuition fee and total paid.">
+              <Input value={editorBill.status === 'paid' ? 'Paid' : editorBill.status === 'partial' ? 'Partial' : 'Unpaid'} readOnly />
             </Field>
             <Field label="Parent / guardian" required>
               <Select name="parentId" defaultValue={current?.parentId || ''} required>
@@ -349,6 +713,77 @@ export function StudentsPage({
             </div>
           </FormSection>
         </EditorModal>
+      ) : null}
+      {editing && addingProgram ? (
+        <DeskModal
+          stacked
+          title="Add program"
+          onClose={() => {
+            if (programBusy) return;
+            setAddingProgram(false);
+            setError(null);
+          }}
+          actions={
+            <>
+              <Button type="button" variant="ghost" disabled={programBusy} onClick={() => setAddingProgram(false)}>
+                Cancel
+              </Button>
+              <Button type="button" disabled={programBusy} onClick={() => void saveCustomProgram()}>
+                {programBusy ? 'Saving…' : 'Save program'}
+              </Button>
+            </>
+          }
+        >
+          <p className="hlc-field-hint">This program is added to the center list and selected for this student.</p>
+          {error ? (
+            <p className="crud-notice crud-notice-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <Field label="Program name" required>
+            <Input
+              value={newProgramName}
+              onChange={(event) => setNewProgramName(event.target.value)}
+              placeholder="e.g. After-school tutorial"
+              autoFocus
+            />
+          </Field>
+          <Field label="Description" optional>
+            <Input value={newProgramNote} onChange={(event) => setNewProgramNote(event.target.value)} />
+          </Field>
+        </DeskModal>
+      ) : null}
+      {messaging ? (
+        <DirectMessageModal
+          key={store.alerts.length}
+          person={messaging}
+          actorId={actor?.userId || ''}
+          alerts={store.alerts}
+          error={error}
+          busy={busy}
+          onClose={() => {
+            setMessaging(null);
+            setError(null);
+          }}
+          onSend={async (body) => {
+            if (!body) {
+              setError('Write a message first.');
+              return;
+            }
+            if (!onStore) return;
+            setBusy(true);
+            setError(null);
+            try {
+              onStore(await api.sendDirectMessage(messaging.userId, body));
+              setNotice(`Message sent to ${displayName(messaging)}.`);
+              setMessaging(null);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Could not send that message.');
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
       ) : null}
     </>
   );

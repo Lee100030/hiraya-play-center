@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { PersonAvatar, PhotoCropDialog } from '@hiraya/ui';
 import { api } from '@/lib/api';
 
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/bmp,.jpg,.jpeg,.png,.webp';
@@ -9,17 +10,32 @@ export function ProfilePhotoField({
   userId,
   hasPhoto,
   cacheKey,
+  kind = 'account',
+  hint,
 }: {
   userId?: string;
   hasPhoto?: boolean;
   cacheKey?: string;
+  kind?: 'account' | 'student';
+  hint?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState('');
   const [fileName, setFileName] = useState('');
   const [status, setStatus] = useState<'idle' | 'ready' | 'remove'>('idle');
   const [dragging, setDragging] = useState(false);
-  const existing = userId && hasPhoto ? api.profileMediaUrl(userId, cacheKey || userId) : '';
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const existing =
+    userId && hasPhoto
+      ? kind === 'student'
+        ? api.studentPhotoUrl(userId, cacheKey)
+        : api.profileMediaUrl(userId, cacheKey || userId)
+      : '';
+  const help =
+    hint ||
+    (kind === 'student'
+      ? 'JPG, PNG, or WEBP. Shown on student cards, profile, and parent mobile.'
+      : 'JPG, PNG, or WEBP. Shown on mobile after they sign in.');
 
   useEffect(() => {
     setPreview('');
@@ -37,6 +53,10 @@ export function ProfilePhotoField({
 
   function applyFile(file?: File | null) {
     if (!file || !file.size) return;
+    setCropFile(file);
+  }
+
+  function commitFile(file: File) {
     if (preview.startsWith('blob:')) URL.revokeObjectURL(preview);
     setPreview(URL.createObjectURL(file));
     setFileName(file.name);
@@ -88,11 +108,11 @@ export function ProfilePhotoField({
           onClick={() => inputRef.current?.click()}
           aria-label={shown ? 'Change profile photo' : 'Upload profile photo'}
         >
-          <span className="photo-preview">{shown ? <img src={shown} alt="" /> : <span>Add photo</span>}</span>
+          <span className="photo-preview">{shown ? <img src={shown} alt="" /> : <PersonAvatar name="Add photo" size="lg" hint />}</span>
         </button>
         <div className="photo-copy">
           <p className="photo-lead">Click the photo or drop an image here</p>
-          <p className="muted">JPG, PNG, or WEBP. Shown on mobile after they sign in.</p>
+          <p className="muted">{help}</p>
           {status === 'ready' ? (
             <p className="photo-status is-ready">Photo selected · {fileName}</p>
           ) : status === 'remove' ? (
@@ -107,6 +127,16 @@ export function ProfilePhotoField({
           </button>
         </div>
       </div>
+      {cropFile ? (
+        <PhotoCropDialog
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onApply={(next) => {
+            setCropFile(null);
+            commitFile(next);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -123,11 +153,29 @@ function fileFromForm(form: FormData, formEl?: HTMLFormElement | null): File | n
   return null;
 }
 
-export async function saveAccountPhoto(userId: string | undefined, form: FormData, formEl?: HTMLFormElement | null) {
-  if (!userId) return null;
+async function savePhoto(
+  id: string | undefined,
+  form: FormData,
+  formEl: HTMLFormElement | null | undefined,
+  kind: 'account' | 'student',
+) {
+  if (!id) return null;
   const photo = fileFromForm(form, formEl);
   const remove = form.get('removePhoto') === '1' || form.getAll('removePhoto').includes('1');
-  if (photo) return api.uploadProfilePhoto(userId, photo, photo.name || 'photo.jpg');
-  if (remove) return api.removeProfilePhoto(userId);
+  if (kind === 'student') {
+    if (photo) return api.uploadStudentPhoto(id, photo, photo.name || 'photo.jpg');
+    if (remove) return api.removeStudentPhoto(id);
+    return null;
+  }
+  if (photo) return api.uploadProfilePhoto(id, photo, photo.name || 'photo.jpg');
+  if (remove) return api.removeProfilePhoto(id);
   return null;
+}
+
+export async function saveAccountPhoto(userId: string | undefined, form: FormData, formEl?: HTMLFormElement | null) {
+  return savePhoto(userId, form, formEl, 'account');
+}
+
+export async function saveStudentPhoto(studentId: string | undefined, form: FormData, formEl?: HTMLFormElement | null) {
+  return savePhoto(studentId, form, formEl, 'student');
 }

@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-nat
 import { Ionicons } from '@expo/vector-icons';
 import { displayName } from '@hiraya/utils';
 import type { HirayaUser } from '@hiraya/types';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Title } from './typography';
 import { profilePhotoUri } from '../profilePhoto';
 import { colors, fonts } from '../theme';
@@ -67,12 +68,26 @@ export function Avatar({
             }}
           />
         ) : (
-          <Title
-            style={[styles.initial, { fontSize: Math.round(px * 0.42), lineHeight: Math.round(px * 0.5) }]}
-            maxFontSizeMultiplier={1.1}
-          >
-            {initial}
-          </Title>
+          <>
+            <LinearGradient
+              colors={[colors.greenMid, colors.greenDeep]}
+              start={{ x: 0.2, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <Ionicons
+              name="person"
+              size={Math.round(px * 0.42)}
+              color="rgba(201,162,39,0.28)"
+              style={{ position: 'absolute' }}
+            />
+            <Title
+              style={[styles.initial, { fontSize: Math.round(px * 0.42), lineHeight: Math.round(px * 0.5) }]}
+              maxFontSizeMultiplier={1.1}
+            >
+              {initial}
+            </Title>
+          </>
         )}
         {showPhoto && loading ? (
           <View style={[styles.skel, { borderRadius: px / 2 }]}>

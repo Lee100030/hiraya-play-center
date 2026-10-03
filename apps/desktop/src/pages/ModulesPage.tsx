@@ -1,67 +1,88 @@
 import type { HirayaDatabase, HirayaUser, LearningModule } from '@hiraya/types';
-import { newId } from '@hiraya/utils';
-import { Field, Input, Select, Textarea } from '@hiraya/ui';
+import { Button, Field, Input, ProgramSpecialtySelect, Select, Textarea } from '@hiraya/ui';
+import { laneLabel, moduleInLane, type ManagementLaneId } from '@hiraya/utils';
 import { FormEvent, useState } from 'react';
 import { EditorModal, FormSection } from '../components/EditorModal';
 import { RecordTable, StatusCell, assigned } from '../components/RecordTable';
+import { api } from '../lib/api';
 import { PAGE_COPY } from '../lib/views';
+
+const MODULE_FILE_ACCEPT = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.gif';
+
+function formatSize(bytes: number) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export function ModulesPage({
   store,
   user,
-  saveStore,
+  onStore,
   onRefresh,
+  lane,
 }: {
   store: HirayaDatabase;
   user: HirayaUser;
-  saveStore: (next: HirayaDatabase) => Promise<void>;
+  onStore: (next: HirayaDatabase) => void;
   onRefresh?: () => Promise<void> | void;
+  lane?: ManagementLaneId | null;
 }) {
   const canManage = user.role === 'super_admin';
   const [editing, setEditing] = useState<LearningModule | null | 'new'>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const current = editing && editing !== 'new' ? editing : null;
+  const rows = store.learningModules.filter((row) => moduleInLane(store, row, lane));
+
+  async function openFile(row: LearningModule) {
+    if (!row.fileName && !row.filePath) {
+      setError('No file is stored on that module yet.');
+      return;
+    }
+    setError(null);
+    try {
+      await api.openModuleFile(row.moduleId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open that file.');
+    }
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
-    const now = new Date().toISOString();
-    const status = String(form.get('status') || 'draft');
-    const next: LearningModule = {
-      moduleId: current?.moduleId || newId('mod'),
-      title: String(form.get('title') || '').trim(),
-      description: String(form.get('description') || '').trim(),
-      programId: String(form.get('programId') || ''),
-      subject: String(form.get('subject') || '').trim(),
-      gradeLevel: String(form.get('gradeLevel') || '').trim(),
-      moduleType: String(form.get('moduleType') || 'Lesson guide'),
-      classIds: current?.classIds || [],
-      currentVersionId: current?.currentVersionId || '',
-      version: current?.version || 'v1.0',
-      status,
-      fileName: String(form.get('fileName') || current?.fileName || ''),
-      filePath: current?.filePath || '',
-      fileType: current?.fileType || '',
-      fileSize: current?.fileSize || 0,
-      uploadedByUserId: current?.uploadedByUserId || user.userId,
-      createdAt: current?.createdAt || now,
-      updatedAt: now,
-      publishedAt: status === 'published' ? current?.publishedAt || now : current?.publishedAt || '',
-      archivedAt: status === 'archived' ? now : '',
-    };
-    if (!next.title) {
+    const title = String(form.get('title') || '').trim();
+    const file = (form.get('file') as File | null) || null;
+    const hasFile = Boolean(file && file.size);
+    if (!title) {
       setError('Title is required.');
       return;
     }
+    if (!current && !hasFile) {
+      setError('Upload a module file.');
+      return;
+    }
+    const status = String(form.get('status') || 'draft');
     setBusy(true);
     setError(null);
     try {
-      await saveStore({
-        ...store,
-        learningModules: current
-          ? store.learningModules.map((item) => (item.moduleId === next.moduleId ? next : item))
-          : [...store.learningModules, next],
-      });
+      onStore(
+        await api.saveModule(
+          {
+            moduleId: current?.moduleId,
+            title,
+            description: String(form.get('description') || ''),
+            programId: String(form.get('programId') || ''),
+            subject: String(form.get('subject') || ''),
+            gradeLevel: String(form.get('specialty') || form.get('gradeLevel') || ''),
+            moduleType: String(form.get('moduleType') || 'Lesson guide'),
+            changeDescription: String(form.get('changeDescription') || ''),
+            status,
+            publish: status === 'published',
+          },
+          hasFile ? file : null,
+        ),
+      );
       setEditing(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save module');
@@ -72,45 +93,47 @@ export function ModulesPage({
 
   async function archiveRows(picked: LearningModule[]) {
     if (!picked.length) return false;
-    const now = new Date().toISOString();
-    const ids = new Set(picked.map((row) => row.moduleId));
-    await saveStore({
-      ...store,
-      learningModules: store.learningModules.map((item) =>
-        ids.has(item.moduleId)
-          ? { ...item, status: item.status === 'archived' ? 'draft' : 'archived', archivedAt: item.status === 'archived' ? '' : now, updatedAt: now }
-          : item,
-      ),
-    });
+    let next = store;
+    for (const row of picked) {
+      next = await api.setModuleStatus(row.moduleId, row.status === 'archived' ? 'draft' : 'archived');
+    }
+    onStore(next);
   }
 
   return (
     <>
+      {error && !editing ? <p className="hlc-field-error">{error}</p> : null}
       <RecordTable
-        title={PAGE_COPY.modules.title}
+        title={lane ? `Module management · ${laneLabel(lane)}` : PAGE_COPY.modules.title}
         description={
-          canManage
-            ? 'Add lesson guides and worksheets, assign a program, and publish or archive them for teachers.'
-            : 'Modules published for your classes and programs.'
+          lane
+            ? `Learning files for ${laneLabel(lane)}.`
+            : canManage
+              ? 'Upload lesson guides and worksheets, store the file on this module, then open it again anytime.'
+              : 'Open published modules for your classes and programs.'
         }
-        rows={store.learningModules}
+        rows={rows}
         rowKey={(row) => row.moduleId}
         search={(row, q) => `${row.title} ${row.subject} ${row.moduleType} ${row.fileName}`.toLowerCase().includes(q)}
         searchPlaceholder="Filter this list of modules"
         emptyTitle="No learning modules"
-        emptyHint={canManage ? 'Add a module to share with teachers.' : 'No published modules yet.'}
+        emptyHint={canManage ? 'Add a module and upload a file to share with teachers.' : 'No published modules yet.'}
         statusOf={(row) => row.status}
-        crud={
-          canManage
-            ? {
-                addLabel: '+ Add Module',
-                onAdd: () => setEditing('new'),
-                onEdit: (row) => setEditing(row),
-                onArchive: archiveRows,
-                onRefresh,
-              }
-            : { onRefresh }
-        }
+        crud={{
+          addLabel: canManage ? '+ Add Module' : undefined,
+          onAdd: canManage ? () => setEditing('new') : undefined,
+          onEdit: canManage ? (row) => setEditing(row) : undefined,
+          onArchive: canManage ? archiveRows : undefined,
+          onRefresh,
+          singleActions: [
+            {
+              label: 'Open file',
+              icon: 'file',
+              needOneMessage: 'Select one module to open its file.',
+              onClick: (row) => void openFile(row),
+            },
+          ],
+        }}
         columns={[
           { key: 'title', header: 'Module', render: (row) => row.title },
           { key: 'subject', header: 'Subject', render: (row) => assigned(row.subject) },
@@ -120,6 +143,19 @@ export function ModulesPage({
             render: (row) => assigned(store.programs.find((item) => item.programId === row.programId)?.name),
           },
           { key: 'type', header: 'Type', priority: 'secondary', render: (row) => assigned(row.moduleType) },
+          {
+            key: 'file',
+            header: 'File',
+            render: (row) =>
+              row.fileName ? (
+                <button type="button" className="linkish" onClick={() => void openFile(row)}>
+                  {row.fileName}
+                  {row.fileSize ? ` · ${formatSize(row.fileSize)}` : ''}
+                </button>
+              ) : (
+                assigned('')
+              ),
+          },
           { key: 'status', header: 'Status', render: (row) => <StatusCell value={row.status} /> },
         ]}
       />
@@ -160,12 +196,35 @@ export function ModulesPage({
                 <option>Other</option>
               </Select>
             </Field>
-            <Field label="Grade / level" optional>
-              <Input name="gradeLevel" defaultValue={current?.gradeLevel} />
+            <Field
+              label="Program lane"
+              optional
+              hint="Used for Module management filters (Playgroup, Pre-kinder, Grade 1–3, ABA, Tutorial)."
+            >
+              <ProgramSpecialtySelect name="specialty" value={current?.gradeLevel || lane || ''} store={store} />
             </Field>
-            <Field label="File name" optional>
-              <Input name="fileName" defaultValue={current?.fileName} />
+            <Field
+              label="Module file"
+              required={!current}
+              optional={Boolean(current)}
+              hint="PDF, Word, PowerPoint, Excel, or image. Max 25 MB. Stored on this module so you can open it later."
+            >
+              <Input name="file" type="file" accept={MODULE_FILE_ACCEPT} required={!current} />
+              {current?.fileName ? (
+                <p className="hlc-field-hint">
+                  Stored now: {current.fileName}
+                  {current.fileSize ? ` (${formatSize(current.fileSize)})` : ''}. Choose a file only to replace it.{' '}
+                  <Button type="button" variant="ghost" onClick={() => void openFile(current)}>
+                    Open stored file
+                  </Button>
+                </p>
+              ) : null}
             </Field>
+            {current?.fileName ? (
+              <Field label="Change note" optional>
+                <Input name="changeDescription" placeholder="Why this file was replaced" />
+              </Field>
+            ) : null}
             <Field label="Status">
               <Select name="status" defaultValue={current?.status || 'draft'}>
                 <option value="draft">draft</option>

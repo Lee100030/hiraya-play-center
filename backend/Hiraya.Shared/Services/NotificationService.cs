@@ -25,7 +25,14 @@ public class NewsSaveRequest
 public class DirectMessageRequest
 {
     public string ToUserId { get; set; } = "";
+    public string GroupId { get; set; } = "";
     public string Body { get; set; } = "";
+}
+
+public class ChatGroupCreateRequest
+{
+    public string Name { get; set; } = "";
+    public List<string> MemberIds { get; set; } = new();
 }
 
 public class NotificationService
@@ -147,6 +154,111 @@ public class NotificationService
         return $"dm:{ids[0]}:{ids[1]}";
     }
 
+    public static string GroupThreadKey(string groupId) => $"group:{(groupId ?? "").Trim()}";
+
+    public static IEnumerable<string> PackedIds(string? packed) =>
+        (packed ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    public static bool AreCoParents(HirayaDatabase db, string parentA, string parentB)
+    {
+        if (string.IsNullOrWhiteSpace(parentA) || string.IsNullOrWhiteSpace(parentB))
+            return false;
+        if (string.Equals(parentA, parentB, StringComparison.OrdinalIgnoreCase))
+            return false;
+        var kidsA = StudentIdsForParent(db, parentA);
+        if (kidsA.Count == 0) return false;
+        return StudentIdsForParent(db, parentB).Overlaps(kidsA);
+    }
+
+    public static HashSet<string> StudentIdsForParent(HirayaDatabase db, string parentId)
+    {
+        var ids = db.ParentStudents
+            .Where(l => l.IsActive && string.Equals(l.ParentId, parentId, StringComparison.OrdinalIgnoreCase))
+            .Select(l => l.StudentId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var student in db.Students.Where(s => string.Equals(s.ParentId, parentId, StringComparison.OrdinalIgnoreCase)))
+            ids.Add(student.StudentId);
+        return ids;
+    }
+
+    public static bool CanDirectMessage(HirayaDatabase db, HirayaUser actor, HirayaUser target)
+    {
+        if (string.Equals(actor.UserId, target.UserId, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!string.Equals(target.Status, "active", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(target.Status, "pending", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (UserRoles.IsAdmin(actor.Role))
+            return target.Role is UserRoles.Teacher or UserRoles.Parent || UserRoles.IsAdmin(target.Role);
+
+        if (actor.Role == UserRoles.Teacher)
+            return target.Role == UserRoles.Teacher || UserRoles.IsAdmin(target.Role);
+
+        if (actor.Role == UserRoles.Parent)
+            return UserRoles.IsAdmin(target.Role) ||
+                   (target.Role == UserRoles.Parent && AreCoParents(db, actor.UserId, target.UserId));
+
+        return false;
+    }
+
+    public static IEnumerable<HirayaUser> MessageContacts(HirayaDatabase db, HirayaUser actor)
+    {
+        return db.Users
+            .Where(u => CanDirectMessage(db, actor, u))
+            .OrderBy(u => PersonLabel(u), StringComparer.OrdinalIgnoreCase);
+    }
+
+    public async Task CreateGroupAsync(HirayaUser actor, ChatGroupCreateRequest input)
+    {
+        if (!UserRoles.IsAdmin(actor.Role))
+            throw new UnauthorizedAccessException("Only the administrator can create a group chat.");
+        var name = (input.Name ?? "").Trim();
+        if (name.Length == 0)
+            throw new InvalidOperationException("Give the group a name.");
+        if (name.Length > 80)
+            throw new InvalidOperationException("Keep the group name under 80 characters.");
+
+        await _repository.MutateAsync(async db =>
+        {
+            WorkflowOps.EnsureLists(db);
+            var memberIds = (input.MemberIds ?? [])
+                .Select(id => (id ?? "").Trim())
+                .Where(id => id.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (!memberIds.Contains(actor.UserId, StringComparer.OrdinalIgnoreCase))
+                memberIds.Insert(0, actor.UserId);
+
+            var people = db.Users
+                .Where(u => memberIds.Contains(u.UserId, StringComparer.OrdinalIgnoreCase))
+                .Where(u =>
+                    u.Role is UserRoles.Teacher or UserRoles.Parent ||
+                    UserRoles.IsAdmin(u.Role))
+                .ToList();
+            if (people.Count < 2)
+                throw new InvalidOperationException("Add at least one teacher or parent besides yourself.");
+
+            var now = DateTime.UtcNow.ToString("o");
+            var group = new ChatGroup
+            {
+                GroupId = IdFactory.New("cg"),
+                Name = name,
+                MemberIds = string.Join(",", people.Select(u => u.UserId)),
+                CreatedBy = actor.UserId,
+                CreatedAt = now,
+                UpdatedAt = now,
+                Status = "active"
+            };
+            db.ChatGroups.Add(group);
+            AuditService.Append(db, actor, AuditModules.Notifications, "group",
+                "chat_group", group.GroupId, $"{PersonLabel(actor)} created group “{name}” ({people.Count} members).");
+            await Task.CompletedTask;
+        });
+    }
+
     public async Task SendDirectAsync(HirayaUser actor, DirectMessageRequest input)
     {
         var body = (input.Body ?? "").Trim();
@@ -157,66 +269,144 @@ public class NotificationService
 
         await _repository.MutateAsync(async db =>
         {
-            string targetId;
-            if (UserRoles.IsAdmin(actor.Role))
+            WorkflowOps.EnsureLists(db);
+            var groupId = (input.GroupId ?? "").Trim();
+            if (groupId.Length > 0)
             {
-                targetId = (input.ToUserId ?? "").Trim();
-                var target = db.Users.FirstOrDefault(u => u.UserId == targetId);
-                if (target is null)
-                    throw new InvalidOperationException("That person was not found.");
-                if (target.Role is not (UserRoles.Teacher or UserRoles.Parent))
-                    throw new InvalidOperationException("Messages can only be sent to a teacher or parent.");
+                SendGroupMessage(db, actor, groupId, body);
+                await Task.CompletedTask;
+                return;
             }
-            else if (actor.Role is UserRoles.Teacher or UserRoles.Parent)
+
+            var targetId = (input.ToUserId ?? "").Trim();
+            if (targetId.Length == 0 && actor.Role is UserRoles.Teacher or UserRoles.Parent)
             {
                 var admin = db.Users.FirstOrDefault(u => u.Role == UserRoles.SuperAdmin);
-                if (admin is null)
-                    throw new InvalidOperationException("The center administrator could not be reached.");
-                targetId = admin.UserId;
-            }
-            else
-            {
-                throw new UnauthorizedAccessException("You cannot send this message.");
+                targetId = admin?.UserId ?? "";
             }
 
-            if (string.Equals(actor.UserId, targetId, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Choose someone else to message.");
+            var target = db.Users.FirstOrDefault(u => u.UserId == targetId)
+                         ?? throw new InvalidOperationException("That person was not found.");
+            if (!CanDirectMessage(db, actor, target))
+                throw new UnauthorizedAccessException("You cannot message that person.");
 
-            var targetUser = db.Users.First(u => u.UserId == targetId);
-            var thread = DirectThreadKey(actor.UserId, targetId);
-            var now = DateTime.UtcNow.ToString("o");
-            var senderName = PersonLabel(actor);
-            var targetName = PersonLabel(targetUser);
+            DeliverDirect(db, actor, target, body);
+            await Task.CompletedTask;
+        });
+    }
 
+    static void SendGroupMessage(HirayaDatabase db, HirayaUser actor, string groupId, string body)
+    {
+        var group = db.ChatGroups.FirstOrDefault(g =>
+                        g.GroupId == groupId &&
+                        !string.Equals(g.Status, "archived", StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException("That group was not found.");
+        var members = PackedIds(group.MemberIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!members.Contains(actor.UserId))
+            throw new UnauthorizedAccessException("You are not in that group.");
+
+        var people = db.Users.Where(u => members.Contains(u.UserId)).ToList();
+        if (people.Count == 0)
+            throw new InvalidOperationException("That group has no members.");
+
+        var thread = GroupThreadKey(group.GroupId);
+        var now = DateTime.UtcNow.ToString("o");
+        var senderName = PersonLabel(actor);
+        group.UpdatedAt = now;
+
+        foreach (var member in people)
+        {
+            var mine = string.Equals(member.UserId, actor.UserId, StringComparison.OrdinalIgnoreCase);
             db.Alerts.Add(new SystemAlert
             {
                 AlertId = IdFactory.New("al"),
                 Kind = NotificationKinds.Direct,
-                Title = senderName,
+                Title = mine ? $"To {group.Name}" : senderName,
                 Message = body,
-                RecipientId = targetId,
-                Href = actor.UserId,
+                RecipientId = member.UserId,
+                Href = group.GroupId,
                 RelatedRecordId = thread,
-                Status = "unread",
+                Status = mine ? "sent" : "unread",
                 CreatedAt = now,
-                Read = false
+                Read = mine,
+                ReadAt = mine ? now : ""
             });
-            db.Alerts.Add(new SystemAlert
-            {
-                AlertId = IdFactory.New("al"),
-                Kind = NotificationKinds.Direct,
-                Title = $"To {targetName}",
-                Message = body,
-                RecipientId = actor.UserId,
-                Href = targetId,
-                RelatedRecordId = thread,
-                Status = "sent",
-                CreatedAt = now,
-                Read = true,
-                ReadAt = now
-            });
-            AuditService.Append(db, actor, AuditModules.Notifications, "direct",
-                "user", targetId, $"{senderName} messaged {targetName}.");
+        }
+
+        AuditService.Append(db, actor, AuditModules.Notifications, "group_message",
+            "chat_group", group.GroupId, $"{senderName} messaged group “{group.Name}”.");
+    }
+
+    static void DeliverDirect(HirayaDatabase db, HirayaUser actor, HirayaUser target, string body)
+    {
+        var thread = DirectThreadKey(actor.UserId, target.UserId);
+        var now = DateTime.UtcNow.ToString("o");
+        var senderName = PersonLabel(actor);
+        var targetName = PersonLabel(target);
+
+        db.Alerts.Add(new SystemAlert
+        {
+            AlertId = IdFactory.New("al"),
+            Kind = NotificationKinds.Direct,
+            Title = senderName,
+            Message = body,
+            RecipientId = target.UserId,
+            Href = actor.UserId,
+            RelatedRecordId = thread,
+            Status = "unread",
+            CreatedAt = now,
+            Read = false
+        });
+        db.Alerts.Add(new SystemAlert
+        {
+            AlertId = IdFactory.New("al"),
+            Kind = NotificationKinds.Direct,
+            Title = $"To {targetName}",
+            Message = body,
+            RecipientId = actor.UserId,
+            Href = target.UserId,
+            RelatedRecordId = thread,
+            Status = "sent",
+            CreatedAt = now,
+            Read = true,
+            ReadAt = now
+        });
+        AuditService.Append(db, actor, AuditModules.Notifications, "direct",
+            "user", target.UserId, $"{senderName} messaged {targetName}.");
+    }
+
+    public async Task DeleteDirectMessageAsync(HirayaUser actor, string alertId)
+    {
+        var id = (alertId ?? "").Trim();
+        if (id.Length == 0)
+            throw new InvalidOperationException("That message was not found.");
+
+        await _repository.MutateAsync(async db =>
+        {
+            WorkflowOps.EnsureLists(db);
+            var mine = db.Alerts.FirstOrDefault(a =>
+                           a.AlertId == id &&
+                           string.Equals(a.Kind, NotificationKinds.Direct, StringComparison.OrdinalIgnoreCase) &&
+                           string.Equals(a.RecipientId, actor.UserId, StringComparison.OrdinalIgnoreCase))
+                       ?? throw new InvalidOperationException("That message was not found.");
+
+            if (!string.Equals(mine.Status, "sent", StringComparison.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException("You can only delete messages you sent.");
+
+            var thread = mine.RelatedRecordId ?? "";
+            var body = mine.Message ?? "";
+            var created = mine.CreatedAt ?? "";
+            var removed = db.Alerts.RemoveAll(a =>
+                string.Equals(a.Kind, NotificationKinds.Direct, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(a.RelatedRecordId, thread, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(a.Message, body, StringComparison.Ordinal) &&
+                string.Equals(a.CreatedAt, created, StringComparison.Ordinal));
+
+            if (removed == 0)
+                throw new InvalidOperationException("That message was not found.");
+
+            AuditService.Append(db, actor, AuditModules.Notifications, "delete",
+                "alert", id, $"{PersonLabel(actor)} deleted a direct message.");
             await Task.CompletedTask;
         });
     }

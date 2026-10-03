@@ -11,13 +11,13 @@ public static class CenterOperationsCatalog
         db.StudentOps ??= [];
         db.CenterHolidays ??= [];
         db.TeacherDuties ??= [];
+        db.Schedules ??= [];
         EnsureTeachers(db);
         EnsureProgramsAndClasses(db);
         EnsureStudents(db);
-        EnsureHolidays(db);
         EnsureDuties(db);
         EnsureKnownTeacherOnRoster(db);
-        EnsureWeekPlans(db);
+        RemoveAutoCalendarData(db);
     }
 
     public static bool RosterReady(HirayaDatabase db) =>
@@ -30,12 +30,10 @@ public static class CenterOperationsCatalog
         db.CenterHolidays ??= [];
         db.TeacherDuties ??= [];
         db.Schedules ??= [];
-        if (db.CenterHolidays.Count == 0 || db.TeacherDuties.Count == 0)
+        if (db.TeacherDuties.Count == 0)
             return true;
         if (db.Users.Any(u => u.UserId == "usr_teacher_001") &&
             db.TeacherDuties.All(d => d.TeacherId != "usr_teacher_001"))
-            return true;
-        if (!db.Schedules.Any(s => (s.ScheduleId ?? "").StartsWith("ops_", StringComparison.Ordinal)))
             return true;
         return !RosterReady(db);
     }
@@ -253,20 +251,21 @@ public static class CenterOperationsCatalog
         return Math.Max(0, age);
     }
 
-    private static void EnsureHolidays(HirayaDatabase db)
+    private static void RemoveAutoCalendarData(HirayaDatabase db)
     {
-        foreach (var (date, title, kind) in Holidays())
+        db.Schedules ??= [];
+        db.CenterHolidays ??= [];
+        // Drop demo week plans and seed sample schedules so the calendar stays empty until staff assign.
+        db.Schedules.RemoveAll(s =>
         {
-            if (db.CenterHolidays.Any(h => h.Date == date))
-                continue;
-            db.CenterHolidays.Add(new CenterHoliday
-            {
-                HolidayId = "hol_" + date.Replace("-", ""),
-                Date = date,
-                Title = title,
-                Kind = kind
-            });
-        }
+            var id = s.ScheduleId ?? "";
+            return id.StartsWith("ops_", StringComparison.Ordinal) ||
+                   id is "sch_001" or "sch_holiday_001";
+        });
+        var autoHolidayIds = new HashSet<string>(
+            Holidays().Select(h => "hol_" + h.Date.Replace("-", "")),
+            StringComparer.OrdinalIgnoreCase);
+        db.CenterHolidays.RemoveAll(h => autoHolidayIds.Contains(h.HolidayId ?? ""));
     }
 
     private static void EnsureDuties(HirayaDatabase db)
@@ -314,57 +313,6 @@ public static class CenterOperationsCatalog
                 Marker = "support",
                 Note = ""
             });
-        }
-    }
-
-    private static void EnsureWeekPlans(HirayaDatabase db)
-    {
-        if (db.Schedules.Any(s => (s.ScheduleId ?? "").StartsWith("ops_", StringComparison.Ordinal)))
-            return;
-
-        void Session(string id, DateTime start, DateTime end, string title, string teacherId, string classId, string studentId, string kind, string notes)
-        {
-            db.Schedules.Add(new Schedule
-            {
-                ScheduleId = id,
-                Title = title,
-                Kind = kind,
-                ClassId = classId,
-                StudentId = studentId,
-                TeacherId = teacherId,
-                ScheduleType = kind,
-                StartAt = DateTime.SpecifyKind(start, DateTimeKind.Local).ToUniversalTime().ToString("o"),
-                EndAt = DateTime.SpecifyKind(end, DateTimeKind.Local).ToUniversalTime().ToString("o"),
-                Room = "Therapy",
-                Notes = notes,
-                Status = "confirmed"
-            });
-        }
-
-        var mon = new DateTime(2026, 9, 7);
-        string[] abaKids = ["Victory", "Psyche", "JM", "Wade", "Mikko", "Psalm", "Majeed", "Nathan", "John Carwynn"];
-        for (var d = 0; d < 5; d++)
-        {
-            var day = mon.AddDays(d);
-            Session($"ops_aba_{d}_1", day.AddHours(8), day.AddHours(10), abaKids[d % abaKids.Length] + " ABA", "usr_t_jess", "cls_aba_jess", "", ScheduleKinds.ClassSession, "ABA");
-            Session($"ops_aba_{d}_brk1", day.AddHours(10), day.AddHours(10).AddMinutes(30), "Break", "usr_t_jess", "cls_aba_jess", "", ScheduleKinds.TeacherTask, "break");
-            Session($"ops_aba_{d}_2", day.AddHours(10).AddMinutes(30), day.AddHours(12).AddMinutes(30), abaKids[(d + 2) % abaKids.Length] + " ABA", "usr_t_jess", "cls_aba_jess", "", ScheduleKinds.ClassSession, "ABA");
-            Session($"ops_aba_{d}_brk2", day.AddHours(12).AddMinutes(30), day.AddHours(13), "Break", "usr_t_jess", "cls_aba_jess", "", ScheduleKinds.TeacherTask, "break");
-            Session($"ops_aba_{d}_3", day.AddHours(13), day.AddHours(15), abaKids[(d + 4) % abaKids.Length] + " ABA", "usr_t_jess", "cls_aba_jess", "", ScheduleKinds.ClassSession, "ABA");
-            if (d < 4)
-                Session($"ops_aba_{d}_4", day.AddHours(15), day.AddHours(17), d == 1 || d == 2 ? "Cleaners" : "Admin / huddle", "usr_t_jess", "cls_aba_jess", "", ScheduleKinds.TeacherTask, "prep");
-            else
-                Session($"ops_aba_{d}_4", day.AddHours(15), day.AddHours(17), "Batch prep / make-up / huddle", "usr_t_jess", "cls_aba_jess", "", ScheduleKinds.Activity, "makeup");
-            Session($"ops_aba_{d}_buf", day.AddHours(17), day.AddHours(20), "Buffer / preparation", "usr_t_jess", "cls_aba_jess", "", ScheduleKinds.TeacherTask, "buffer");
-        }
-
-        string[] am = ["Zacc", "Viel", "Skye", "Kristoff", "Mesach", "Jarell"];
-        string[] pm = ["Psalm", "Carren", "Mateen", "Vonn", "Amir", "JC", "Timothy", "Evan"];
-        for (var d = 0; d < 6; d++)
-        {
-            var day = mon.AddDays(d);
-            Session($"ops_pg_am_{d}", day.AddHours(11), day.AddHours(12).AddMinutes(30), string.Join(", ", am.Skip(d % 3).Take(3)), "usr_t_analyn", "cls_playgroup_am", "", ScheduleKinds.ClassSession, "playgroup");
-            Session($"ops_pg_pm_{d}", day.AddHours(13).AddMinutes(30), day.AddHours(15), string.Join(", ", pm.Skip(d % 4).Take(4)), "usr_t_carol", "cls_playgroup_pm", "", ScheduleKinds.ClassSession, "playgroup");
         }
     }
 

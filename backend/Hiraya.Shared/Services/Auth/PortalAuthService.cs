@@ -117,28 +117,6 @@ public class PortalAuthService
             user = null;
 
         var passwordOk = user != null && PasswordHasher.Verify(password, user.Password);
-        if (!passwordOk && user != null && SeedData.TryCanonicalSeedPassword(key, password, out var canonical))
-        {
-            passwordOk = PasswordHasher.Verify(canonical, user.Password);
-            if (!passwordOk)
-            {
-                try
-                {
-                    await repository.MutateAsync(async data =>
-                    {
-                        var live = data.Users.FirstOrDefault(u => u.UserId == user.UserId);
-                        if (live == null) return;
-                        live.Password = PasswordHasher.Hash(canonical);
-                        await Task.CompletedTask;
-                    });
-                    passwordOk = true;
-                }
-                catch
-                {
-                    passwordOk = false;
-                }
-            }
-        }
 
         if (user == null || !passwordOk)
         {

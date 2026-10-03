@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { HirayaUser } from '@hiraya/types';
 import { resolveMobileApiUrl } from './apiUrl';
-import { useAuth } from './auth';
+import { currentSessionToken, useAuth } from './auth';
 import { useCenter } from './store';
 
 export function profilePhotoUri(
@@ -11,7 +11,9 @@ export function profilePhotoUri(
   if (!path || !user?.userId) return '';
   if (/^https?:\/\//i.test(path) || path.startsWith('data:') || path.startsWith('file:')) return path;
   const stamp = encodeURIComponent(user.updatedAt || path);
-  return `${resolveMobileApiUrl().replace(/\/$/, '')}/api/media/profile/${encodeURIComponent(user.userId)}?v=${stamp}`;
+  const token = currentSessionToken();
+  const session = token ? `&session=${encodeURIComponent(token)}` : '';
+  return `${resolveMobileApiUrl().replace(/\/$/, '')}/api/media/profile/${encodeURIComponent(user.userId)}?v=${stamp}${session}`;
 }
 
 export function useSessionProfile() {

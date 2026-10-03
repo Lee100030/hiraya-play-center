@@ -14,6 +14,19 @@ builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, relo
 
 var dbProvider = HirayaDb.ResolveProvider(builder.Configuration);
 var connection = HirayaDb.ApplyPassword(HirayaDb.ResolveConnection(builder.Configuration, dbProvider), builder.Configuration);
+if (builder.Environment.IsProduction())
+{
+    var fromEnv = Environment.GetEnvironmentVariable("HIRAYA_MYSQL")
+                  ?? Environment.GetEnvironmentVariable("DATABASE_URL")
+                  ?? Environment.GetEnvironmentVariable("HIRAYA_SQLSERVER")
+                  ?? Environment.GetEnvironmentVariable("HIRAYA_POSTGRES")
+                  ?? builder.Configuration["Hiraya:Neon"];
+    if (string.IsNullOrWhiteSpace(fromEnv))
+    {
+        throw new InvalidOperationException(
+            "Set HIRAYA_POSTGRES to the Neon connection before running the API in Production. The local empty-password default must not be used.");
+    }
+}
 var listenPort = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrWhiteSpace(listenPort))
     builder.WebHost.UseUrls($"http://0.0.0.0:{listenPort}");
@@ -103,12 +116,14 @@ builder.Services.AddSingleton(new SessionTokenOptions
 {
     Secret = string.IsNullOrWhiteSpace(sessionSecret) ? SessionTokens.DevelopmentSecret : sessionSecret
 });
+builder.Services.AddSingleton<IRevokedSessionStore, RevokedSessionStore>();
 builder.Services.AddSingleton<SessionGate>();
 builder.Services.AddSingleton<PublicRequestThrottle>();
 builder.Services.AddSingleton<IHirayaRepository, EfHirayaRepository>();
 builder.Services.AddSingleton<PortalAuthService>();
 builder.Services.AddSingleton<AccountService>();
 builder.Services.AddSingleton<ProfilePhotoService>();
+builder.Services.AddSingleton<StudentDocumentService>();
 builder.Services.AddSingleton<EnrollmentService>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.Configure<HirayaSmtpOptions>(builder.Configuration.GetSection(HirayaSmtpOptions.SectionName));
@@ -154,11 +169,11 @@ app.UseExceptionHandler(err =>
         var log = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Hiraya.Api");
         if (IsDatabaseError(ex))
         {
-            log.LogError(ex, "MySQL is not available.");
+            log.LogError(ex, "The learning center database is not available.");
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await context.Response.WriteAsJsonAsync(new
             {
-                error = "The learning center database is not available. Start XAMPP MySQL and confirm the connection string."
+                error = DatabaseUnavailableMessage(dbProvider)
             });
             return;
         }
@@ -172,8 +187,10 @@ app.UseExceptionHandler(err =>
     });
 });
 
-app.MapGet("/api", () => Results.Json(CentralHub.Info(), JsonDefaults.Options));
-app.MapGet("/api/hub", () => Results.Json(CentralHub.Info(), JsonDefaults.Options));
+app.MapGet("/api", (IDbContextFactory<HirayaLearningCenterDbContext> factory) =>
+    Results.Json(CentralHub.Info(LiveDatabaseName(factory)), JsonDefaults.Options));
+app.MapGet("/api/hub", (IDbContextFactory<HirayaLearningCenterDbContext> factory) =>
+    Results.Json(CentralHub.Info(LiveDatabaseName(factory)), JsonDefaults.Options));
 
 app.MapGet("/api/health", async (IDbContextFactory<HirayaLearningCenterDbContext> factory) =>
 {
@@ -185,19 +202,19 @@ app.MapGet("/api/health", async (IDbContextFactory<HirayaLearningCenterDbContext
         {
             status = ok ? "ok" : "down",
             hub = "hiraya-central",
-            database = "hiraya_learning_center",
+            database = DatabaseName(db.Database.GetConnectionString()),
             clients = CentralHub.Clients,
         };
         return ok ? Results.Ok(payload) : Results.Json(payload, statusCode: 503);
     }
     catch (Exception ex)
     {
-        app.Logger.LogWarning(ex, "Health check could not reach MySQL.");
+        app.Logger.LogWarning(ex, "Health check could not reach the center database.");
         return Results.Json(new
         {
             status = "down",
             hub = "hiraya-central",
-            database = "hiraya_learning_center",
+            database = "",
             clients = CentralHub.Clients,
         }, statusCode: 503);
     }
@@ -216,7 +233,7 @@ app.MapGet("/api/store", async (HttpRequest request, IHirayaRepository repo, ILo
     catch (Exception ex)
     {
         logs.CreateLogger("Hiraya.Api").LogError(ex, "Failed loading HLCMS store.");
-        return Results.Json(new { error = "Center records could not be loaded. Confirm MySQL is running and try again." }, statusCode: StatusCodes.Status500InternalServerError);
+        return Results.Json(new { error = RecordsUnavailableMessage(dbProvider, "loaded") }, statusCode: StatusCodes.Status500InternalServerError);
     }
 });
 
@@ -254,12 +271,12 @@ app.MapGet("/api/auth/me", async (HttpRequest request, IHirayaRepository repo) =
     return Results.Json(AccountService.ClonePublic(actor), JsonDefaults.Options);
 });
 
-app.MapPost("/api/auth/logout", (HttpRequest request, SessionTokenOptions tokens, SessionGate gate) =>
+app.MapPost("/api/auth/logout", async (HttpRequest request, SessionTokenOptions tokens, SessionGate gate, CancellationToken ct) =>
 {
     var packed = request.Headers["X-Hiraya-Session"].FirstOrDefault();
     var ticket = SessionTokens.TryRead(packed, tokens.Secret);
     if (ticket is not null)
-        gate.Revoke(ticket.Jti, ticket.ExpiresUnix);
+        await gate.RevokeAsync(ticket.Jti, ticket.ExpiresUnix, ct);
     return Results.NoContent();
 });
 
@@ -342,8 +359,45 @@ app.MapPost("/api/public/enrollment", async (HttpRequest request, PublicEnrollme
     }
 });
 
+app.MapPost("/api/public/teacher-application", async (HttpRequest request, TeacherApplyRequest body, EnrollmentService enroll, PublicRequestThrottle throttle) =>
+{
+    if (!throttle.Allow($"teacher:{ParentPortalApi.ClientHost(request)}", 8, TimeSpan.FromMinutes(15)))
+        return Results.Json(new { error = "Too many applications. Please wait and try again." }, statusCode: StatusCodes.Status429TooManyRequests);
+    try
+    {
+        var applicationId = await enroll.SubmitTeacherApplicationAsync(body.Fullname, body.Email, body.Phone, body.Position, body.Notes);
+        return Results.Json(new PublicEnrollmentResult { Submitted = true, ApplicationId = applicationId }, JsonDefaults.Options);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+    }
+});
+
 app.MapPost("/api/messages", SendDirect);
 app.MapPost("/api/direct-messages", SendDirect);
+app.MapDelete("/api/messages/{alertId}", DeleteDirect);
+app.MapDelete("/api/direct-messages/{alertId}", DeleteDirect);
+app.MapPost("/api/chat-groups", async (ChatGroupCreateRequest payload, HttpRequest request, IHirayaRepository repo, NotificationService notes) =>
+{
+    var actor = await ParentPortalApi.ActorAsync(request, repo);
+    if (actor is null)
+        return Results.Unauthorized();
+    try
+    {
+        await notes.CreateGroupAsync(actor, payload ?? new ChatGroupCreateRequest());
+        var data = await repo.LoadAsync();
+        return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status403Forbidden);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+    }
+});
 
 async Task<IResult> SendDirect(DirectMessageRequest payload, HttpRequest request, IHirayaRepository repo, NotificationService notes)
 {
@@ -365,6 +419,56 @@ async Task<IResult> SendDirect(DirectMessageRequest payload, HttpRequest request
         return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
     }
 }
+
+async Task<IResult> DeleteDirect(string alertId, HttpRequest request, IHirayaRepository repo, NotificationService notes)
+{
+    var actor = await ParentPortalApi.ActorAsync(request, repo);
+    if (actor is null)
+        return Results.Unauthorized();
+    try
+    {
+        await notes.DeleteDirectMessageAsync(actor, alertId);
+        var data = await repo.LoadAsync();
+        return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status403Forbidden);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+    }
+}
+
+app.MapPost("/api/store/patch", async (HttpRequest request, StorePatchRequest? body, IHirayaRepository repo, ILoggerFactory logs, CancellationToken ct) =>
+{
+    var actor = await ParentPortalApi.ActorAsync(request, repo);
+    if (actor is null)
+        return Results.Unauthorized();
+    try
+    {
+        var patch = body ?? new StorePatchRequest();
+        var merged = patch.Collections.Count == 0
+            ? await repo.LoadAsync(ct)
+            : await repo.ApplyClientPatchAsync(patch, actor, ct);
+        return Results.Json(StoreSanitizer.VisibleTo(merged, actor), JsonDefaults.Options);
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        logs.CreateLogger("Hiraya.Api").LogWarning("Store patch denied for {UserId}: {Message}", actor.UserId, ex.Message);
+        return Results.Json(new { error = "You are not allowed to save that data." }, statusCode: StatusCodes.Status403Forbidden);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+    }
+    catch (Exception ex)
+    {
+        logs.CreateLogger("Hiraya.Api").LogError(ex, "Failed saving HLCMS store patch.");
+        return Results.Json(new { error = RecordsUnavailableMessage(dbProvider, "saved") }, statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
 
 app.MapPut("/api/store", async (HttpRequest request, HirayaDatabase incoming, IHirayaRepository repo, ILoggerFactory logs, CancellationToken ct) =>
 {
@@ -390,7 +494,7 @@ app.MapPut("/api/store", async (HttpRequest request, HirayaDatabase incoming, IH
     catch (Exception ex)
     {
         logs.CreateLogger("Hiraya.Api").LogError(ex, "Failed saving HLCMS store.");
-        return Results.Json(new { error = "Center records could not be saved. Confirm MySQL is running and try again." }, statusCode: StatusCodes.Status500InternalServerError);
+        return Results.Json(new { error = RecordsUnavailableMessage(dbProvider, "saved") }, statusCode: StatusCodes.Status500InternalServerError);
     }
 });
 
@@ -399,7 +503,10 @@ ParentPortalApi.Map(app);
 WebsiteApi.Map(app);
 StaffApi.Map(app);
 ProfilePhotoApi.Map(app);
+StudentDocumentApi.Map(app);
 EnrollmentApi.Map(app);
+PaymentApi.Map(app);
+FeedbackApi.Map(app);
 
 try
 {
@@ -411,10 +518,42 @@ try
 catch (Exception ex)
 {
     app.Logger.LogError(ex, "{Provider} initialization failed. Check the connection string and that the database server is running.",
-        dbProvider == HirayaDb.SqlServer ? "SQL Server" : "MySQL");
+        dbProvider == HirayaDb.SqlServer ? "SQL Server" : dbProvider == HirayaDb.Postgres ? "PostgreSQL" : "MySQL");
 }
 
 app.Run();
+
+static string LiveDatabaseName(IDbContextFactory<HirayaLearningCenterDbContext> factory)
+{
+    using var db = factory.CreateDbContext();
+    return DatabaseName(db.Database.GetConnectionString());
+}
+
+static string DatabaseUnavailableMessage(string provider) =>
+    string.Equals(provider, HirayaDb.Postgres, StringComparison.OrdinalIgnoreCase)
+        ? "The learning center database is not available. Confirm Neon is reachable and try again."
+        : "The learning center database is not available. Start XAMPP MySQL and confirm the connection string.";
+
+static string RecordsUnavailableMessage(string provider, string action) =>
+    string.Equals(provider, HirayaDb.Postgres, StringComparison.OrdinalIgnoreCase)
+        ? $"Center records could not be {action}. Confirm Neon is reachable and try again."
+        : $"Center records could not be {action}. Confirm MySQL is running and try again.";
+
+static string DatabaseName(string? connection)
+{
+    if (string.IsNullOrWhiteSpace(connection))
+        return "";
+    foreach (var part in connection.Split(';', StringSplitOptions.RemoveEmptyEntries))
+    {
+        var split = part.Split('=', 2);
+        if (split.Length != 2)
+            continue;
+        if (split[0].Equals("Database", StringComparison.OrdinalIgnoreCase) ||
+            split[0].Equals("Initial Catalog", StringComparison.OrdinalIgnoreCase))
+            return split[1].Trim();
+    }
+    return "";
+}
 
 static bool IsDatabaseError(Exception? ex)
 {
@@ -424,6 +563,8 @@ static bool IsDatabaseError(Exception? ex)
             return true;
         var name = cur.GetType().FullName ?? "";
         if (name.Contains("MySql", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Npgsql", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Postgres", StringComparison.OrdinalIgnoreCase)
             || name.Contains("SqlClient", StringComparison.OrdinalIgnoreCase)
             || name.Contains("SqlException", StringComparison.OrdinalIgnoreCase))
             return true;

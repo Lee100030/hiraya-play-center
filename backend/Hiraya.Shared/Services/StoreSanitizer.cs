@@ -40,11 +40,31 @@ public static class StoreSanitizer
         copy.Attendance = copy.Attendance.Where(a => ids.Contains(a.StudentId)).ToList();
         copy.Reports = copy.Reports.Where(r => ids.Contains(r.StudentId) && r.Status == ProgressStatuses.Published).ToList();
         copy.Payments = copy.Payments.Where(p => ids.Contains(p.StudentId)).ToList();
+        copy.CenterExpenses = [];
+        copy.OpeningBalances = [];
         copy.StudentOps = copy.StudentOps.Where(o => ids.Contains(o.StudentId)).ToList();
         var classIds = copy.Enrollments.Select(e => e.ClassId).ToHashSet();
         copy.Classes = copy.Classes.Where(c => classIds.Contains(c.ClassId)).ToList();
         var teacherIds = copy.Classes.Select(c => c.TeacherId).Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet();
-        copy.Users = copy.Users.Where(u => u.UserId == actor.UserId || teacherIds.Contains(u.UserId)).ToList();
+        var coParentIds = copy.ParentStudents
+            .Where(l => l.IsActive && ids.Contains(l.StudentId) && l.ParentId != actor.UserId)
+            .Select(l => l.ParentId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var student in copy.Students)
+        {
+            if (!string.IsNullOrWhiteSpace(student.ParentId) &&
+                !string.Equals(student.ParentId, actor.UserId, StringComparison.OrdinalIgnoreCase))
+                coParentIds.Add(student.ParentId);
+        }
+        var adminIds = copy.Users
+            .Where(u => UserRoles.IsAdmin(u.Role))
+            .Select(u => u.UserId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        copy.Users = copy.Users.Where(u =>
+            u.UserId == actor.UserId ||
+            teacherIds.Contains(u.UserId) ||
+            coParentIds.Contains(u.UserId) ||
+            adminIds.Contains(u.UserId)).ToList();
         copy.Schedules = copy.Schedules.Where(s =>
             classIds.Contains(s.ClassId) || ids.Contains(s.StudentId)).ToList();
         copy.EnrollmentApplications = [];
@@ -55,7 +75,7 @@ public static class StoreSanitizer
         copy.LeaveRequests = [];
         copy.TeacherDuties = [];
         copy.LearningModuleVersions = [];
-        copy.LearningModules = copy.LearningModules.Where(m => m.Status == LearningModuleStatuses.Published).ToList();
+        copy.LearningModules = LearningModuleService.Visible(copy, actor).ToList();
         copy.WebsiteGallery = [];
         copy.StaffTasks = [];
         copy.SessionPackages = copy.SessionPackages.Where(p => ids.Contains(p.StudentId)).ToList();
@@ -63,6 +83,11 @@ public static class StoreSanitizer
         copy.News = copy.News.Where(n => WorkflowOps.NewsVisibleTo(copy, n, actor)).ToList();
         copy.TeacherComments = [];
         copy.TeacherNotes = [];
+        copy.StudentDocuments = copy.StudentDocuments.Where(d => ids.Contains(d.StudentId)).ToList();
+        copy.ChatGroups = copy.ChatGroups
+            .Where(g => NotificationService.PackedIds(g.MemberIds).Contains(actor.UserId) &&
+                        !string.Equals(g.Status, "archived", StringComparison.OrdinalIgnoreCase))
+            .ToList();
         copy.Alerts = copy.Alerts.Where(a =>
             a.RecipientId == actor.UserId || a.RecipientId == "everyone").ToList();
         foreach (var student in copy.Students)
@@ -85,7 +110,10 @@ public static class StoreSanitizer
         foreach (var enrollment in copy.Enrollments.Where(e => ids.Contains(e.StudentId)))
             classIds.Add(enrollment.ClassId);
 
-        copy.Users = copy.Users.Where(u => u.UserId == actor.UserId).ToList();
+        copy.Users = copy.Users.Where(u =>
+            u.UserId == actor.UserId ||
+            u.Role == UserRoles.Teacher ||
+            UserRoles.IsAdmin(u.Role)).ToList();
         copy.Students = copy.Students.Where(s => ids.Contains(s.StudentId)).ToList();
         copy.ParentStudents = copy.ParentStudents.Where(l => l.IsActive && ids.Contains(l.StudentId)).ToList();
         copy.Enrollments = copy.Enrollments.Where(e => ids.Contains(e.StudentId)).ToList();
@@ -94,11 +122,23 @@ public static class StoreSanitizer
                 ? a.EmployeeId == actor.UserId || a.RecordedBy == actor.UserId
                 : ids.Contains(a.StudentId)).ToList();
         copy.Reports = copy.Reports.Where(r => ids.Contains(r.StudentId)).ToList();
-        copy.Payments = [];
+        copy.Payments = copy.Payments
+            .Where(p =>
+                string.Equals(p.EnrollmentId, "teacher", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(p.StudentId, actor.UserId, StringComparison.OrdinalIgnoreCase))
+            .Select(p =>
+            {
+                p.AccountNumber = "";
+                p.FromAccountNumber = "";
+                return p;
+            })
+            .ToList();
+        copy.CenterExpenses = [];
+        copy.OpeningBalances = [];
         copy.StudentOps = [];
         copy.Classes = copy.Classes.Where(c => classIds.Contains(c.ClassId)).ToList();
         copy.Schedules = copy.Schedules.Where(s =>
-            s.TeacherId == actor.UserId ||
+            WorkflowOps.ScheduleAssignedTo(s, actor.UserId) ||
             classIds.Contains(s.ClassId) ||
             ids.Contains(s.StudentId)).ToList();
         copy.EnrollmentApplications = [];
@@ -124,6 +164,11 @@ public static class StoreSanitizer
             n.TeacherId == actor.UserId &&
             n.Visibility == "teacher" &&
             n.Status != "archived").ToList();
+        copy.StudentDocuments = copy.StudentDocuments.Where(d => ids.Contains(d.StudentId)).ToList();
+        copy.ChatGroups = copy.ChatGroups
+            .Where(g => NotificationService.PackedIds(g.MemberIds).Contains(actor.UserId) &&
+                        !string.Equals(g.Status, "archived", StringComparison.OrdinalIgnoreCase))
+            .ToList();
         return copy;
     }
 
@@ -134,6 +179,8 @@ public static class StoreSanitizer
             UserRoles.IsAdmin(u.Role) ||
             Navigation.IsEmployeeRole(u.Role)).ToList();
         copy.EnrollmentApplications = [];
+        copy.CenterExpenses = [];
+        copy.OpeningBalances = [];
         copy.AuditLogs = [];
         copy.AccountInvitations = [];
         copy.RolePermissions = [];
@@ -143,6 +190,10 @@ public static class StoreSanitizer
         copy.WebsiteGallery = [];
         copy.TeacherComments = [];
         copy.TeacherNotes = [];
+        copy.ChatGroups = copy.ChatGroups
+            .Where(g => NotificationService.PackedIds(g.MemberIds).Contains(actor.UserId) &&
+                        !string.Equals(g.Status, "archived", StringComparison.OrdinalIgnoreCase))
+            .ToList();
         return copy;
     }
 
@@ -220,6 +271,7 @@ public static class StoreSanitizer
                 throw new InvalidOperationException(string.Join(" ", issues));
         }
         WorkflowOps.AfterAdminSave(previous, incoming, actor);
+        StudentTuition.Enforce(previous, incoming);
         return incoming;
     }
 
@@ -236,6 +288,7 @@ public static class StoreSanitizer
         FamilyAccess.EnsureLegacyLinks(incoming);
         WorkflowOps.EnsureLists(current);
         WorkflowOps.EnsureLists(incoming);
+        current = CloneKeepSecrets(current);
         var previous = CloneKeepSecrets(current);
         var allowed = FamilyAccess.AssignedStudentIdsForTeacher(current, actor.UserId);
 
@@ -261,6 +314,7 @@ public static class StoreSanitizer
             .Where(t => !WorkflowOps.TaskAssignedTo(t, actor.UserId))
             .Concat(incoming.StaffTasks.Where(t => WorkflowOps.TaskAssignedTo(t, actor.UserId)))
             .ToList();
+        OverlayStudentSessions(current, incoming, allowed);
         WorkflowOps.AfterTeacherSave(previous, current, actor);
         return current;
     }
@@ -282,13 +336,42 @@ public static class StoreSanitizer
     {
         FamilyAccess.EnsureLegacyLinks(current);
         FamilyAccess.EnsureLegacyLinks(incoming);
+        var previous = CloneKeepSecrets(current);
         current.Payments = incoming.Payments;
         current.Attendance = incoming.Attendance;
         current.StudentOps = incoming.StudentOps;
+        OverlayStudentSessions(current, incoming, null);
+        StudentTuition.Enforce(previous, current);
+        WorkflowOps.ConsumeNewPresentAttendance(previous, current, actor);
         current.Alerts = current.Alerts.Where(a => a.RecipientId != actor.UserId)
             .Concat(incoming.Alerts.Where(a => a.RecipientId == actor.UserId))
             .ToList();
         return current;
+    }
+
+    /// <summary>
+    /// One balance per student. Copy the incoming package and history for the allowed students
+    /// so a class confirmation saved by the client is the same row the server keeps.
+    /// A null allow-list copies every student (staff and admin-shaped writes).
+    /// </summary>
+    private static void OverlayStudentSessions(HirayaDatabase current, HirayaDatabase incoming, HashSet<string>? allowed)
+    {
+        WorkflowOps.EnsureLists(current);
+        WorkflowOps.EnsureLists(incoming);
+        bool Keep(string studentId) =>
+            allowed is null || allowed.Contains(studentId);
+
+        foreach (var package in incoming.SessionPackages.Where(p => Keep(p.StudentId)))
+            WorkflowOps.RecalculatePackage(package);
+
+        current.SessionPackages = current.SessionPackages
+            .Where(p => !Keep(p.StudentId))
+            .Concat(incoming.SessionPackages.Where(p => Keep(p.StudentId)))
+            .ToList();
+        current.SessionHistory = current.SessionHistory
+            .Where(h => !Keep(h.StudentId))
+            .Concat(incoming.SessionHistory.Where(h => Keep(h.StudentId)))
+            .ToList();
     }
 
     private static List<AttendanceRecord> MergeAttendance(

@@ -77,10 +77,12 @@ export function LoginScreen({
         <button className="login-submit" type="submit" disabled={busy}>
           {busy ? 'Signing in…' : 'Open workspace'}
         </button>
-        <p className="login-hint">
-          <Icons.shield width={16} height={16} />
-          <span>Demo: admin / Admin123 (admin123 also works). Keep Hiraya.Api on port 5188.</span>
-        </p>
+        {import.meta.env.DEV ? (
+          <p className="login-hint">
+            <Icons.shield width={16} height={16} />
+            <span>Local demo sign-in is on this screen only. Keep Hiraya.Api on port 5188.</span>
+          </p>
+        ) : null}
         <button type="button" className="login-recover" onClick={() => setShowRecover((value) => !value)}>
           Forgot password? Contact IT support
         </button>

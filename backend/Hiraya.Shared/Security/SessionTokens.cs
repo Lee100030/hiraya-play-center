@@ -8,7 +8,7 @@ namespace Hiraya.Shared.Security;
 
 public static class SessionTokens
 {
-    public static TimeSpan DefaultLifetime => TimeSpan.FromHours(12);
+    public static TimeSpan DefaultLifetime => TimeSpan.FromDays(14);
     public const string DevelopmentSecret = "hiraya-dev-session-not-for-production";
 
     public static string PasswordStamp(string? passwordHash)
@@ -88,9 +88,21 @@ public sealed class SessionTicket
     public long ExpiresUnix { get; init; }
 }
 
+public interface IRevokedSessionStore
+{
+    Task RevokeAsync(string jti, long expiresUnix, CancellationToken ct = default);
+    Task<bool> IsRevokedAsync(string jti, CancellationToken ct = default);
+}
+
 public sealed class SessionGate
 {
     private readonly ConcurrentDictionary<string, long> _revoked = new(StringComparer.Ordinal);
+    private readonly IRevokedSessionStore? _store;
+
+    public SessionGate(IRevokedSessionStore? store = null)
+    {
+        _store = store;
+    }
 
     public void Revoke(string? jti, long expiresUnix)
     {
@@ -98,6 +110,16 @@ public sealed class SessionGate
             return;
         _revoked[jti] = expiresUnix;
         Prune();
+        if (_store is null)
+            return;
+        try
+        {
+            _store.RevokeAsync(jti, expiresUnix).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            /* Memory revoke still applies in this process if the table is unavailable. */
+        }
     }
 
     public bool IsRevoked(string? jti)
@@ -105,7 +127,41 @@ public sealed class SessionGate
         if (string.IsNullOrWhiteSpace(jti))
             return true;
         Prune();
-        return _revoked.ContainsKey(jti);
+        if (_revoked.ContainsKey(jti))
+            return true;
+        if (_store is null)
+            return false;
+        try
+        {
+            return _store.IsRevokedAsync(jti).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task RevokeAsync(string? jti, long expiresUnix, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(jti))
+            return;
+        _revoked[jti] = expiresUnix;
+        Prune();
+        if (_store is null)
+            return;
+        await _store.RevokeAsync(jti, expiresUnix, ct);
+    }
+
+    public async Task<bool> IsRevokedAsync(string? jti, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(jti))
+            return true;
+        Prune();
+        if (_revoked.ContainsKey(jti))
+            return true;
+        if (_store is null)
+            return false;
+        return await _store.IsRevokedAsync(jti, ct);
     }
 
     private void Prune()

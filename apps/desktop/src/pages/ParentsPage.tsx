@@ -1,10 +1,11 @@
 import type { HirayaDatabase, HirayaUser } from '@hiraya/types';
-import { displayName, studentDisplay } from '@hiraya/utils';
+import { displayName, laneLabel, parentInLane, roleLabel, studentDisplay, type ManagementLaneId } from '@hiraya/utils';
 import { Field, Input, Select, Button } from '@hiraya/ui';
 import { FormEvent, useState } from 'react';
 import { DirectMessageModal } from '../components/DirectMessageModal';
 import { EditorModal, FormSection } from '../components/EditorModal';
 import { ProfilePhotoField, saveAccountPhoto } from '../components/ProfilePhotoField';
+import { ProfileFact, ProfileModal } from '../components/ProfileModal';
 import { NameCell, RecordTable, StatusCell, assigned } from '../components/RecordTable';
 import { api } from '../lib/api';
 import { childrenOf } from '../lib/crud';
@@ -15,13 +16,15 @@ export function ParentsPage({
   onStore,
   onRefresh,
   actor,
+  lane,
 }: {
   store: HirayaDatabase;
   onStore: (next: HirayaDatabase) => void;
   onRefresh?: () => Promise<void> | void;
   actor: HirayaUser;
+  lane?: ManagementLaneId | null;
 }) {
-  const rows = store.users.filter((item) => item.role === 'parent');
+  const rows = store.users.filter((item) => item.role === 'parent' && parentInLane(store, item.userId, lane));
   const [editing, setEditing] = useState<HirayaUser | null | 'new'>(null);
   const [linking, setLinking] = useState<HirayaUser | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +33,9 @@ export function ParentsPage({
   const [linkStudentId, setLinkStudentId] = useState('');
   const [linkRel, setLinkRel] = useState('Guardian');
   const [messaging, setMessaging] = useState<HirayaUser | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const current = editing && editing !== 'new' ? editing : null;
+  const viewing = openId ? store.users.find((item) => item.userId === openId) : undefined;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
@@ -41,6 +46,7 @@ export function ParentsPage({
       middleName: String(form.get('middleName') || ''),
       lastName: String(form.get('lastName') || ''),
       email: String(form.get('email') || ''),
+      personalEmail: String(form.get('personalEmail') || '').trim(),
       phone: String(form.get('phone') || ''),
       address: String(form.get('address') || ''),
       notes: String(form.get('notes') || ''),
@@ -123,7 +129,20 @@ export function ParentsPage({
   async function restore(row: HirayaUser) {
     if (!window.confirm(`Activate ${displayName(row)}?`)) return;
     onStore(await api.setParentActive(row.userId, true));
-    setNotice('Parent activated.');
+    setNotice(`${displayName(row)} is active.`);
+  }
+
+  async function deactivateOne(row: HirayaUser) {
+    if (!window.confirm(`Deactivate ${displayName(row)}? They can be restored from this profile.`)) return;
+    setBusy(true);
+    try {
+      onStore(await api.setParentActive(row.userId, false));
+      setNotice(`${displayName(row)} is inactive.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update parent status.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function linkChildInModal() {
@@ -179,8 +198,9 @@ export function ParentsPage({
         </p>
       ) : null}
       <RecordTable
-        title={PAGE_COPY.parents.title}
-        description={PAGE_COPY.parents.description}
+        kicker="Management"
+        title={lane ? `Parent management · ${laneLabel(lane)}` : PAGE_COPY.parents.title}
+        description={lane ? `Guardians with children in ${laneLabel(lane)}.` : PAGE_COPY.parents.description}
         rows={rows}
         rowKey={(row) => row.userId}
         search={(row, q) => `${displayName(row)} ${row.email} ${row.phone}`.toLowerCase().includes(q)}
@@ -203,6 +223,15 @@ export function ParentsPage({
           onDelete: removeRows,
           onRefresh,
           singleActions: [
+            {
+              icon: 'eye',
+              label: 'Open profile',
+              needOneMessage: 'Please select only one parent to open.',
+              onClick: (row) => {
+                setNotice(null);
+                setOpenId(row.userId);
+              },
+            },
             {
               icon: 'chat',
               label: 'Message',
@@ -240,7 +269,79 @@ export function ParentsPage({
           },
           { key: 'status', header: 'Account status', render: (row) => <StatusCell value={row.status} /> },
         ]}
+        card={{
+          name: (row) => displayName(row),
+          photo: (row) => (row.profileImagePath ? api.profileMediaUrl(row.userId, row.updatedAt || row.profileImagePath) : undefined),
+          role: (row) => roleLabel(row.role),
+          stat: (row) => {
+            const n = childrenOf(store, row.userId).length;
+            return n ? `${n} linked children` : 'No children linked';
+          },
+        }}
+        onRowOpen={(row) => {
+          setNotice(null);
+          setOpenId(row.userId);
+        }}
       />
+      {viewing ? (
+        <ProfileModal
+          title="Parent profile"
+          name={displayName(viewing)}
+          subtitle={roleLabel(viewing.role)}
+          status={viewing.status}
+          photo={viewing.profileImagePath ? api.profileMediaUrl(viewing.userId, viewing.updatedAt || viewing.profileImagePath) : undefined}
+          active={viewing.status === 'active'}
+          toggleBusy={busy}
+          onToggleActive={(next) => {
+            if (next) void restore(viewing);
+            else void deactivateOne(viewing);
+          }}
+          onClose={() => setOpenId(null)}
+          actions={
+            <div className="profile-modal-actions">
+              <Button type="button" variant="ghost" onClick={() => setOpenId(null)}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setOpenId(null);
+                  setMessaging(viewing);
+                }}
+              >
+                Message
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setOpenId(null);
+                  setLinking(viewing);
+                }}
+              >
+                Link child
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setOpenId(null);
+                  setEditing(viewing);
+                }}
+              >
+                Edit
+              </Button>
+            </div>
+          }
+        >
+          <ProfileFact label="Phone">{assigned(viewing.phone)}</ProfileFact>
+          <ProfileFact label="Email">{assigned(viewing.email)}</ProfileFact>
+          <ProfileFact label="Address">{assigned(viewing.address)}</ProfileFact>
+          <ProfileFact label="Linked children">
+            {assigned(childrenOf(store, viewing.userId).map(studentDisplay).join(', '))}
+          </ProfileFact>
+        </ProfileModal>
+      ) : null}
       {messaging ? (
         <DirectMessageModal
           key={store.alerts.length}
@@ -293,8 +394,11 @@ export function ParentsPage({
             <Field label="Last name" required>
               <Input name="lastName" defaultValue={current?.lastName} required />
             </Field>
-            <Field label="Email" required>
+            <Field label="Hiraya email" required hint="Sign-in address. This can stay on @hiraya.local.">
               <Input name="email" type="email" defaultValue={current?.email} required />
+            </Field>
+            <Field label="Personal email" optional hint="Real inbox such as Gmail. Payment mail is sent here.">
+              <Input name="personalEmail" type="email" defaultValue={current?.personalEmail || ''} placeholder="name@gmail.com" />
             </Field>
             <Field label="Phone" required>
               <Input name="phone" defaultValue={current?.phone || ''} required />

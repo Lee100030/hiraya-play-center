@@ -173,7 +173,7 @@ public class HttpHirayaRepository : IHirayaRepository
             if ((int)response.StatusCode is 403)
                 throw new InvalidOperationException(detail ?? "You are not allowed to save that change.");
             if ((int)response.StatusCode is 503)
-                throw new InvalidOperationException(detail ?? "MySQL is not available. Start XAMPP MySQL, then try again.");
+                throw new InvalidOperationException(detail ?? "The learning center database is not available. Confirm Hiraya.Api can reach Neon, then try again.");
 
             throw new InvalidOperationException(detail ?? "Could not save to the learning center service. Check Hiraya.Api and try again.");
         }

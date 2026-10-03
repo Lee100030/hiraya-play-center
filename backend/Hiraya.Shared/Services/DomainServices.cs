@@ -1,16 +1,34 @@
 using Hiraya.Shared.Models;
 using Hiraya.Shared.Security;
 using Hiraya.Shared.Services.Firebase;
+using Microsoft.Extensions.Logging;
 
 namespace Hiraya.Shared.Services;
+
+public sealed class EnrollmentApprovalNotice
+{
+    public string ParentUserId { get; init; } = "";
+    public string ParentEmail { get; init; } = "";
+    public string ParentName { get; init; } = "";
+    public string StudentName { get; init; } = "";
+    public string Program { get; init; } = "";
+    public bool ParentNeedsActivation { get; init; }
+}
 
 public class EnrollmentService
 {
     private readonly IHirayaRepository _repository;
+    private readonly ParentAccountService? _parents;
+    private readonly ILogger<EnrollmentService>? _logger;
 
-    public EnrollmentService(IHirayaRepository repository)
+    public EnrollmentService(
+        IHirayaRepository repository,
+        ParentAccountService? parents = null,
+        ILogger<EnrollmentService>? logger = null)
     {
         _repository = repository;
+        _parents = parents;
+        _logger = logger;
     }
 
     public async Task<string> SubmitPublicApplicationAsync(
@@ -72,6 +90,7 @@ public class EnrollmentService
                 PreferredProgram = program,
                 SubmittedAt = DateTime.UtcNow.ToString("o"),
                 Status = "pending_review",
+                ApplicationKind = "student",
                 Notes = FormatApplicationNotes(
                     studentAddress,
                     studentPhone,
@@ -95,6 +114,68 @@ public class EnrollmentService
             await Task.CompletedTask;
         });
 
+        await TrySendReceivedAsync(
+            guardianEmail,
+            guardianName,
+            "we received your enrollment application",
+            $"We received the enrollment application for {childName} ({program}). It is waiting for review. Acceptance, the parent portal, and tuition are separate steps and have not happened yet.");
+        return applicationId;
+    }
+
+    public async Task<string> SubmitTeacherApplicationAsync(string fullname, string email, string phone, string position, string? notes)
+    {
+        var name = (fullname ?? "").Trim();
+        var mail = (email ?? "").Trim();
+        var contact = (phone ?? "").Trim();
+        var role = (position ?? "").Trim();
+        if (name.Length < 2)
+            throw new InvalidOperationException("Please enter your full name.");
+        if (mail.Length < 5 || !mail.Contains('@') || !mail.Contains('.'))
+            throw new InvalidOperationException("Please enter a valid email.");
+        var digits = new string(contact.Where(char.IsDigit).ToArray());
+        if (digits.Length < 7)
+            throw new InvalidOperationException("Please enter a valid contact number.");
+        if (string.IsNullOrWhiteSpace(role))
+            throw new InvalidOperationException("Please choose the role you want to teach.");
+
+        var applicationId = $"tch_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid().ToString("N")[..6]}";
+        await _repository.MutateAsync(async db =>
+        {
+            var duplicate = db.EnrollmentApplications.Any(a =>
+                string.Equals(a.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase) &&
+                a.Status == "pending_review" &&
+                string.Equals(a.ParentEmail, mail, StringComparison.OrdinalIgnoreCase));
+            if (duplicate)
+                throw new InvalidOperationException("A teacher application for this email is already waiting for review.");
+            db.EnrollmentApplications.Add(new EnrollmentApplication
+            {
+                ApplicationId = applicationId,
+                ApplicationKind = "teacher",
+                StudentFullname = name,
+                ParentFullname = name,
+                ParentEmail = mail,
+                ParentPhone = contact,
+                PreferredProgram = role,
+                SubmittedAt = DateTime.UtcNow.ToString("o"),
+                Status = "pending_review",
+                Notes = (notes ?? "").Trim()
+            });
+            NotificationService.PushToUsers(
+                db,
+                NotificationService.Recipients(db, NotificationAudiences.Admins).Select(u => u.UserId),
+                $"A teacher application was submitted. Applicant: {name}. Role: {role}. This is not a student enrollment.",
+                NotificationKinds.Enrollment,
+                "New teacher application",
+                "enrollment");
+            AuditService.Append(db, "", "Public", AuditModules.Enrollment, "apply-teacher",
+                "application", applicationId, $"Teacher application submitted by {name}.");
+            await Task.CompletedTask;
+        });
+        await TrySendReceivedAsync(
+            mail,
+            name,
+            "we received your teacher application",
+            $"We received your teacher application for {role}. It is waiting for review. Applying does not mean you have been accepted, and no interview has been scheduled.");
         return applicationId;
     }
 
@@ -103,6 +184,7 @@ public class EnrollmentService
         if (!Navigation.CanManageEnrollment(actor.Role))
             throw new UnauthorizedAccessException("Only administrators can approve enrollment applications.");
         var adminUserId = actor.UserId;
+        EnrollmentApprovalNotice? notice = null;
         await _repository.MutateAsync(async db =>
         {
             var app = db.EnrollmentApplications.FirstOrDefault(a => a.ApplicationId == applicationId)
@@ -110,6 +192,22 @@ public class EnrollmentService
 
             if (app.Status != "pending_review" && app.Status != "pending")
                 throw new InvalidOperationException("Application already processed.");
+
+            if (string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase))
+            {
+                app.Status = "approved";
+                AuditService.Append(db, adminUserId, "", AuditModules.Enrollment, "approve-teacher",
+                    "application", applicationId, $"Approved teacher application for {app.StudentFullname}. No student was created.");
+                NotificationService.PushToUsers(
+                    db,
+                    NotificationService.Recipients(db, NotificationAudiences.Admins).Select(u => u.UserId),
+                    $"Teacher application for {app.StudentFullname} was approved. Add the teacher account from Teachers. No student was created.",
+                    NotificationKinds.Enrollment,
+                    "Teacher application approved",
+                    "enrollment");
+                await Task.CompletedTask;
+                return;
+            }
 
             var learningClass = ResolveClass(db, classId, app.PreferredProgram);
             if (learningClass != null && ClassService.OccupiedSeats(db, learningClass.ClassId) >= learningClass.Capacity)
@@ -157,8 +255,100 @@ public class EnrollmentService
             app.StudentNumber = studentNumber;
             AuditService.Append(db, adminUserId, "", AuditModules.Enrollment, "approve",
                 "application", applicationId, $"Approved application for {app.StudentFullname}.");
+            notice = new EnrollmentApprovalNotice
+            {
+                ParentUserId = parent.UserId,
+                ParentEmail = parent.Email,
+                ParentName = parent.Fullname,
+                StudentName = app.StudentFullname,
+                Program = programName,
+                ParentNeedsActivation = string.Equals(parent.Status, AccountStatuses.PendingActivation, StringComparison.OrdinalIgnoreCase)
+            };
             await Task.CompletedTask;
         });
+
+        if (notice is null || _parents is null)
+            return;
+        try
+        {
+            await _parents.NotifyEnrollmentAcceptedAsync(notice);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Enrollment was accepted, but the parent notice could not be prepared.");
+        }
+    }
+
+    private async Task TrySendReceivedAsync(string email, string name, string subjectLine, string body)
+    {
+        if (_parents is null)
+            return;
+        try
+        {
+            await _parents.NotifyApplicationReceivedAsync(email, name, subjectLine, body);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Application was saved, but the receipt email could not be sent.");
+        }
+    }
+
+    public async Task ScheduleTeacherInterviewAsync(
+        string applicationId,
+        HirayaUser actor,
+        string when,
+        string place,
+        string? instructions)
+    {
+        if (!Navigation.CanManageEnrollment(actor.Role))
+            throw new UnauthorizedAccessException("Only administrators can schedule teacher interviews.");
+        var at = (when ?? "").Trim();
+        var where = (place ?? "").Trim();
+        var note = (instructions ?? "").Trim();
+        if (at.Length < 3)
+            throw new InvalidOperationException("Enter the interview date and time.");
+        if (where.Length < 3)
+            throw new InvalidOperationException("Enter the interview location or link.");
+
+        string email = "";
+        string name = "";
+        await _repository.MutateAsync(async db =>
+        {
+            var app = db.EnrollmentApplications.FirstOrDefault(a => a.ApplicationId == applicationId)
+                      ?? throw new InvalidOperationException("Application not found.");
+            if (!string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Only a teacher application can be moved to interview.");
+            if (app.Status != "pending_review" && app.Status != "pending")
+                throw new InvalidOperationException("This application is not waiting for review.");
+            app.Status = "interview";
+            var line = $"Interview: {at} at {where}." + (note.Length > 0 ? $" {note}" : "");
+            app.Notes = string.IsNullOrWhiteSpace(app.Notes) ? line : $"{app.Notes.Trim()}\n{line}";
+            email = app.ParentEmail;
+            name = app.StudentFullname;
+            AuditService.Append(db, actor.UserId, "", AuditModules.Enrollment, "interview",
+                "application", applicationId, $"Scheduled an interview for {name} on {at} at {where}.");
+            NotificationService.PushToUsers(
+                db,
+                NotificationService.Recipients(db, NotificationAudiences.Admins).Select(u => u.UserId),
+                $"Interview scheduled for {name} on {at} at {where}. This is not a job offer.",
+                NotificationKinds.Enrollment,
+                "Teacher interview",
+                "enrollment");
+            await Task.CompletedTask;
+        });
+
+        if (_parents is null)
+            return;
+        try
+        {
+            await _parents.NotifyTeacherInterviewAsync(email, name, at, where, string.IsNullOrWhiteSpace(note)
+                ? "Please arrive a few minutes early and bring a valid ID."
+                : note);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "The interview was saved, but the email could not be sent.");
+        }
     }
 
     public async Task RejectApplicationAsync(string applicationId, HirayaUser actor)

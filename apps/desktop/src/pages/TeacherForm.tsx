@@ -1,6 +1,6 @@
-import type { HirayaUser, TeacherProfile } from '@hiraya/types';
+import type { HirayaDatabase, HirayaUser, TeacherProfile } from '@hiraya/types';
 import { displayName } from '@hiraya/utils';
-import { Field, Input, Select, Textarea } from '@hiraya/ui';
+import { Field, Input, ProgramSpecialtySelect, Select, Textarea } from '@hiraya/ui';
 import type { FormEvent } from 'react';
 import { EditorModal, FormSection } from '../components/EditorModal';
 import { ProfilePhotoField } from '../components/ProfilePhotoField';
@@ -8,7 +8,7 @@ import { ProfilePhotoField } from '../components/ProfilePhotoField';
 export function StaffForm({
   user,
   profile,
-  specialties,
+  store,
   error,
   busy,
   onClose,
@@ -16,7 +16,7 @@ export function StaffForm({
 }: {
   user: HirayaUser | null;
   profile?: TeacherProfile;
-  specialties: string[];
+  store?: HirayaDatabase | null;
   error: string | null;
   busy: boolean;
   onClose: () => void;
@@ -44,8 +44,11 @@ export function StaffForm({
         <Field label="Last name" required>
           <Input name="lastName" defaultValue={user?.lastName || (user ? displayName(user) : '')} required />
         </Field>
-        <Field label="Email" required>
+        <Field label="Hiraya email" required hint="Sign-in address. This can stay on @hiraya.local.">
           <Input name="email" type="email" defaultValue={user?.email} required />
+        </Field>
+        <Field label="Personal email" optional hint="Real inbox such as Gmail. Payment mail is sent here.">
+          <Input name="personalEmail" type="email" defaultValue={user?.personalEmail || ''} placeholder="name@gmail.com" />
         </Field>
         <Field label="Contact number" required>
           <Input name="phone" defaultValue={user?.phone || ''} required />
@@ -53,13 +56,12 @@ export function StaffForm({
         <Field label="Address" optional>
           <Input name="address" defaultValue={user?.address} />
         </Field>
-        <Field label="Specialization" optional>
-          <Input name="specialty" list="teacher-specialties" defaultValue={profile?.specialty} />
-          <datalist id="teacher-specialties">
-            {specialties.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
+        <Field
+          label="Specialization"
+          optional
+          hint="Playgroup, Pre-kinder, Kinder, Nursery, Grade 1–3, ABA Therapy, or Tutorial Session. That teacher appears in the matching Teachers Management list."
+        >
+          <ProgramSpecialtySelect key={user?.userId || 'new'} value={profile?.specialty} store={store} />
         </Field>
         <input type="hidden" name="role" value="teacher" />
         <Field label="Employee code" optional>

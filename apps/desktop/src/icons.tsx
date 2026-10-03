@@ -104,6 +104,12 @@ export const Icons = {
       <path d="M6 12.5V16c0 .8 2.7 3 6 3s6-2.2 6-3v-3.5" />
     </Svg>
   ),
+  programTuition: (p: IconProps) => (
+    <Svg {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 10h8M8 14h8M12 7v10" />
+    </Svg>
+  ),
   reports: (p: IconProps) => (
     <Svg {...p}>
       <path d="M3 3v18h18" />
@@ -213,6 +219,19 @@ export const Icons = {
       <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </Svg>
   ),
+  send: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M22 2L11 13" />
+      <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+    </Svg>
+  ),
+  more: (p: IconProps) => (
+    <Svg {...p}>
+      <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </Svg>
+  ),
   file: (p: IconProps) => (
     <Svg {...p}>
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
@@ -223,5 +242,12 @@ export const Icons = {
   tasks: (p: IconProps) => Icons.enrollment(p),
   announcements: (p: IconProps) => Icons.notifications(p),
   sessions: (p: IconProps) => Icons.payments(p),
+  finance: (p: IconProps) => Icons.payments(p),
+  teacherApplications: (p: IconProps) => Icons.teachers(p),
   messages: (p: IconProps) => Icons.chat(p),
+  feedback: (p: IconProps) => (
+    <Svg {...p}>
+      <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" />
+    </Svg>
+  ),
 };

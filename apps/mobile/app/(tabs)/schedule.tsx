@@ -3,40 +3,60 @@ import { Alert, Modal, Pressable, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AppButton, AppHeader, Body, Caption, Card, EmptyState, ErrorState, Field, Heading, LoadingState, Screen, SectionTitle, StatusBadge } from '../../src/components/ui';
 import { useCenter } from '../../src/store';
-import { classForStudent, eventPlace, eventTimeRange, eventTitle, formatTime, isTeacherTask, schedulesForDay, todayKey } from '../../src/selectors';
+import {
+  assignedNames,
+  classForStudent,
+  dayCells,
+  eventPlace,
+  eventTimeRange,
+  eventTitle,
+  formatTime,
+  friendlyError,
+  isTeacherTask,
+  schedulesForDay,
+  staffTasksForTeacher,
+  teacherDayBoard,
+  todayKey,
+} from '../../src/selectors';
 import { colors, fonts } from '../../src/theme';
 import { useAuth } from '../../src/auth';
 import { api } from '../../src/auth';
 import { isMobileParent, isMobileTeacher } from '../../src/rbac';
-import { friendlyError } from '../../src/selectors';
+import { localDateKey } from '@hiraya/utils';
 
-function addDays(offset: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return date;
-}
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function ScheduleTab() {
   const { user } = useAuth();
   const { store, loading, error, refresh, selected } = useCenter();
   const router = useRouter();
   const params = useLocalSearchParams<{ task?: string }>();
-  const [offset, setOffset] = useState(0);
+  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [picked, setPicked] = useState(todayKey());
   const [taskOpen, setTaskOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskBusy, setTaskBusy] = useState(false);
   const teacher = isMobileTeacher(user?.role);
   const family = isMobileParent(user?.role);
-  const day = addDays(offset);
-  const key = todayKey(day);
   const child = family ? selected : undefined;
-  const rows = useMemo(
-    () => schedulesForDay(store, key, child, teacher ? user?.userId : undefined),
-    [store, key, child, user, teacher],
-  );
-  const classes = rows.filter((item) => !isTeacherTask(item) && Boolean(item.startAt));
-  const tasks = rows.filter((item) => isTeacherTask(item));
-  const days = Array.from({ length: 7 }, (_, index) => addDays(index));
+  const teacherId = teacher ? user?.userId : undefined;
+  const days = useMemo(() => dayCells(month), [month]);
+  const today = todayKey();
+  const monthLabel = month.toLocaleString('en-PH', { month: 'long', year: 'numeric' });
+
+  const board = useMemo(() => {
+    if (teacherId) return teacherDayBoard(store, teacherId, picked);
+    return {
+      schedules: schedulesForDay(store, picked, child),
+      tasks: [] as ReturnType<typeof staffTasksForTeacher>,
+      holidays: (store.centerHolidays || []).filter((item) => localDateKey(item.date) === picked),
+    };
+  }, [store, teacherId, picked, child]);
+
+  const classes = board.schedules.filter((item) => !isTeacherTask(item));
+  const personalTasks = board.schedules.filter((item) => isTeacherTask(item));
+  const assignedTasks = board.tasks;
+  const dayCount = classes.length + personalTasks.length + assignedTasks.length + board.holidays.length;
 
   useEffect(() => {
     if (teacher && params.task === '1') {
@@ -45,6 +65,17 @@ export default function ScheduleTab() {
     }
   }, [params.task, teacher, router]);
 
+  function countsOn(day: string) {
+    if (teacherId) {
+      const item = teacherDayBoard(store, teacherId, day);
+      return item.schedules.length + item.tasks.length + item.holidays.length;
+    }
+    return (
+      schedulesForDay(store, day, child).length +
+      (store.centerHolidays || []).filter((row) => localDateKey(row.date) === day).length
+    );
+  }
+
   async function saveTask() {
     if (!user || !taskTitle.trim()) {
       setTaskOpen(false);
@@ -52,9 +83,7 @@ export default function ScheduleTab() {
     }
     setTaskBusy(true);
     try {
-      const start = new Date();
-      start.setMinutes(0, 0, 0);
-      if (offset) start.setDate(start.getDate() + offset);
+      const start = new Date(`${picked}T08:00:00`);
       const end = new Date(start.getTime() + 60 * 60 * 1000);
       await api.putStore({
         ...store,
@@ -75,7 +104,7 @@ export default function ScheduleTab() {
             status: 'confirmed',
           },
         ],
-      });
+      }, store);
       setTaskTitle('');
       setTaskOpen(false);
       await refresh();
@@ -97,10 +126,10 @@ export default function ScheduleTab() {
   return (
     <Screen>
       <AppHeader
-        title={teacher ? 'Calendar' : 'Schedule'}
+        title="Calendar"
         subtitle={
           teacher
-            ? 'Your classes, prep, and personal tasks for this week.'
+            ? 'Same center calendar. Your assigned class times and tasks from Super Admin appear here.'
             : child
               ? `Class times for ${child.fullname || child.firstName}`
               : 'Published class times from the center.'
@@ -111,89 +140,149 @@ export default function ScheduleTab() {
               onPress={() => setTaskOpen(true)}
               style={{ minHeight: 44, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: colors.gold, justifyContent: 'center' }}
             >
-              <Caption style={{ color: colors.green }}>Assign</Caption>
+              <Caption style={{ color: colors.green }}>My task</Caption>
             </Pressable>
           ) : undefined
         }
       />
       {error ? <ErrorState message={error} onRetry={() => void refresh()} /> : null}
-      <View style={{ flexDirection: 'row', gap: 6, marginTop: 16, marginBottom: 8 }}>
-        {days.map((item, index) => {
-          const active = index === offset;
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 16, marginBottom: 12 }}>
+        <NavChip
+          label="Previous"
+          onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+        />
+        <NavChip
+          label="Today"
+          onPress={() => {
+            const now = new Date();
+            setMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+            setPicked(todayKey(now));
+          }}
+        />
+        <NavChip
+          label="Next"
+          onPress={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+        />
+        <Text style={{ fontFamily: fonts.poppinsBold, color: colors.green, fontSize: 15 }}>{monthLabel}</Text>
+      </View>
+
+      <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+        {WEEKDAYS.map((label) => (
+          <Text key={label} style={{ flex: 1, textAlign: 'center', fontFamily: fonts.poppinsSemiBold, color: colors.muted, fontSize: 10 }}>
+            {label}
+          </Text>
+        ))}
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', borderWidth: 1, borderColor: colors.line, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface }}>
+        {days.map((date) => {
+          const key = todayKey(date);
+          const inMonth = date.getMonth() === month.getMonth();
+          const on = key === picked;
+          const isToday = key === today;
+          const count = inMonth ? countsOn(key) : 0;
           return (
             <Pressable
-              key={item.toISOString()}
-              onPress={() => setOffset(index)}
+              key={key + String(inMonth)}
+              onPress={() => setPicked(key)}
               style={{
-                flex: 1,
-                minHeight: 52,
-                borderRadius: 12,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: active ? colors.green : colors.surface,
-                borderWidth: 1,
-                borderColor: active ? colors.green : colors.line,
+                width: '14.28%',
+                minHeight: 64,
+                padding: 4,
+                borderRightWidth: 1,
+                borderBottomWidth: 1,
+                borderColor: colors.line,
+                backgroundColor: on ? '#fff8e6' : colors.surface,
+                opacity: inMonth ? 1 : 0.45,
               }}
             >
-              <Caption style={{ color: active ? colors.cream : colors.muted, fontFamily: fonts.poppinsSemiBold }}>
-                {item.toLocaleDateString('en-PH', { weekday: 'short' })}
-              </Caption>
-              <Text style={{ color: active ? colors.gold : colors.green, fontFamily: fonts.poppinsBold, fontSize: 16, lineHeight: 20 }}>
-                {item.getDate()}
+              <Text
+                style={{
+                  fontFamily: fonts.poppinsBold,
+                  fontSize: 12,
+                  color: isToday ? colors.gold : colors.green,
+                }}
+              >
+                {date.getDate()}
               </Text>
+              {count ? (
+                <Text style={{ fontFamily: fonts.poppinsSemiBold, fontSize: 9, color: colors.greenMid }} numberOfLines={2}>
+                  {count} item{count === 1 ? '' : 's'}
+                </Text>
+              ) : null}
             </Pressable>
           );
         })}
       </View>
-      <SectionTitle title={offset === 0 ? 'Today' : key} />
-      {classes.length === 0 ? (
+
+      <SectionTitle title={picked === today ? 'Today' : picked} />
+      {dayCount === 0 ? (
         <EmptyState
           icon="calendar-outline"
-          title="No classes this day"
-          hint="Nothing is scheduled for this date."
-          actionLabel={teacher ? 'Assign a task' : 'Contact the center'}
-          onAction={() => (teacher ? setTaskOpen(true) : router.push('/(tabs)/profile'))}
+          title={teacher ? 'No assigned schedule this day' : 'No classes this day'}
+          hint={
+            teacher
+              ? 'When Super Admin assigns you on the center calendar, it shows on this date.'
+              : 'Nothing is scheduled for this date.'
+          }
+          actionLabel={teacher ? 'Add a personal task' : undefined}
+          onAction={teacher ? () => setTaskOpen(true) : undefined}
         />
-      ) : (
-        classes.map((item) => {
-          const when = eventTimeRange(item.startAt, item.endAt);
-          const place = eventPlace(item.room);
-          return (
-            <Card key={item.scheduleId}>
-              {when ? <Caption>{when}</Caption> : null}
-              <Heading>{eventTitle(item)}</Heading>
-              {place ? <Body>{place}</Body> : null}
-              {item.notes ? <Caption>{item.notes}</Caption> : null}
-              <View style={{ marginTop: 8 }}>
-                <StatusBadge status={item.status || 'confirmed'} />
-              </View>
-            </Card>
-          );
-        })
-      )}
+      ) : null}
+
+      {board.holidays.map((row) => (
+        <Card key={row.holidayId}>
+          <Caption>Holiday</Caption>
+          <Heading>{row.title}</Heading>
+        </Card>
+      ))}
+
+      {classes.map((item) => {
+        const when = eventTimeRange(item.startAt, item.endAt);
+        const place = eventPlace(item.room);
+        const names = assignedNames(store, item.teacherId);
+        return (
+          <Card key={item.scheduleId}>
+            {when ? <Caption>{when}</Caption> : null}
+            <Heading>{eventTitle(item)}</Heading>
+            {place ? <Body>{place}</Body> : null}
+            {names.map((name) => (
+              <Caption key={name} style={{ fontFamily: fonts.poppinsBold, color: colors.green }}>
+                {name}
+              </Caption>
+            ))}
+            {item.notes ? <Caption>{item.notes}</Caption> : null}
+            <View style={{ marginTop: 8 }}>
+              <StatusBadge status={item.status || 'confirmed'} />
+            </View>
+          </Card>
+        );
+      })}
+
       {teacher ? (
         <>
-          <SectionTitle title="My tasks" />
-          {tasks.length === 0 ? (
-            <EmptyState
-              icon="create-outline"
-              title="No tasks today"
-              hint="Assign prep, a huddle, or a follow-up for this day."
-              actionLabel="Assign a task"
-              onAction={() => setTaskOpen(true)}
-              fill={classes.length === 0 ? false : true}
-            />
-          ) : (
-            tasks.map((item) => (
-              <Card key={item.scheduleId}>
-                <Caption>{eventTimeRange(item.startAt, item.endAt) || formatTime(item.startAt)}</Caption>
-                <Heading>{eventTitle(item)}</Heading>
-                <StatusBadge status="assigned" />
+          {assignedTasks.map((item) => (
+            <Pressable key={item.taskId} onPress={() => router.push('/tasks')}>
+              <Card>
+                <Caption>
+                  Assigned by the center · {item.priority}
+                </Caption>
+                <Heading>{item.title}</Heading>
+                {item.description ? <Body>{item.description}</Body> : null}
+                <StatusBadge status={item.status} />
               </Card>
-            ))
-          )}
+            </Pressable>
+          ))}
+          {personalTasks.map((item) => (
+            <Card key={item.scheduleId}>
+              <Caption>My personal task · {eventTimeRange(item.startAt, item.endAt) || formatTime(item.startAt)}</Caption>
+              <Heading>{eventTitle(item)}</Heading>
+              <StatusBadge status="assigned" />
+            </Card>
+          ))}
         </>
       ) : null}
+
       {child && classForStudent(store, child.studentId) ? (
         <Card>
           <Caption>Regular class</Caption>
@@ -208,8 +297,8 @@ export default function ScheduleTab() {
             style={{ backgroundColor: colors.cream, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}
             onPress={(event) => event.stopPropagation()}
           >
-            <Heading>Assign a task</Heading>
-            <Caption style={{ marginBottom: 12 }}>Saved to your calendar for the selected day. Parents will not see this.</Caption>
+            <Heading>Add a personal task</Heading>
+            <Caption style={{ marginBottom: 12 }}>Saved to your calendar for {picked}. Parents will not see this.</Caption>
             <Field label="Task" required value={taskTitle} onChangeText={setTaskTitle} placeholder="Prep materials, parent follow-up…" />
             <AppButton label="Save task" onPress={() => void saveTask()} loading={taskBusy} disabled={taskBusy || !taskTitle.trim()} />
             <Pressable onPress={() => setTaskOpen(false)} style={{ minHeight: 44, marginTop: 8, alignItems: 'center' }}>
@@ -219,5 +308,24 @@ export default function ScheduleTab() {
         </Pressable>
       </Modal>
     </Screen>
+  );
+}
+
+function NavChip({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        minHeight: 40,
+        paddingHorizontal: 14,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: colors.gold,
+        justifyContent: 'center',
+        backgroundColor: colors.surface,
+      }}
+    >
+      <Caption style={{ color: colors.green }}>{label}</Caption>
+    </Pressable>
   );
 }

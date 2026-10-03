@@ -1,5 +1,6 @@
 import { Button } from '@hiraya/ui';
 import type { FormEvent, ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export function FormSection({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -29,12 +30,34 @@ export function EditorModal({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   legend?: boolean;
 }) {
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+  return createPortal(
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <form
         className="modal-card"
         encType="multipart/form-data"
+        onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' || event.shiftKey) return;
+          const target = event.target;
+          if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+          if (target.type === 'submit' || target.type === 'button' || target.type === 'hidden') return;
+          event.preventDefault();
+          const fields = [...event.currentTarget.querySelectorAll<HTMLElement>('input, select, textarea')].filter(
+            (field) =>
+              field.tabIndex !== -1 &&
+              !field.hasAttribute('hidden') &&
+              !(field instanceof HTMLInputElement && (field.type === 'hidden' || field.disabled)),
+          );
+          const next = fields[fields.indexOf(target) + 1];
+          next?.focus();
+        }}
         onSubmit={(event) => {
           event.preventDefault();
           void onSubmit(event);
@@ -60,6 +83,7 @@ export function EditorModal({
           </Button>
         </footer>
       </form>
-    </div>
+    </div>,
+    document.body,
   );
 }

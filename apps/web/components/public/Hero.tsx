@@ -2,7 +2,7 @@
 
 import { AntigravityField } from '@/components/public/AntigravityField';
 import { CampusTour } from '@/components/public/CampusTour';
-import { EnrollTrigger } from '@/components/public/enrollment';
+import { EnrollTrigger, TeacherApplyTrigger } from '@/components/public/enrollment';
 import { crestSrc } from '@/lib/publicSite';
 import type { PublicSite } from '@hiraya/types';
 import dynamic from 'next/dynamic';
@@ -50,14 +50,14 @@ export function Hero({ site }: { site: PublicSite }) {
           <Image
             className="home-hero-logo"
             src="/images/hiraya-crest.png"
-            alt="HIRAYA Learning Center crest"
+            alt="Hiraya Kids Learning Center crest"
             width={280}
             height={280}
             priority
           />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="home-hero-logo" src={src} alt="HIRAYA Learning Center crest" />
+          <img className="home-hero-logo" src={src} alt="Hiraya Kids Learning Center crest" />
         )}
         <p className="home-kicker">{site.centerName}</p>
         <h1>
@@ -68,6 +68,7 @@ export function Hero({ site }: { site: PublicSite }) {
         <p className="lede-light">{site.welcomeMessage || site.description}</p>
         <div className="hero-cta-row">
           <EnrollTrigger className="btn-hero">Start enrollment</EnrollTrigger>
+          <TeacherApplyTrigger className="btn-ghost-light">Apply as a teacher</TeacherApplyTrigger>
           <button type="button" className="btn-ghost-light" onClick={() => setTour(true)}>
             Watch a campus tour
           </button>

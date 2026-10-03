@@ -1,5 +1,6 @@
 import { Button } from '@hiraya/ui';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export function DeskModal({
   title,
@@ -7,22 +8,33 @@ export function DeskModal({
   onClose,
   tone = 'info',
   size = 'narrow',
+  stacked,
   actions,
+  hideFooter,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   tone?: 'info' | 'error' | 'success';
-  size?: 'narrow' | 'wide';
+  size?: 'narrow' | 'wide' | 'board';
+  stacked?: boolean;
   actions?: ReactNode;
+  hideFooter?: boolean;
 }) {
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+  return createPortal(
+    <div
+      className={['modal-backdrop', stacked ? 'is-stack' : ''].filter(Boolean).join(' ')}
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <div
-        className={`modal-card modal-${size} modal-${tone}`}
+        className={`modal-card modal-${size} modal-${tone}${hideFooter ? ' modal-no-footer' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="desk-modal-title"
+        onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
         <header>
@@ -32,14 +44,17 @@ export function DeskModal({
           </button>
         </header>
         <div className="desk-modal-body">{children}</div>
-        <footer>
-          {actions || (
-            <Button type="button" onClick={onClose}>
-              Close
-            </Button>
-          )}
-        </footer>
+        {hideFooter ? null : (
+          <footer>
+            {actions || (
+              <Button type="button" onClick={onClose}>
+                Close
+              </Button>
+            )}
+          </footer>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

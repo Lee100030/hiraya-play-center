@@ -7,10 +7,14 @@ public static class WorkflowOps
     public static void EnsureLists(HirayaDatabase db)
     {
         db.StaffTasks ??= [];
+        db.CenterExpenses ??= [];
+        db.OpeningBalances ??= [];
         db.SessionPackages ??= [];
         db.SessionHistory ??= [];
         db.TeacherComments ??= [];
         db.TeacherNotes ??= [];
+        db.StudentDocuments ??= [];
+        db.ChatGroups ??= [];
         db.News ??= [];
         db.Alerts ??= [];
         db.Schedules ??= [];
@@ -22,6 +26,9 @@ public static class WorkflowOps
 
     public static bool TaskAssignedTo(StaffTask task, string teacherId) =>
         TeacherIdList(task.TeacherIds).Contains(teacherId);
+
+    public static bool ScheduleAssignedTo(Schedule schedule, string teacherId) =>
+        TeacherIdList(schedule.TeacherId).Contains(teacherId);
 
     public static void RecalculatePackage(SessionPackage package, DateTime? now = null)
     {
@@ -49,8 +56,8 @@ public static class WorkflowOps
 
     public static SessionPackage? ActivePackageFor(HirayaDatabase db, string studentId) =>
         db.SessionPackages
-            .Where(p => p.StudentId == studentId &&
-                        p.Status is not SessionPackageStatuses.Suspended and not SessionPackageStatuses.Completed)
+            .Where(p => string.Equals(p.StudentId, studentId, StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(p.Status, SessionPackageStatuses.Suspended, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(p => p.CreatedAt)
             .FirstOrDefault();
 
@@ -199,21 +206,24 @@ public static class WorkflowOps
         {
             if (schedule.Kind == ScheduleKinds.TeacherTask)
                 continue;
-            if (beforeSchedules.ContainsKey(schedule.ScheduleId))
-                continue;
-            if (!string.IsNullOrWhiteSpace(schedule.TeacherId))
+            var priorTeachers = beforeSchedules.TryGetValue(schedule.ScheduleId, out var priorSchedule)
+                ? TeacherIdList(priorSchedule.TeacherId).ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var assignedTeachers = TeacherIdList(schedule.TeacherId).ToList();
+            foreach (var teacherId in assignedTeachers.Where(id => !priorTeachers.Contains(id)))
             {
                 NotificationService.Push(
                     after,
-                    schedule.TeacherId,
+                    teacherId,
                     $"A schedule was assigned: {schedule.Title}.",
                     NotificationKinds.Schedule,
                     "Schedule assigned",
                     "/schedule");
-                var alert = after.Alerts.LastOrDefault(a => a.RecipientId == schedule.TeacherId);
+                var alert = after.Alerts.LastOrDefault(a => a.RecipientId == teacherId);
                 if (alert != null) alert.RelatedRecordId = schedule.ScheduleId;
             }
-            NotifyParentsForSchedule(after, schedule);
+            if (!beforeSchedules.ContainsKey(schedule.ScheduleId))
+                NotifyParentsForSchedule(after, schedule);
         }
 
         var beforeTasks = before.StaffTasks.ToDictionary(t => t.TaskId);
@@ -273,6 +283,47 @@ public static class WorkflowOps
             if (prior != null && AttendanceStatuses.IsPresentLike(prior.Status))
                 continue;
             ConsumeSession(after, row.StudentId, actor, attendanceId: row.AttendanceId);
+            NotifyParentsForAttendance(after, row, actor);
+        }
+    }
+
+    private static void NotifyParentsForAttendance(HirayaDatabase db, AttendanceRecord row, HirayaUser actor)
+    {
+        var student = db.Students.FirstOrDefault(s => s.StudentId == row.StudentId);
+        var childName = student is null
+            ? "your child"
+            : $"{student.FirstName} {student.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(childName) || childName == "")
+            childName = string.IsNullOrWhiteSpace(student?.Fullname) ? "your child" : student!.Fullname.Trim();
+        var status = AttendanceStatuses.IsPresentLike(row.Status)
+            ? "present"
+            : (string.IsNullOrWhiteSpace(row.Status) ? "updated" : row.Status);
+        var teacherLabel = string.IsNullOrWhiteSpace(actor.Fullname)
+            ? $"{actor.FirstName} {actor.LastName}".Trim()
+            : actor.Fullname.Trim();
+        if (string.IsNullOrWhiteSpace(teacherLabel))
+            teacherLabel = "The center";
+
+        var parentIds = db.ParentStudents
+            .Where(l => l.IsActive && l.StudentId == row.StudentId)
+            .Select(l => l.ParentId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(student?.ParentId))
+            parentIds.Add(student.ParentId);
+
+        foreach (var parentId in parentIds)
+        {
+            if (string.Equals(parentId, actor.UserId, StringComparison.OrdinalIgnoreCase))
+                continue;
+            NotificationService.Push(
+                db,
+                parentId,
+                $"{childName} was marked {status} today by {teacherLabel}.",
+                NotificationKinds.Attendance,
+                "Attendance update",
+                "/attendance");
+            var alert = db.Alerts.LastOrDefault(a => a.RecipientId == parentId);
+            if (alert != null) alert.RelatedRecordId = row.AttendanceId;
         }
     }
 

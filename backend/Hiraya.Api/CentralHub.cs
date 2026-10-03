@@ -7,12 +7,12 @@ public static class CentralHub
 {
     public static readonly string[] Clients = ["website", "desktop", "mobile"];
 
-    public static object Info() => new
+    public static object Info(string database) => new
     {
         name = "HIRAYA Central API",
         hub = "hiraya-central",
         sessionHeader = "X-Hiraya-Session",
-        database = "hiraya_learning_center",
+        database,
         clients = Clients,
         listen = "http://0.0.0.0:5188",
         endpoints = new

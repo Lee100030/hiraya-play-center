@@ -8,8 +8,8 @@ import type {
   TeacherAdminNote,
   TeacherComment,
 } from '@hiraya/types';
-import { displayName, newId, studentDisplay } from '@hiraya/utils';
-import { Button, Field, Input, Select, StatusBadge, Textarea, EmptyValue } from '@hiraya/ui';
+import { confirmStudentPresentToday, displayName, isStudentHereToday, localDateKey, newId, packedTeacherIds, scheduleAssignedTo, sessionLeftFor, sessionLeftLabel, specialtyLaneLabel, staffDisplayRole, studentDisplay } from '@hiraya/utils';
+import { Button, Field, Input, PersonAvatar, PhotoCardPicker, Select, StatusBadge, Textarea } from '@hiraya/ui';
 import { FormEvent, useMemo, useState, type ReactNode } from 'react';
 import { DeskModal } from '../components/DeskModal';
 import { EditorModal, FormSection } from '../components/EditorModal';
@@ -19,9 +19,9 @@ import { api } from '../lib/api';
 import {
   assignedStudentsForTeacher,
   programsForTeacher,
-  remainingSessionsFor,
   studentPlacement,
 } from '../lib/crud';
+import { saveAccountPhoto } from '../components/ProfilePhotoField';
 import { StaffForm } from './TeacherForm';
 
 type Tab =
@@ -124,13 +124,29 @@ export function TeacherWorkspacePage({
     (row) => row.kind === 'employee' && (row.employeeId === teacherId || row.recordedBy === teacherId),
   );
   const schedules = store.schedules.filter(
-    (row) => row.teacherId === teacherId && row.kind !== 'teacherTask' && row.status !== 'cancelled',
+    (row) => scheduleAssignedTo(row, teacherId) && row.kind !== 'teacherTask' && row.status !== 'cancelled',
   );
 
   const monthSchedules = useMemo(() => {
     const key = monthKey(month);
-    return schedules.filter((row) => (row.startAt || '').slice(0, 7) === key);
+    return schedules.filter((row) => localDateKey(row.startAt).slice(0, 7) === key);
   }, [schedules, month]);
+  const monthTasks = useMemo(() => {
+    const key = monthKey(month);
+    return tasks.filter((row) => localDateKey(row.dueAt).slice(0, 7) === key && row.status !== 'cancelled');
+  }, [tasks, month]);
+  const teacherPeople = useMemo(
+    () =>
+      store.users
+        .filter((item) => item.role === 'teacher')
+        .map((item) => ({
+          id: item.userId,
+          name: displayName(item),
+          photo: item.profileImagePath ? api.profileMediaUrl(item.userId, item.updatedAt || item.profileImagePath) : undefined,
+          role: staffDisplayRole(item.role, store.teacherProfiles.find((row) => row.userId === item.userId)?.specialty),
+        })),
+    [store.users, store.teacherProfiles],
+  );
 
   const pendingTasks = tasks.filter((row) => !['completed', 'cancelled'].includes(row.status)).length;
   const completedTasks = tasks.filter((row) => row.status === 'completed').length;
@@ -183,6 +199,27 @@ export function TeacherWorkspacePage({
     );
   }
 
+  async function markInClass(row: Student) {
+    if (isStudentHereToday(store, row.studentId)) {
+      setNotice(`${studentDisplay(row)} is already marked in class today.`);
+      return;
+    }
+    const name = studentDisplay(row);
+    const before = sessionLeftFor(store, row.studentId);
+    const prompt = before.hasPackage
+      ? `Confirm that ${name} is in class? This uses 1 session. ${before.remaining} left of ${before.total}.`
+      : `Confirm that ${name} is in class? No session package is assigned, so sessions left stays empty.`;
+    if (!window.confirm(prompt)) return;
+    const next = confirmStudentPresentToday(store, row.studentId, actor.userId, undefined, 'Confirmed in class by teacher');
+    const left = sessionLeftFor(next, row.studentId);
+    await persist(
+      next,
+      left.hasPackage
+        ? `${name} is in class. ${left.remaining} session${left.remaining === 1 ? '' : 's'} left of ${left.total}.`
+        : `${name} is in class. Assign a session package to track sessions left.`,
+    );
+  }
+
   async function persist(next: HirayaDatabase, message: string) {
     try {
       await saveStore(next);
@@ -199,10 +236,11 @@ export function TeacherWorkspacePage({
   async function onSaveTeacher(event: FormEvent<HTMLFormElement>) {
     if (!teacher) return;
     const form = new FormData(event.currentTarget);
+    const formEl = event.currentTarget;
     const firstName = String(form.get('firstName') || teacher.firstName);
     const middleName = String(form.get('middleName') || '');
     const lastName = String(form.get('lastName') || teacher.lastName);
-    const fullname = String(form.get('fullname') || [firstName, middleName, lastName].filter(Boolean).join(' '));
+    const fullname = [firstName, middleName, lastName].filter(Boolean).join(' ');
     setBusy(true);
     setStaffError(null);
     try {
@@ -214,6 +252,7 @@ export function TeacherWorkspacePage({
         middleName,
         lastName,
         email: String(form.get('email') || ''),
+        personalEmail: String(form.get('personalEmail') || '').trim(),
         phone: String(form.get('phone') || ''),
         address: String(form.get('address') || ''),
         notes: String(form.get('notes') || ''),
@@ -223,10 +262,18 @@ export function TeacherWorkspacePage({
         specialty: String(form.get('specialty') || ''),
         bio: String(form.get('bio') || ''),
         status: String(form.get('status') || 'active'),
+        hireDate: String(form.get('hireDate') || ''),
         password: String(form.get('password') || '') || undefined,
         confirmPassword: String(form.get('confirmPassword') || '') || undefined,
       });
       onStore(saved.store);
+      try {
+        const withPhoto = await saveAccountPhoto(teacher.userId, form, formEl);
+        if (withPhoto) onStore(withPhoto);
+      } catch (photoErr) {
+        setStaffError(photoErr instanceof Error ? `Account saved, but the photo did not upload: ${photoErr.message}` : 'Account saved, but the photo did not upload.');
+        return;
+      }
       setEditingTeacher(false);
       setNotice('Teacher saved.');
     } catch (err) {
@@ -294,6 +341,7 @@ export function TeacherWorkspacePage({
       setError('End time must be after start time.');
       return;
     }
+    const teacherIds = form.getAll('teacherIds').map(String).filter(Boolean).join(',') || teacherId;
     const next: Schedule = {
       scheduleId: editSchedule?.scheduleId || newId('sch'),
       title: String(form.get('title') || '').trim() || 'Class session',
@@ -301,7 +349,7 @@ export function TeacherWorkspacePage({
       scheduleType: 'classSession',
       classId: String(form.get('classId') || ''),
       studentId: String(form.get('studentId') || ''),
-      teacherId,
+      teacherId: teacherIds,
       programId: String(form.get('programId') || ''),
       startAt: start ? new Date(start).toISOString() : nowIso(),
       endAt: end ? new Date(end).toISOString() : nowIso(),
@@ -316,7 +364,7 @@ export function TeacherWorkspacePage({
           ? store.schedules.map((item) => (item.scheduleId === next.scheduleId ? next : item))
           : [...store.schedules, next],
       },
-      'Schedule saved. The teacher calendar on mobile uses this record.',
+      'Schedule saved. It shows on Center calendar, this teacher workspace, and the teacher mobile calendar.',
     );
   }
 
@@ -352,7 +400,7 @@ export function TeacherWorkspacePage({
       description: String(form.get('description') || '').trim(),
       priority: String(form.get('priority') || 'normal'),
       dueAt: String(form.get('dueAt') || ''),
-      teacherIds: teacherId,
+      teacherIds: form.getAll('teacherIds').map(String).filter(Boolean).join(',') || teacherId,
       classId: String(form.get('classId') || ''),
       studentId: String(form.get('studentId') || ''),
       status: String(form.get('status') || 'assigned'),
@@ -375,7 +423,7 @@ export function TeacherWorkspacePage({
           ? (store.staffTasks || []).map((item) => (item.taskId === next.taskId ? next : item))
           : [...(store.staffTasks || []), next],
       },
-      'Task saved. The teacher will see it on mobile.',
+      'Task saved. Assigned teachers see it on mobile and on their Teacher Management calendar.',
     );
   }
 
@@ -482,17 +530,12 @@ export function TeacherWorkspacePage({
       ) : null}
       <header className="page-head ws-head">
         <div className="ws-hero">
-          {teacher.profileImagePath ? (
-            <img
-              className="ws-photo"
-              src={api.profileMediaUrl(teacher.userId, teacher.updatedAt || teacher.profileImagePath)}
-              alt={displayName(teacher)}
-            />
-          ) : (
-            <span className="ws-photo ws-photo-empty" aria-hidden="true">
-              {(displayName(teacher) || '?').trim().slice(0, 1).toUpperCase()}
-            </span>
-          )}
+          <PersonAvatar
+            name={displayName(teacher)}
+            photo={teacher.profileImagePath ? api.profileMediaUrl(teacher.userId, teacher.updatedAt || teacher.profileImagePath) : undefined}
+            size="lg"
+            hint={!teacher.profileImagePath}
+          />
           <div className="page-head-copy">
             <p className="page-crumb">HIRAYA / Teacher Management / Workspace</p>
             <div className="ws-title-row">
@@ -500,7 +543,7 @@ export function TeacherWorkspacePage({
               <StatusBadge status={teacher.status} />
             </div>
             <p className="ws-meta">
-              {[teacher.email, teacher.phone, profile?.specialty || 'No specialization'].filter(Boolean).join(' · ')}
+              {[teacher.email, teacher.phone, specialtyLaneLabel(profile?.specialty) || 'No program assigned'].filter(Boolean).join(' · ')}
             </p>
           </div>
         </div>
@@ -519,7 +562,7 @@ export function TeacherWorkspacePage({
           </Button>
           <Button type="button" variant="ghost" onClick={() => setModal('schedule')}>
             <Icons.calendar width={14} height={14} />
-            Create Schedule
+            Assign schedule
           </Button>
         </div>
       </header>
@@ -660,7 +703,7 @@ export function TeacherWorkspacePage({
           <p>Contact: {assigned(teacher.phone)}</p>
           <p>Address: {assigned(teacher.address)}</p>
           <h2>Professional information</h2>
-          <p>Specialization: {assigned(profile?.specialty)}</p>
+          <p>Program: {assigned(specialtyLaneLabel(profile?.specialty))}</p>
           <p>Programs: {assigned(programs.map((item) => item.name).join(', '))}</p>
           <p>Classes: {assigned(classes.map((item) => item.name).join(', '))}</p>
           <p>
@@ -677,7 +720,7 @@ export function TeacherWorkspacePage({
       {tab === 'students' ? (
         <RecordTable
           title="Assigned Students"
-          description="These children appear on the teacher mobile app."
+          description="Confirm a child is in class to use one session from their package."
           rows={students}
           rowKey={(row) => row.studentId}
           search={(row, q) => studentDisplay(row).toLowerCase().includes(q)}
@@ -698,11 +741,20 @@ export function TeacherWorkspacePage({
             { key: 'class', header: 'Class', render: (row) => assigned(studentPlacement(store, row.studentId).className) },
             {
               key: 'sessions',
-              header: 'Sessions remaining',
-              render: (row) => {
-                const left = remainingSessionsFor(store, row.studentId);
-                return left == null ? <EmptyValue /> : String(left);
-              },
+              header: 'Sessions left',
+              render: (row) => sessionLeftLabel(store, row.studentId),
+            },
+            {
+              key: 'today',
+              header: 'In class',
+              render: (row) =>
+                isStudentHereToday(store, row.studentId) ? (
+                  <StatusCell value="present" />
+                ) : (
+                  <Button type="button" variant="ghost" onClick={() => void markInClass(row)}>
+                    In class
+                  </Button>
+                ),
             },
             { key: 'status', header: 'Status', render: (row) => <StatusCell value={row.status} /> },
             {
@@ -781,8 +833,11 @@ export function TeacherWorkspacePage({
             <strong>
               {month.toLocaleString(undefined, { month: 'long', year: 'numeric' })}
             </strong>
-            <Button type="button" onClick={() => setModal('schedule')}>
-              + Create Schedule
+            <Button type="button" variant="ghost" onClick={() => setModal('schedule')}>
+              Assign schedule
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setModal('task')}>
+              Assign task
             </Button>
           </div>
           <div className="month-cal">
@@ -792,9 +847,10 @@ export function TeacherWorkspacePage({
               </div>
             ))}
             {days.map((date) => {
-              const key = date.toISOString().slice(0, 10);
+              const key = localDateKey(date);
               const inMonth = date.getMonth() === month.getMonth();
-              const events = schedules.filter((row) => (row.startAt || '').slice(0, 10) === key);
+              const events = schedules.filter((row) => localDateKey(row.startAt) === key);
+              const dayTasks = monthTasks.filter((row) => localDateKey(row.dueAt) === key);
               return (
                 <div key={key + inMonth} className={inMonth ? 'month-cal-cell' : 'month-cal-cell is-out'}>
                   <span>{date.getDate()}</span>
@@ -809,10 +865,36 @@ export function TeacherWorkspacePage({
                       }}
                     >
                       {new Date(row.startAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}{' '}
-                      {store.students.find((item) => item.studentId === row.studentId)
-                        ? studentDisplay(store.students.find((item) => item.studentId === row.studentId)!)
-                        : store.classes.find((item) => item.classId === row.classId)?.name || row.title}{' '}
-                      {row.room}
+                      {row.title}
+                      <strong className="month-cal-teacher">
+                        {(packedTeacherIds(row.teacherId).length
+                          ? packedTeacherIds(row.teacherId).map((id) => displayName(store.users.find((item) => item.userId === id))).filter(Boolean)
+                          : [displayName(teacher) || 'Unassigned']
+                        ).map((name) => (
+                          <span key={name}>{name}</span>
+                        ))}
+                      </strong>
+                    </button>
+                  ))}
+                  {dayTasks.map((row) => (
+                    <button
+                      key={row.taskId}
+                      type="button"
+                      className="month-cal-event is-task"
+                      onClick={() => {
+                        setEditTask(row);
+                        setModal('task');
+                      }}
+                    >
+                      Task · {row.title}
+                      <strong className="month-cal-teacher">
+                        {(packedTeacherIds(row.teacherIds).length
+                          ? packedTeacherIds(row.teacherIds).map((id) => displayName(store.users.find((item) => item.userId === id))).filter(Boolean)
+                          : [displayName(teacher) || 'Unassigned']
+                        ).map((name) => (
+                          <span key={name}>{name}</span>
+                        ))}
+                      </strong>
                     </button>
                   ))}
                 </div>
@@ -964,7 +1046,7 @@ export function TeacherWorkspacePage({
         <StaffForm
           user={teacher}
           profile={profile}
-          specialties={store.teacherRoleOptions.map((item) => item.name).filter(Boolean)}
+          store={store}
           error={staffError}
           busy={busy}
           onClose={() => setEditingTeacher(false)}
@@ -1018,7 +1100,7 @@ export function TeacherWorkspacePage({
 
       {modal === 'schedule' ? (
         <EditorModal
-          title={editSchedule ? `Edit ${editSchedule.title || 'schedule'}` : 'Create schedule'}
+          title={editSchedule ? `Edit ${editSchedule.title || 'schedule'}` : 'Assign schedule'}
           error={error}
           busy={false}
           submitLabel="Save schedule"
@@ -1030,6 +1112,14 @@ export function TeacherWorkspacePage({
         >
           <Field label="Title" required>
             <Input name="title" defaultValue={editSchedule?.title} required />
+          </Field>
+          <Field label="Teachers" required hint="Tap a photo card to assign. You can pick more than one. Saved to Center calendar and mobile.">
+            <PhotoCardPicker
+              key={editSchedule?.scheduleId || 'new-ws-schedule'}
+              name="teacherIds"
+              people={teacherPeople}
+              defaultSelected={packedTeacherIds(editSchedule?.teacherId).length ? packedTeacherIds(editSchedule?.teacherId) : [teacherId]}
+            />
           </Field>
           <Field label="Start" required>
             <Input name="startAt" type="datetime-local" defaultValue={localInput(editSchedule?.startAt)} required />
@@ -1097,6 +1187,14 @@ export function TeacherWorkspacePage({
         >
           <Field label="Task title" required>
             <Input name="title" defaultValue={editTask?.title} required />
+          </Field>
+          <Field label="Teachers" required hint="Tap a photo card. Assigned teachers see this on mobile.">
+            <PhotoCardPicker
+              key={editTask?.taskId || 'new-ws-task'}
+              name="teacherIds"
+              people={teacherPeople}
+              defaultSelected={packedTeacherIds(editTask?.teacherIds).length ? packedTeacherIds(editTask?.teacherIds) : [teacherId]}
+            />
           </Field>
           <Field label="Description">
             <Textarea name="description" defaultValue={editTask?.description} />

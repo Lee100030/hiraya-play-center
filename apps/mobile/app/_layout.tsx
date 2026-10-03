@@ -88,6 +88,8 @@ export default function RootLayout() {
               <Stack.Screen name="sessions" options={stackScreen('Sessions')} />
               <Stack.Screen name="students" options={stackScreen('My students')} />
               <Stack.Screen name="notes" options={stackScreen('Notes')} />
+              <Stack.Screen name="salary" options={stackScreen('My salary')} />
+              <Stack.Screen name="feedback" options={stackScreen('Feedback')} />
               <Stack.Screen name="password" options={stackScreen('Password')} />
               <Stack.Screen
                 name="messages"

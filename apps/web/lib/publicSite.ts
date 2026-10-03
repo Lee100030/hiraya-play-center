@@ -3,30 +3,36 @@ import type { PublicSite } from '@hiraya/types';
 export const HIRAYA_FACEBOOK_URL = 'https://www.facebook.com/profile.php?id=61566869041459';
 
 export const publicDefaults: PublicSite = {
-  centerName: 'HIRAYA Learning Center',
+  centerName: 'Hiraya Kids Learning Center',
   description:
-    'HIRAYA Learning Center is a safe and supportive place where children can grow, learn, and develop their skills with care.',
-  aboutTitle: 'About HIRAYA',
-  welcomeTitle: 'Welcome to HIRAYA Learning Center',
+    'At Hiraya Kids Learning Center, every child learns through meaningful play, exploration, and hands-on experiences. The curriculum is child-centered and play-based, supporting each child’s unique journey while fostering confidence, creativity, independence, and a lifelong love for learning. Isang Hiraya para sa mga bata.',
+  aboutTitle: 'About Hiraya Kids Learning Center',
+  welcomeTitle: 'Welcome to Hiraya Kids Learning Center',
   welcomeMessage:
-    'We provide a safe and supportive learning environment where children can grow, learn, and develop their skills.',
+    'Every child learns best through meaningful play, exploration, and hands-on experiences. School year 2026–2027.',
   mission:
-    'To nurture curious, kind, and confident learners through play, guided instruction, and partnership with families.',
+    'To create a joyful, inclusive, and enriching learning environment that nurtures the whole child—mind, body, and spirit—through play, creativity, and meaningful experiences.',
   vision:
-    'A community where every child is known, supported, and ready for the next step in learning.',
-  values: 'Care, curiosity, respect, and joyful learning in every classroom.',
+    'To be a trusted early childhood learning center that inspires young learners to grow into compassionate, capable, and confident individuals who contribute positively to their community and the world.',
+  values:
+    '1. Child-centered learning — we honor each child’s unique pace, interests, and abilities, and let curiosity lead. 2. Holistic development — we nurture the mind, body, and spirit through balanced experiences that promote emotional, social, physical, and cognitive growth. 3. Inclusivity and respect — we embrace diversity so every child feels valued, understood, and respected. 4. Love for learning — we cultivate wonder, creativity, and a lifelong passion for exploration and discovery. 5. Community and collaboration — parents and teachers work hand-in-hand to support each child’s journey. 6. Integrity and responsibility — we model honesty, kindness, and accountability in learning and play. 7. Care for the world — we inspire children to respect nature, care for their surroundings, and contribute positively to their community.',
   address: 'Rodriguez (Montalban), Rizal, Philippines',
   phone: '+63 917 753 4258',
   email: 'hirayakids.learning@gmail.com',
   website: HIRAYA_FACEBOOK_URL,
-  businessHours: 'Monday–Friday, 8:00–17:00',
+  businessHours: 'Playgroup daily · Nursery–Grade 2 weekdays 8:00–10:30',
   hasLogo: false,
   contentUpdatedAt: '',
   programs: [
-    { programId: 'prg_kinder', name: 'Kinder', description: 'Play-based kindergarten that builds literacy, numeracy, and social skills.' },
-    { programId: 'prg_g1', name: 'Grade 1', description: 'Foundational grade-one learning with guided reading and classroom routines.' },
-    { programId: 'prg_g2', name: 'Grade 2', description: 'Growing independence in reading, writing, and problem solving.' },
-    { programId: 'prg_g3', name: 'Grade 3', description: 'Deeper academic skills with project work and collaborative learning.' },
+    { programId: 'prg_playgroup', name: 'Playgroup', description: 'Playgroup for ages 1.5–8, Monday to Sunday, with paper work, obstacle courses, and life-skills activities.' },
+    { programId: 'prg_tiny_tots', name: 'Tiny Tots', description: 'Playgroup for ages 1.5–2.5. Monday to Sunday, 10:00 AM–11:30 AM.' },
+    { programId: 'prg_bright_buds', name: 'Bright Buds', description: 'Playgroup for ages 2.6–3.9. Monday to Sunday, 12:30 PM–2:00 PM.' },
+    { programId: 'prg_rising_stars', name: 'Rising Stars', description: 'Playgroup for ages 4–8. Monday to Sunday, 2:30 PM–4:00 PM.' },
+    { programId: 'prg_preschool', name: 'Pre-school', description: 'Nursery, Pre-Kindergarten, Kindergarten, and Grades 1–3. Monday to Friday, 8:00 AM–10:30 AM. School year 2026–2027.' },
+    { programId: 'prg_kinder', name: 'Kinder', description: 'Kindergarten, Monday to Friday, 8:00 AM–10:30 AM. School readiness through academics and social-emotional growth.' },
+    { programId: 'prg_g1', name: 'Grade 1', description: 'Grade 1, Monday to Friday, 8:00 AM–10:30 AM. Literacy, numeracy, critical thinking, and independent learning.' },
+    { programId: 'prg_tutorial', name: 'Tutorial Session', description: 'Tutorial for ages 4–12. Academic readiness, homework assistance, and skill reinforcement. Enrollment is subject to slot availability.' },
+    { programId: 'prg_aba', name: 'ABA Therapy', description: 'ABA therapy for ages 2–12. Behavior, communication, social interaction, and daily living skills. Enrollment is subject to slot availability.' },
   ],
 };
 

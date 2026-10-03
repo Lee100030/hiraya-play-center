@@ -3,6 +3,7 @@
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { useStore } from '@/components/StoreProvider';
 import { Loading } from '@hiraya/ui';
+import { centerTuitionTotals, isTeacherApplication, paymentCountsTowardPaid } from '@hiraya/utils';
 import { enrollmentStatusLabel } from '@/lib/enrollment';
 import { useMemo } from 'react';
 
@@ -15,7 +16,9 @@ function monthKey(iso: string) {
 export default function AdminReportsPage() {
   const { store, loading } = useStore();
 
-  const revenue = store.payments.reduce((sum, row) => sum + (Number(row.amountPaid) || 0), 0);
+  const collected = centerTuitionTotals(store);
+  const learnerApplications = store.enrollmentApplications.filter((row) => !isTeacherApplication(row));
+  const revenue = collected.paid;
   const present = store.attendance.filter((item) => item.status === 'present' || item.status === 'late').length;
   const attendanceRate = store.attendance.length ? Math.round((present / store.attendance.length) * 100) : 0;
 
@@ -28,14 +31,16 @@ export default function AdminReportsPage() {
     }
     return keys.map((key) => ({
       key,
-      count: store.enrollmentApplications.filter((row) => monthKey(row.submittedAt || '') === key).length,
-      paid: store.payments.filter((row) => (row.paidAt || row.paymentDate || '').startsWith(key)).reduce((sum, row) => sum + Number(row.amountPaid || 0), 0),
+      count: learnerApplications.filter((row) => monthKey(row.submittedAt || '') === key).length,
+      paid: store.payments
+        .filter((row) => row.enrollmentId !== 'teacher' && paymentCountsTowardPaid(row.paymentStatus) && (row.paidAt || row.paymentDate || '').startsWith(key))
+        .reduce((sum, row) => sum + Number(row.amountPaid || 0), 0),
     }));
-  }, [store.enrollmentApplications, store.payments]);
+  }, [learnerApplications, store.payments]);
 
   const statusSlices = useMemo(() => {
     const counts = { Pending: 0, Approved: 0, Rejected: 0 };
-    for (const row of store.enrollmentApplications) {
+    for (const row of learnerApplications) {
       const label = enrollmentStatusLabel(row.status);
       if (label === 'Pending') counts.Pending += 1;
       else if (label === 'Approved') counts.Approved += 1;
@@ -47,7 +52,7 @@ export default function AdminReportsPage() {
       { name: 'Approved', value: counts.Approved, color: '#1f7a4d', pct: (counts.Approved / total) * 100 },
       { name: 'Rejected', value: counts.Rejected, color: '#c44536', pct: (counts.Rejected / total) * 100 },
     ];
-  }, [store.enrollmentApplications]);
+  }, [learnerApplications]);
 
   const maxMonth = Math.max(1, ...months.map((item) => item.count));
   const maxPay = Math.max(1, ...months.map((item) => item.paid));
@@ -62,8 +67,13 @@ export default function AdminReportsPage() {
   function exportCsv() {
     const lines = [
       'Report,Value',
-      `Total Revenue,${revenue}`,
-      `Total Enrollments,${store.enrollmentApplications.length}`,
+      `Total Tuition,${collected.tuition}`,
+      `Total Paid,${collected.paid}`,
+      `Outstanding Balance,${collected.outstanding}`,
+      `Paid Students,${collected.paidCount}`,
+      `Partially Paid Students,${collected.partialCount}`,
+      `Unpaid Students,${collected.unpaidCount}`,
+      `Total Enrollments,${learnerApplications.length}`,
       `Attendance Rate,${attendanceRate}%`,
       '',
       'Month,Enrollments,Revenue',
@@ -104,12 +114,13 @@ export default function AdminReportsPage() {
       />
       <div className="kpi-grid">
         <article className="kpi-card">
-          <p className="kpi-label">Total Revenue</p>
-          <strong className="kpi-value">₱{revenue.toLocaleString()}</strong>
+          <p className="kpi-label">Total paid</p>
+          <strong className="kpi-value">₱{collected.paid.toLocaleString()}</strong>
+          <p className="kpi-label">Outstanding ₱{collected.outstanding.toLocaleString()} · Tuition ₱{collected.tuition.toLocaleString()}</p>
         </article>
         <article className="kpi-card">
           <p className="kpi-label">Total Enrollments</p>
-          <strong className="kpi-value">{store.enrollmentApplications.length}</strong>
+          <strong className="kpi-value">{learnerApplications.length}</strong>
         </article>
         <article className="kpi-card">
           <p className="kpi-label">Attendance Rate</p>

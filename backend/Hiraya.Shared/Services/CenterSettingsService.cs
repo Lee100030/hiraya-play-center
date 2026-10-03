@@ -30,7 +30,7 @@ public class CenterSettingsService
                 Description = input.Description.Trim(),
                 AboutTitle = string.IsNullOrWhiteSpace(input.AboutTitle) ? "About HIRAYA" : input.AboutTitle.Trim(),
                 WelcomeTitle = string.IsNullOrWhiteSpace(input.WelcomeTitle)
-                    ? "Welcome to HIRAYA Learning Center"
+                    ? "Welcome to Hiraya Kids Learning Center"
                     : input.WelcomeTitle.Trim(),
                 WelcomeMessage = (input.WelcomeMessage ?? "").Trim(),
                 Mission = input.Mission.Trim(),

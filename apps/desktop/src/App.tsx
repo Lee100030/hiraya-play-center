@@ -7,12 +7,13 @@ import { api, USER_STORAGE_KEY } from './lib/api';
 import { type ViewId } from './lib/views';
 import { DashboardPage } from './pages/DashboardPage';
 import { WorkspacePages } from './pages/WorkspacePages';
-import { displayName, resolveLoginPassword } from '@hiraya/utils';
+import { displayName, isManagementLaneView, resolveLoginPassword, type ManagementLaneId } from '@hiraya/utils';
 
 export default function App() {
   const [user, setUser] = useState<HirayaUser | null>(null);
   const [store, setStore] = useState<HirayaDatabase>(emptyStore());
   const [view, setView] = useState<ViewId>('dashboard');
+  const [peopleLane, setPeopleLane] = useState<ManagementLaneId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [login, setLogin] = useState('admin');
@@ -32,6 +33,10 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    document.title = 'HIRAYA | Desktop';
   }, []);
 
   useEffect(() => {
@@ -73,7 +78,15 @@ export default function App() {
       setStore(await api.getStore());
       setView('dashboard');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed');
+      const raw = err instanceof Error ? err.message : 'Sign-in failed';
+      const offline =
+        /failed to fetch|networkerror|load failed|aborted|timeout/i.test(raw) ||
+        (err instanceof Error && err.name === 'AbortError');
+      setError(
+        offline
+          ? 'HIRAYA API is not running on port 5188. Start Hiraya.Api, then sign in again.'
+          : raw,
+      );
     } finally {
       setBusy(false);
     }
@@ -89,7 +102,7 @@ export default function App() {
   async function saveStore(next: HirayaDatabase) {
     setLoadError(null);
     try {
-      setStore(await api.putStore(next));
+      setStore(await api.saveChanges(store, next));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not save records';
       setLoadError(message);
@@ -136,10 +149,14 @@ export default function App() {
       user={user}
       store={store}
       view={view}
+      peopleLane={peopleLane}
       collapsed={collapsed}
       loading={loading && store.students.length === 0 && store.enrollmentApplications.length === 0}
       loadError={loadError}
-      onView={setView}
+      onView={(id, lane) => {
+        setView(id);
+        setPeopleLane(isManagementLaneView(id) || id === 'payments' || id === 'feedback' ? lane ?? null : null);
+      }}
       onCollapse={() => {
         const next = !collapsed;
         setCollapsed(next);
@@ -152,10 +169,19 @@ export default function App() {
       saveStore={saveStore}
     >
       {view === 'dashboard' ? (
-        <DashboardPage store={store} name={displayName(user)} role={user.role} onView={setView} />
+        <DashboardPage
+          store={store}
+          name={displayName(user)}
+          role={user.role}
+          onView={(id) => {
+            setView(id);
+            setPeopleLane(null);
+          }}
+        />
       ) : (
         <WorkspacePages
           view={view}
+          peopleLane={peopleLane}
           store={store}
           user={user}
           onStore={setStore}

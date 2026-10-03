@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { FormEvent, useMemo, useState } from 'react';
-import { displayName, roleLabel } from '@hiraya/utils';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { addLearningProgram, displayName, isBuiltinManagementLane, managementLanesFor, PAYMENT_LANES, parsePaymentLane, removeLearningProgram, roleLabel } from '@hiraya/utils';
+import { Button, Field, Input } from '@hiraya/ui';
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/components/StoreProvider';
 import { StoreStatus } from '@/components/StoreStatus';
+import { AdminModal } from '@/components/admin/AdminModal';
 
 const navGroups = [
   {
@@ -20,24 +22,26 @@ const navGroups = [
       { href: '/admin/parents', label: 'Parent management', icon: '♡' },
       { href: '/admin/staff', label: 'Teachers Management', icon: '★' },
       { href: '/admin/modules', label: 'Module management', icon: '▤' },
+      { href: '/admin/program-tuition', label: 'Program tuition management', icon: '₱' },
       { href: '/admin/schedules', label: 'Schedule management', icon: '◷' },
-      { href: '/admin/tasks', label: 'Task management', icon: '✓' },
       { href: '/admin/announcements', label: 'Announcement management', icon: '✉' },
       { href: '/admin/sessions', label: 'Session management', icon: '◌' },
     ],
   },
   {
     label: 'Enrollment',
-    items: [{ href: '/admin/enrollments', label: 'Enrollment Recording', icon: '✎' }],
+    items: [
+      { href: '/admin/enrollments', label: 'Enrollment Recording', icon: '✎' },
+      { href: '/admin/teacher-applications', label: 'Teacher applications', icon: '★' },
+    ],
   },
   {
     label: 'Records',
     items: [
-      { href: '/admin/programs', label: 'Programs', icon: '▤' },
-      { href: '/admin/classes', label: 'Classes', icon: '⌂' },
-      { href: '/admin/attendance', label: 'Attendance', icon: '☑' },
-      { href: '/admin/progress', label: 'Progress', icon: '▲' },
+      { href: '/admin/attendance', label: 'Teachers Attendance record', icon: '☑' },
+      { href: '/admin/progress', label: 'Student progress', icon: '▲' },
       { href: '/admin/payments', label: 'Payments', icon: '₱' },
+      { href: '/admin/expenses', label: 'Center Cash flow', icon: '₱' },
       { href: '/admin/messages', label: 'Notifications', icon: '🔔' },
       { href: '/admin/reports', label: 'Reports', icon: '▦' },
       { href: '/admin/website', label: 'Marketing site', icon: '◈' },
@@ -50,10 +54,25 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { store, save } = useStore();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const peopleLane = searchParams.get('lane');
   const router = useRouter();
+  const peopleHrefs = ['/admin/students', '/admin/parents', '/admin/staff', '/admin/modules', '/admin/sessions'];
+  const paymentHref = '/admin/payments';
+  const programLanes = useMemo(() => managementLanesFor(store), [store]);
+  const paymentLane = parsePaymentLane(peopleLane);
+  const section =
+    navGroups.find((group) =>
+      group.items.some((item) => (item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href))),
+    )?.label || 'Dashboard';
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [notes, setNotes] = useState(false);
+  const [openPeopleNav, setOpenPeopleNav] = useState<string | null>(null);
+  const [addingProgram, setAddingProgram] = useState(false);
+  const [newProgramName, setNewProgramName] = useState('');
+  const [programBusy, setProgramBusy] = useState(false);
+  const [programError, setProgramError] = useState('');
   const unreadMessages = useMemo(
     () =>
       store.alerts.filter(
@@ -112,6 +131,52 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     router.replace('/admin');
   }
 
+  async function saveNewProgram() {
+    setProgramBusy(true);
+    setProgramError('');
+    try {
+      const result = addLearningProgram(store, newProgramName);
+      await save(result.store);
+      setAddingProgram(false);
+      setNewProgramName('');
+      if (result.created && openPeopleNav) {
+        router.push(`${openPeopleNav}?lane=${encodeURIComponent(result.program.programId)}`);
+        setOpen(false);
+      }
+    } catch (err) {
+      setProgramError(err instanceof Error ? err.message : 'Could not add that program.');
+    } finally {
+      setProgramBusy(false);
+    }
+  }
+
+  async function deleteProgram(laneId: string, label: string) {
+    if (isBuiltinManagementLane(laneId)) {
+      window.alert('Built-in programs cannot be deleted.');
+      return;
+    }
+    if (!window.confirm(`Remove “${label}” from every management list?`)) return;
+    setProgramBusy(true);
+    setProgramError('');
+    try {
+      const result = removeLearningProgram(store, laneId);
+      await save(result.store);
+      if (peopleLane === laneId && openPeopleNav) {
+        router.push(openPeopleNav);
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not remove that program.');
+    } finally {
+      setProgramBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const match = peopleHrefs.find((href) => pathname.startsWith(href));
+    if (match) setOpenPeopleNav(match);
+    else if (pathname.startsWith(paymentHref)) setOpenPeopleNav(paymentHref);
+  }, [pathname, peopleLane]);
+
   return (
     <div className={open ? 'admin-shell nav-open' : 'admin-shell'}>
       <div className="admin-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
@@ -129,19 +194,127 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <div key={group.label} className="admin-nav-group">
               <p className="admin-nav-heading">{group.label}</p>
               {group.items.map((item) => {
-                const active = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
+                const nestedPrograms = peopleHrefs.includes(item.href);
+                const nestedPayments = item.href === paymentHref;
+                const nested = nestedPrograms || nestedPayments;
+                const current = item.href === '/admin' ? pathname === '/admin' : pathname.startsWith(item.href);
+                const dropOpen = nested && openPeopleNav === item.href;
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={active ? 'active' : ''}
-                    onClick={() => setOpen(false)}
-                  >
-                    <span className="nav-ico" aria-hidden="true">
-                      {item.icon}
-                    </span>
-                    {item.label}
-                  </Link>
+                  <div key={item.href} className={dropOpen ? 'nav-item-block is-expanded' : 'nav-item-block'}>
+                    {nested ? (
+                      <button
+                        type="button"
+                        className={
+                          current
+                            ? dropOpen
+                              ? 'is-open has-caret'
+                              : 'active has-caret'
+                            : dropOpen
+                              ? 'is-open has-caret'
+                              : 'has-caret'
+                        }
+                        aria-expanded={dropOpen}
+                        onClick={() => {
+                          const nextOpen = openPeopleNav === item.href ? null : item.href;
+                          setOpenPeopleNav(nextOpen);
+                          if (nextOpen && !current) {
+                            if (nestedPayments) {
+                              router.push(`${item.href}?lane=teachers`);
+                            } else {
+                              router.push(item.href);
+                            }
+                          }
+                        }}
+                      >
+                        <span className="nav-ico" aria-hidden="true">
+                          {item.icon}
+                        </span>
+                        <span className="nav-label">{item.label}</span>
+                        <span className={dropOpen ? 'nav-caret is-open' : 'nav-caret'} aria-hidden="true">
+                          ▸
+                        </span>
+                      </button>
+                    ) : (
+                      <Link
+                        href={item.href}
+                        className={current ? 'active' : ''}
+                        onClick={() => setOpen(false)}
+                      >
+                        <span className="nav-ico" aria-hidden="true">
+                          {item.icon}
+                        </span>
+                        {item.label}
+                      </Link>
+                    )}
+                    {dropOpen && nestedPrograms ? (
+                      <div className="nav-sub" role="group" aria-label={`${item.label} programs`}>
+                        <Link
+                          href={item.href}
+                          className={current && !peopleLane ? 'active' : ''}
+                          onClick={() => setOpen(false)}
+                        >
+                          All
+                        </Link>
+                        {programLanes.map((lane) => (
+                          <div
+                            key={lane.id}
+                            className={
+                              current && peopleLane === lane.id ? 'nav-sub-row is-active' : 'nav-sub-row'
+                            }
+                          >
+                            <Link
+                              href={`${item.href}?lane=${lane.id}`}
+                              className="nav-sub-link"
+                              onClick={() => setOpen(false)}
+                            >
+                              {lane.label}
+                            </Link>
+                            {!isBuiltinManagementLane(lane.id) ? (
+                              <button
+                                type="button"
+                                className="nav-sub-delete"
+                                title={`Remove ${lane.label}`}
+                                aria-label={`Remove ${lane.label}`}
+                                disabled={programBusy}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  void deleteProgram(lane.id, lane.label);
+                                }}
+                              >
+                                ×
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="nav-sub-add"
+                          onClick={() => {
+                            setProgramError('');
+                            setNewProgramName('');
+                            setAddingProgram(true);
+                          }}
+                        >
+                          + Add program
+                        </button>
+                      </div>
+                    ) : null}
+                    {dropOpen && nestedPayments ? (
+                      <div className="nav-sub" role="group" aria-label="Payment lists">
+                        {PAYMENT_LANES.map((lane) => (
+                          <Link
+                            key={lane.id}
+                            href={`${item.href}?lane=${lane.id}`}
+                            className={current && paymentLane === lane.id ? 'active' : ''}
+                            onClick={() => setOpen(false)}
+                          >
+                            {lane.label}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
@@ -160,6 +333,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         >
           <span aria-hidden="true">{open ? '✕' : '☰'}</span>
         </button>
+        <div className="desk-top-brand">
+          <strong>Hiraya Kids Learning Center</strong>
+          <span className="desk-sublabel">{section}</span>
+        </div>
         <form className="admin-search" onSubmit={onSearch} role="search">
           <label className="sr-only" htmlFor="admin-search">
             Jump to a student or application
@@ -249,6 +426,40 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <StoreStatus />
         {children}
       </main>
+      {addingProgram ? (
+        <AdminModal
+          title="Add program"
+          onClose={() => {
+            if (programBusy) return;
+            setAddingProgram(false);
+            setProgramError('');
+          }}
+          footer={
+            <>
+              <Button type="button" variant="ghost" disabled={programBusy} onClick={() => setAddingProgram(false)}>
+                Cancel
+              </Button>
+              <Button type="button" disabled={programBusy} onClick={() => void saveNewProgram()}>
+                {programBusy ? 'Saving…' : 'Add program'}
+              </Button>
+            </>
+          }
+        >
+          {programError ? <p className="hlc-field-error">{programError}</p> : null}
+          <Field
+            label="Program name"
+            required
+            hint="Appears under Student, Parent, Teacher, Module, and Session management for everyone."
+          >
+            <Input
+              value={newProgramName}
+              onChange={(event) => setNewProgramName(event.target.value)}
+              placeholder="e.g. Summer enrichment"
+              autoFocus
+            />
+          </Field>
+        </AdminModal>
+      ) : null}
       </div>
     </div>
   );

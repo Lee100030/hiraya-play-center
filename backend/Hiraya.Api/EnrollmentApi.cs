@@ -57,6 +57,31 @@ public static class EnrollmentApi
             }
         });
 
+        app.MapPost("/api/enrollment/applications/{id}/interview", async (
+            string id,
+            InterviewBody? body,
+            HttpRequest request,
+            IHirayaRepository repo,
+            EnrollmentService enroll) =>
+        {
+            var actor = await ParentPortalApi.ActorAsync(request, repo);
+            if (actor is null) return Results.Unauthorized();
+            try
+            {
+                await enroll.ScheduleTeacherInterviewAsync(id, actor, body?.When ?? "", body?.Place ?? "", body?.Instructions);
+                var data = await repo.LoadAsync();
+                return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Results.Json(new { error = "You are not allowed to schedule interviews." }, statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
         app.MapPost("/api/enrollment/applications/{id}/cancel", async (
             string id,
             HttpRequest request,
@@ -86,4 +111,11 @@ public static class EnrollmentApi
 public sealed class ApproveEnrollmentBody
 {
     public string? ClassId { get; set; }
+}
+
+public sealed class InterviewBody
+{
+    public string When { get; set; } = "";
+    public string Place { get; set; } = "";
+    public string? Instructions { get; set; }
 }

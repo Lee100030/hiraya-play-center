@@ -16,7 +16,7 @@ export function ProgramsSection({
       <header className="programs-header">
         <p className="eyebrow">Learning</p>
         <Heading>Our programs</Heading>
-        <p>Choose a program that is right for your child — from kindergarten through the early grades.</p>
+        <p>Choose a program that is right for your child — playgroup, nursery through grade school, tutorial, or ABA therapy.</p>
       </header>
       {loading || !site.programs.length ? (
         <p className="programs-empty">{loading ? 'Loading programs…' : 'Programs will be available soon.'}</p>

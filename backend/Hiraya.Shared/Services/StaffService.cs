@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 using Hiraya.Shared;
 using Hiraya.Shared.Models;
 using Hiraya.Shared.Security;
@@ -13,6 +14,7 @@ public class StaffSaveRequest
     public string ProfileId { get; set; } = "";
     public string Fullname { get; set; } = "";
     public string Email { get; set; } = "";
+    public string PersonalEmail { get; set; } = "";
     public string Password { get; set; } = "";
     public string ConfirmPassword { get; set; } = "";
     public string Phone { get; set; } = "";
@@ -176,6 +178,49 @@ public class StaffService
         }
     }
 
+    public static string NormalizeProgramSpecialty(string? raw)
+    {
+        var text = (raw ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        var lower = text.ToLowerInvariant();
+        (string Id, string[] Aliases)[] lanes =
+        [
+            ("playgroup", ["playgroup", "play group", "play-group"]),
+            ("prekinder", ["pre-kinder", "prekinder", "pre kinder", "pre-kindergarten", "prekindergarten", "preschool", "pre-school", "pre school"]),
+            ("kinder", ["kindergarten", "kinder"]),
+            ("nursery", ["nursery"]),
+            ("grade1", ["grade 1", "grade1", "grade-1", "g1"]),
+            ("grade2", ["grade 2", "grade2", "grade-2", "g2"]),
+            ("grade3", ["grade 3", "grade3", "grade-3", "g3"]),
+            ("aba", ["aba", "ava", "therapist", "aba therapist"]),
+            ("tutorial", ["tutorial"])
+        ];
+        if (lower is "preschool") return "prekinder";
+        foreach (var lane in lanes)
+        {
+            if (string.Equals(lane.Id, lower, StringComparison.OrdinalIgnoreCase))
+                return lane.Id;
+        }
+        // Longest aliases first so "pre-kinder" wins over "kinder" and "grade 1" over partials.
+        var ranked = lanes
+            .SelectMany(lane => lane.Aliases.Select(alias => (lane.Id, Alias: alias)))
+            .OrderByDescending(x => x.Alias.Length);
+        foreach (var (id, alias) in ranked)
+        {
+            if (AliasMatches(lower, alias))
+                return id;
+        }
+        return text;
+    }
+
+    static bool AliasMatches(string text, string alias)
+    {
+        if (string.Equals(text, alias, StringComparison.OrdinalIgnoreCase))
+            return true;
+        var escaped = Regex.Escape(alias).Replace("\\ ", "\\s+");
+        return Regex.IsMatch(text, $@"(?:^|[^a-z0-9]){escaped}(?![a-z0-9])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
     internal static string ApplySave(HirayaDatabase db, StaffSaveRequest input, HirayaUser? actor)
     {
         var fullname = (input.Fullname ?? "").Trim();
@@ -190,6 +235,18 @@ public class StaffService
                 string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("That email is already used by another account.");
 
+        var normalizedName = Regex.Replace((fullname ?? "").Trim().ToLowerInvariant(), @"\s+", " ");
+        if (!string.IsNullOrWhiteSpace(normalizedName) &&
+            (role == UserRoles.Teacher || role == UserRoles.Staff) &&
+            db.Users.Any(u =>
+                u.UserId != userId &&
+                (u.Role == UserRoles.Teacher || u.Role == UserRoles.Staff) &&
+                string.Equals(
+                    Regex.Replace((u.Fullname ?? "").Trim().ToLowerInvariant(), @"\s+", " "),
+                    normalizedName,
+                    StringComparison.Ordinal)))
+            throw new InvalidOperationException("A teacher or staff member with that name already exists. Open their existing record instead of creating a duplicate.");
+
         var password = EnsurePassword(input, requireForNew: existing is null);
         string storedPassword;
         if (!string.IsNullOrWhiteSpace(password))
@@ -202,16 +259,7 @@ public class StaffService
             throw new InvalidOperationException("Password is required for a new account.");
 
         EnsureDefaultSpecialties(db);
-        var specialty = (input.Specialty ?? "").Trim();
-        if (!string.IsNullOrWhiteSpace(specialty) &&
-            !db.TeacherRoleOptions.Any(r => string.Equals(r.Name, specialty, StringComparison.OrdinalIgnoreCase)))
-        {
-            db.TeacherRoleOptions.Add(new TeacherRoleOption
-            {
-                RoleId = IdFactory.New("trole"),
-                Name = specialty
-            });
-        }
+        var specialty = NormalizeProgramSpecialty(input.Specialty);
 
         var existingProfile = db.TeacherProfiles.FirstOrDefault(p => p.UserId == userId);
         var status = string.IsNullOrWhiteSpace(input.Status) ? "active" : input.Status.Trim();
@@ -226,6 +274,7 @@ public class StaffService
             UserId = userId,
             Fullname = fullname,
             Email = email,
+            PersonalEmail = PersonalMailbox.KeepOrReplace(input.PersonalEmail, existing?.PersonalEmail),
             Password = storedPassword,
             Role = role,
             Status = status,

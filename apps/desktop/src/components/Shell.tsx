@@ -1,5 +1,24 @@
-import { Button } from '@hiraya/ui';
-import { displayName, formatDate, roleLabel } from '@hiraya/utils';
+import { Button, Field, Input, PersonAvatar } from '@hiraya/ui';
+import {
+  addLearningProgram,
+  displayName,
+  formatDate,
+  isBuiltinManagementLane,
+  isTeacherApplication,
+  isManagementLaneView,
+  FEEDBACK_LANES,
+  isFeedbackLane,
+  isPaymentLane,
+  managementLanesFor,
+  PAYMENT_LANES,
+  parseFeedbackLane,
+  parsePaymentLane,
+  removeLearningProgram,
+  roleLabel,
+  type FeedbackLaneId,
+  type ManagementLaneId,
+  type PaymentLaneId,
+} from '@hiraya/utils';
 import type { HirayaDatabase, HirayaUser, SystemAlert } from '@hiraya/types';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Icons } from '../icons';
@@ -7,6 +26,7 @@ import { desktopNav, type ViewId } from '../lib/views';
 import { DeskModal } from './DeskModal';
 import { MessengerInbox } from '../pages/MessagesPage';
 import { AssistantDock } from './AssistantDock';
+import { api } from '../lib/api';
 
 export function Shell({
   user,
@@ -22,6 +42,7 @@ export function Shell({
   onMarkRead,
   onStore,
   saveStore,
+  peopleLane,
   children,
 }: {
   user: HirayaUser;
@@ -30,13 +51,14 @@ export function Shell({
   collapsed: boolean;
   loading: boolean;
   loadError: string | null;
-  onView: (id: ViewId) => void;
+  onView: (id: ViewId, lane?: ManagementLaneId | null) => void;
   onCollapse: () => void;
   onLogout: () => void;
   onRefresh: () => void;
   onMarkRead: (id: string) => void;
   onStore: (next: HirayaDatabase) => void;
   saveStore: (next: HirayaDatabase) => Promise<void>;
+  peopleLane?: ManagementLaneId | null;
   children: ReactNode;
 }) {
   const [inboxOpen, setInboxOpen] = useState(false);
@@ -45,6 +67,12 @@ export function Shell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [openPeopleNav, setOpenPeopleNav] = useState<string | null>(null);
+  const [addingProgram, setAddingProgram] = useState(false);
+  const [newProgramName, setNewProgramName] = useState('');
+  const [programBusy, setProgramBusy] = useState(false);
+  const [programError, setProgramError] = useState<string | null>(null);
+  const programLanes = useMemo(() => managementLanesFor(store), [store]);
   const alerts = useMemo(
     () =>
       [...(store.alerts || [])]
@@ -62,11 +90,19 @@ export function Shell({
       alert.status !== 'sent',
   ).length;
   const groups = desktopNav(user.role);
+  const section =
+    groups.find((group) => group.items.some((item) => item.id === view))?.label || 'Dashboard';
   const iconMap = Icons as Record<string, (props?: { width?: number; height?: number }) => ReactNode>;
 
   useEffect(() => {
     setErrorOpen(Boolean(loadError));
   }, [loadError]);
+
+  useEffect(() => {
+    if (isManagementLaneView(view) || view === 'payments' || view === 'feedback') {
+      setOpenPeopleNav(view);
+    }
+  }, [view, peopleLane]);
 
   useEffect(() => {
     const latest = unreadAlerts[0];
@@ -91,13 +127,59 @@ export function Shell({
     const apps = store.enrollmentApplications
       .filter((row) => `${row.studentFullname} ${row.parentFullname}`.toLowerCase().includes(q))
       .slice(0, 4)
-      .map((row) => ({ id: row.applicationId, label: row.studentFullname, view: 'enrollment' as ViewId }));
+      .map((row) => ({
+        id: row.applicationId,
+        label: isTeacherApplication(row) ? `${row.studentFullname} · teacher application` : row.studentFullname,
+        view: 'enrollment' as ViewId,
+      }));
     return [...people, ...apps];
   }, [query, store.students, store.enrollmentApplications]);
 
   function openAlert(alert: SystemAlert) {
     setActiveAlert(alert);
     if (!alert.read) onMarkRead(alert.alertId);
+  }
+
+  async function saveNewProgram() {
+    setProgramBusy(true);
+    setProgramError(null);
+    try {
+      const result = addLearningProgram(store, newProgramName);
+      await saveStore(result.store);
+      onStore(result.store);
+      setAddingProgram(false);
+      setNewProgramName('');
+      if (result.created && openPeopleNav && isManagementLaneView(openPeopleNav)) {
+        onView(openPeopleNav as ViewId, result.program.programId);
+      }
+    } catch (err) {
+      setProgramError(err instanceof Error ? err.message : 'Could not add that program.');
+    } finally {
+      setProgramBusy(false);
+    }
+  }
+
+  async function deleteProgram(laneId: string, label: string) {
+    if (isBuiltinManagementLane(laneId)) {
+      window.alert('Built-in programs cannot be deleted.');
+      return;
+    }
+    if (!window.confirm(`Remove “${label}” from every management list?`)) return;
+    setProgramBusy(true);
+    setProgramError(null);
+    try {
+      const result = removeLearningProgram(store, laneId);
+      await saveStore(result.store);
+      onStore(result.store);
+      if (peopleLane === laneId && openPeopleNav && isManagementLaneView(openPeopleNav)) {
+        onView(openPeopleNav as ViewId, null);
+      }
+    } catch (err) {
+      setProgramError(err instanceof Error ? err.message : 'Could not remove that program.');
+      window.alert(err instanceof Error ? err.message : 'Could not remove that program.');
+    } finally {
+      setProgramBusy(false);
+    }
   }
 
   return (
@@ -118,19 +200,142 @@ export function Shell({
               {!collapsed ? <p>{group.label}</p> : <p className="nav-group-dot">•</p>}
               {group.items.map((item) => {
                 const Icon = iconMap[item.id] || Icons.dashboard;
+                const nestedPrograms = !collapsed && group.label === 'Management' && isManagementLaneView(item.id);
+                const nestedPayments = !collapsed && item.id === 'payments';
+                const nestedFeedback = !collapsed && item.id === 'feedback';
+                const nested = nestedPrograms || nestedPayments || nestedFeedback;
+                const current = view === item.id;
+                const dropOpen = nested && openPeopleNav === item.id;
+                const paymentLane = nestedPayments ? parsePaymentLane(peopleLane) : null;
+                const feedbackLane = nestedFeedback ? parseFeedbackLane(current ? peopleLane : null) : null;
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={view === item.id ? 'active' : ''}
-                    title={collapsed ? item.label : undefined}
-                    onClick={() => onView(item.id)}
-                  >
-                    <i className="nav-ico" aria-hidden="true">
-                      <Icon width={18} height={18} />
-                    </i>
-                    {!collapsed ? <span>{item.label}</span> : null}
-                  </button>
+                  <div key={item.id} className={dropOpen ? 'nav-item-block is-expanded' : 'nav-item-block'}>
+                    <button
+                      type="button"
+                      className={
+                        nested
+                          ? current
+                            ? dropOpen
+                              ? 'is-open has-caret'
+                              : 'active has-caret'
+                            : dropOpen
+                              ? 'is-open has-caret'
+                              : 'has-caret'
+                          : current
+                            ? 'active'
+                            : ''
+                      }
+                      title={collapsed ? item.label : undefined}
+                      aria-expanded={nested ? dropOpen : undefined}
+                      onClick={() => {
+                        if (!nested) {
+                          onView(item.id, null);
+                          return;
+                        }
+                        const nextOpen = openPeopleNav === item.id ? null : item.id;
+                        setOpenPeopleNav(nextOpen);
+                        if (nextOpen) {
+                          if (nestedPayments) {
+                            onView(item.id, (isPaymentLane(peopleLane) ? peopleLane : 'teachers') as PaymentLaneId);
+                          } else if (nestedFeedback) {
+                            onView(
+                              item.id,
+                              (current && isFeedbackLane(peopleLane) ? peopleLane : 'parents') as FeedbackLaneId,
+                            );
+                          } else {
+                            onView(item.id, peopleLane && current ? peopleLane : null);
+                          }
+                        }
+                      }}
+                    >
+                      <i className="nav-ico" aria-hidden="true">
+                        <Icon width={18} height={18} />
+                      </i>
+                      {!collapsed ? <span>{item.label}</span> : null}
+                      {nested ? (
+                        <i className={dropOpen ? 'nav-caret is-open' : 'nav-caret'} aria-hidden="true">
+                          <Icons.chevronRight width={14} height={14} />
+                        </i>
+                      ) : null}
+                    </button>
+                    {dropOpen && nestedPrograms ? (
+                      <div className="nav-sub" role="group" aria-label={`${item.label} programs`}>
+                        <button
+                          type="button"
+                          className={current && !peopleLane ? 'active' : ''}
+                          onClick={() => onView(item.id, null)}
+                        >
+                          <span>All</span>
+                        </button>
+                        {programLanes.map((lane) => (
+                          <div
+                            key={lane.id}
+                            className={
+                              current && peopleLane === lane.id ? 'nav-sub-row is-active' : 'nav-sub-row'
+                            }
+                          >
+                            <button type="button" className="nav-sub-link" onClick={() => onView(item.id, lane.id)}>
+                              <span>{lane.label}</span>
+                            </button>
+                            {!isBuiltinManagementLane(lane.id) ? (
+                              <button
+                                type="button"
+                                className="nav-sub-delete"
+                                title={`Remove ${lane.label}`}
+                                aria-label={`Remove ${lane.label}`}
+                                disabled={programBusy}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void deleteProgram(lane.id, lane.label);
+                                }}
+                              >
+                                <Icons.trash width={12} height={12} />
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="nav-sub-add"
+                          onClick={() => {
+                            setProgramError(null);
+                            setNewProgramName('');
+                            setAddingProgram(true);
+                          }}
+                        >
+                          <span>+ Add program</span>
+                        </button>
+                      </div>
+                    ) : null}
+                    {dropOpen && nestedPayments ? (
+                      <div className="nav-sub" role="group" aria-label="Payment lists">
+                        {PAYMENT_LANES.map((lane) => (
+                          <button
+                            key={lane.id}
+                            type="button"
+                            className={current && paymentLane === lane.id ? 'active' : ''}
+                            onClick={() => onView(item.id, lane.id)}
+                          >
+                            <span>{lane.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {dropOpen && nestedFeedback ? (
+                      <div className="nav-sub" role="group" aria-label="Feedback lists">
+                        {FEEDBACK_LANES.map((lane) => (
+                          <button
+                            key={lane.id}
+                            type="button"
+                            className={current && feedbackLane === lane.id ? 'active' : ''}
+                            onClick={() => onView(item.id, lane.id)}
+                          >
+                            <span>{lane.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
@@ -154,6 +359,10 @@ export function Shell({
           <button type="button" className="icon-btn" onClick={onCollapse} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
             {collapsed ? <Icons.menu /> : <Icons.chevron />}
           </button>
+          <div className="desk-top-brand">
+            <strong>Hiraya Kids Learning Center</strong>
+            <span className="desk-sublabel">{section}</span>
+          </div>
           <div className="top-search">
             <Icons.search width={16} height={16} />
             <input
@@ -220,7 +429,13 @@ export function Shell({
                   setProfileOpen((open) => !open);
                 }}
               >
-                <span>{displayName(user).slice(0, 1) || 'A'}</span>
+                <span className="profile-chip-avatar">
+                  <PersonAvatar
+                    name={displayName(user)}
+                    photo={user.profileImagePath ? api.profileMediaUrl(user.userId, user.updatedAt || user.profileImagePath) : undefined}
+                    size="sm"
+                  />
+                </span>
                 <div>
                   <strong>{displayName(user)}</strong>
                   <small>{roleLabel(user.role)}</small>
@@ -244,16 +459,7 @@ export function Shell({
       </div>
 
       {messagesOpen ? (
-        <DeskModal
-          title="Messages"
-          size="wide"
-          onClose={() => setMessagesOpen(false)}
-          actions={
-            <Button type="button" onClick={() => setMessagesOpen(false)}>
-              Close
-            </Button>
-          }
-        >
+        <DeskModal title="Messages" size="wide" hideFooter onClose={() => setMessagesOpen(false)}>
           <MessengerInbox store={store} user={user} onStore={onStore} saveStore={saveStore} />
         </DeskModal>
       ) : null}
@@ -354,6 +560,47 @@ export function Shell({
           }
         >
           <p>{loadError}</p>
+        </DeskModal>
+      ) : null}
+
+      {addingProgram ? (
+        <DeskModal
+          title="Add program"
+          onClose={() => {
+            if (programBusy) return;
+            setAddingProgram(false);
+            setProgramError(null);
+          }}
+          actions={
+            <>
+              <Button type="button" variant="ghost" disabled={programBusy} onClick={() => setAddingProgram(false)}>
+                Cancel
+              </Button>
+              <Button type="button" disabled={programBusy} onClick={() => void saveNewProgram()}>
+                {programBusy ? 'Saving…' : 'Add program'}
+              </Button>
+            </>
+          }
+        >
+          {programError ? (
+            <p className="form-error" role="alert">
+              {programError}
+            </p>
+          ) : null}
+          <Field label="Program name" required hint="Appears under Student, Parent, Teacher, Module, and Session management for everyone.">
+            <Input
+              value={newProgramName}
+              onChange={(event) => setNewProgramName(event.target.value)}
+              placeholder="e.g. Summer enrichment"
+              autoFocus
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void saveNewProgram();
+                }
+              }}
+            />
+          </Field>
         </DeskModal>
       ) : null}
 

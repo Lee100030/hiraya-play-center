@@ -59,6 +59,7 @@ export interface HirayaUser {
   lastName: string;
   fullname: string;
   email: string;
+  personalEmail?: string;
   role: string;
   status: string;
   phone?: string | null;
@@ -111,6 +112,20 @@ export interface Student {
   status: string;
   enrollmentDate: string;
   notes: string;
+  profileImagePath: string;
+}
+
+export interface StudentDocument {
+  documentId: string;
+  studentId: string;
+  kind: string;
+  title: string;
+  originalName: string;
+  storedPath: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedBy: string;
+  createdAt: string;
 }
 
 export interface StudentOpsRecord {
@@ -121,6 +136,7 @@ export interface StudentOpsRecord {
   hasFetcherId: boolean;
   hasNametag: boolean;
   feeAmount: number;
+  tuitionFee?: number;
   laceAmount: number;
   currentSlot: string;
   package: string;
@@ -166,6 +182,9 @@ export interface LearningProgram {
   name: string;
   description: string;
   status: string;
+  tuitionFee?: number;
+  /** Sessions included in this program’s package. Students in the program share this total. */
+  packageSessions?: number;
 }
 
 export interface LearningClass {
@@ -205,6 +224,8 @@ export interface EnrollmentApplication {
   status: string;
   studentNumber?: string | null;
   notes?: string | null;
+  /** student applications stay empty or "student". "teacher" is a job application, not a child enrollment. */
+  applicationKind?: string;
 }
 
 export interface AttendanceRecord {
@@ -298,8 +319,38 @@ export interface Payment {
   dueAt: string;
   paidAt: string;
   recordedBy: string;
+  receivedBy: string;
+  accountNumber?: string;
+  fromAccountNumber?: string;
+  receiptPath?: string;
+  receiptName?: string;
   notes: string;
+  /** Playgroup, tutorial, prekinder, aba, uniform, other, or opening. Empty uses the child’s program. */
+  incomeBucket?: string;
   history: PaymentHistoryEntry[];
+}
+
+export interface CenterExpense {
+  expenseId: string;
+  expenseDate: string;
+  item: string;
+  category: string;
+  amount: number;
+  paidTo: string;
+  paidBy: string;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+  /** income or expense. Empty rows stay expenses. */
+  kind?: string;
+}
+
+export interface OpeningBalance {
+  openingId: string;
+  month: string;
+  amount: number;
+  note: string;
+  updatedAt: string;
 }
 
 export interface SystemAlert {
@@ -314,6 +365,16 @@ export interface SystemAlert {
   read: boolean;
   relatedRecordId?: string;
   readAt?: string;
+}
+
+export interface ChatGroup {
+  groupId: string;
+  name: string;
+  memberIds: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  status: string;
 }
 
 export interface NewsItem {
@@ -549,6 +610,8 @@ export interface HirayaDatabase {
   news: NewsItem[];
   leaveRequests: LeaveRequest[];
   payments: Payment[];
+  centerExpenses: CenterExpense[];
+  openingBalances: OpeningBalance[];
   alerts: SystemAlert[];
   auditLogs: AuditLogEntry[];
   rolePermissions: RolePermission[];
@@ -567,6 +630,8 @@ export interface HirayaDatabase {
   sessionHistory: SessionHistoryEntry[];
   teacherComments: TeacherComment[];
   teacherNotes: TeacherAdminNote[];
+  studentDocuments: StudentDocument[];
+  chatGroups: ChatGroup[];
   settings: CenterSettings;
 }
 
@@ -606,6 +671,14 @@ export interface EnrollmentApplyResult {
   applicationId?: string;
 }
 
+export interface TeacherApplyInput {
+  fullname: string;
+  email: string;
+  phone: string;
+  position: string;
+  notes?: string;
+}
+
 export interface EnrollmentApplyInput {
   studentFullname: string;
   studentBirthdate: string;
@@ -640,6 +713,8 @@ export const emptyStore = (): HirayaDatabase => ({
   news: [],
   leaveRequests: [],
   payments: [],
+  centerExpenses: [],
+  openingBalances: [],
   alerts: [],
   auditLogs: [],
   rolePermissions: [],
@@ -658,9 +733,11 @@ export const emptyStore = (): HirayaDatabase => ({
   sessionHistory: [],
   teacherComments: [],
   teacherNotes: [],
+  studentDocuments: [],
+  chatGroups: [],
   settings: {
     settingsId: 'center',
-    centerName: 'HIRAYA Learning Center',
+    centerName: 'Hiraya Kids Learning Center',
     logoPath: '',
     address: '',
     phone: '',
@@ -668,7 +745,7 @@ export const emptyStore = (): HirayaDatabase => ({
     website: '',
     description: '',
     aboutTitle: 'About HIRAYA',
-    welcomeTitle: 'Welcome to HIRAYA Learning Center',
+    welcomeTitle: 'Welcome to Hiraya Kids Learning Center',
     welcomeMessage: '',
     mission: '',
     vision: '',

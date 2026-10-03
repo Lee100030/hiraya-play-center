@@ -7,6 +7,7 @@ import { useCenter } from '../../src/store';
 import { isMobileParent, isMobileTeacher } from '../../src/rbac';
 import { colors, fonts } from '../../src/theme';
 import { FloatingMessageButton } from '../../src/components/FloatingMessageButton';
+import { FloatingFeedbackButton } from '../../src/components/FloatingFeedbackButton';
 
 export const unstable_settings = {
   initialRouteName: 'home',
@@ -90,6 +91,7 @@ export default function TabsLayout() {
       />
       </Tabs>
       <FloatingMessageButton />
+      <FloatingFeedbackButton />
     </View>
   );
 }

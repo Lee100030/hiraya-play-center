@@ -13,7 +13,7 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts, radius, shadow, space } from '../theme';
 import { statusTone } from '@hiraya/utils';
 import { Body, Caption, Heading, Label } from './typography';
@@ -27,15 +27,17 @@ export function Screen({
   padded?: boolean;
   scroll?: boolean;
 }) {
+  const insets = useSafeAreaInsets();
+  const bottomPad = 32 + 58 + Math.max(insets.bottom, 10);
   const body = scroll ? (
     <ScrollView
-      contentContainerStyle={[styles.scroll, padded && styles.pad, { paddingBottom: 32 }]}
+      contentContainerStyle={[styles.scroll, padded && styles.pad, { paddingBottom: bottomPad }]}
       keyboardShouldPersistTaps="handled"
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.fill, padded && styles.pad]}>{children}</View>
+    <View style={[styles.fill, padded && styles.pad, { paddingBottom: bottomPad }]}>{children}</View>
   );
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -127,6 +129,7 @@ export function Field({
   onFocus,
   onBlur,
   style,
+  multiline,
   ...props
 }: TextInputProps & { label: string; required?: boolean; accessory?: ReactNode }) {
   const inputRef = useRef<TextInput>(null);
@@ -139,14 +142,16 @@ export function Field({
       </Label>
       <Pressable
         onPress={() => inputRef.current?.focus()}
-        style={[styles.inputShell, focused && styles.inputShellFocus]}
+        accessible={false}
+        style={[styles.inputShell, multiline ? styles.inputShellMultiline : null, focused && styles.inputShellFocus]}
       >
         <TextInput
           ref={inputRef}
           placeholderTextColor={colors.placeholder}
           showSoftInputOnFocus
           underlineColorAndroid="transparent"
-          textAlignVertical="center"
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
           {...props}
           onFocus={(event) => {
             setFocused(true);
@@ -156,9 +161,14 @@ export function Field({
             setFocused(false);
             onBlur?.(event);
           }}
-          style={[styles.input, accessory ? styles.inputWithAccessory : null, style]}
+          style={[
+            styles.input,
+            multiline ? styles.inputMultiline : null,
+            accessory ? styles.inputWithAccessory : null,
+            style,
+          ]}
         />
-        {accessory ? <View style={styles.inputAccessory}>{accessory}</View> : null}
+        {accessory ? <View style={styles.inputAccessory} pointerEvents="box-none">{accessory}</View> : null}
       </Pressable>
     </View>
   );
@@ -302,6 +312,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: 12,
   },
+  inputShellMultiline: {
+    justifyContent: 'flex-start',
+    minHeight: 120,
+  },
   inputShellFocus: {
     borderColor: colors.gold,
     shadowColor: colors.gold,
@@ -318,6 +332,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: Platform.OS === 'ios' ? fonts.poppinsRegular : undefined,
     fontSize: 16,
+  },
+  inputMultiline: {
+    minHeight: 120,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   inputWithAccessory: { paddingRight: 48 },
   inputAccessory: {

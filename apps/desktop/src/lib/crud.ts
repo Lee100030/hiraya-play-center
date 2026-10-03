@@ -80,5 +80,6 @@ export function studentRecord(partial: Partial<Student> & Pick<Student, 'firstNa
     status: partial.status || 'active',
     enrollmentDate: partial.enrollmentDate || todayIso(),
     notes: partial.notes || '',
+    profileImagePath: partial.profileImagePath || '',
   };
 }

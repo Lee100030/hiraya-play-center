@@ -139,6 +139,7 @@ public class PaymentService
                 PaymentDate = dueIso,
                 PaidAt = existing?.PaidAt ?? "",
                 RecordedBy = actor.UserId,
+                ReceivedBy = existing?.ReceivedBy ?? "",
                 History = (existing?.History ?? []).ToList()
             };
             next.PaymentStatus = EffectiveStatus(next);
@@ -189,11 +190,15 @@ public class PaymentService
             if (payment.PaymentStatus is PaymentStatuses.Cancelled or PaymentStatuses.Refunded)
                 throw new InvalidOperationException("This charge cannot accept payments.");
 
-            var remaining = Remaining(payment);
+            var studentId = ResolveStudentId(db, payment);
+            var teacherPay = StudentTuition.IsTeacherPayment(payment);
+            var remaining = teacherPay ? Remaining(payment) : StudentTuition.Remaining(db, studentId);
             if (remaining <= 0)
                 throw new InvalidOperationException("This charge is already paid in full.");
             if (input.Amount - remaining > 0.009m)
-                throw new InvalidOperationException($"Collection cannot exceed the remaining ₱{remaining:N2}.");
+                throw new InvalidOperationException(teacherPay
+                    ? $"Collection cannot exceed the remaining ₱{remaining:N2}."
+                    : $"Payment amount cannot exceed the remaining balance of ₱{remaining:N2}.");
 
             var now = DateTime.UtcNow.ToString("o");
             payment.AmountPaid = decimal.Round(payment.AmountPaid + input.Amount, 2);
@@ -210,6 +215,9 @@ public class PaymentService
                 payment.PaymentDate = now;
             }
 
+            if (!teacherPay)
+                StudentTuition.SyncStatus(db);
+            var balanceLeft = teacherPay ? Remaining(payment) : StudentTuition.Remaining(db, studentId);
             payment.History ??= [];
             payment.History.Add(new PaymentHistoryEntry
             {
@@ -217,7 +225,7 @@ public class PaymentService
                 ChangedBy = actor.UserId,
                 ChangedAt = now,
                 Action = "collected",
-                Summary = $"Collected ₱{input.Amount:N2} via {PaymentMethods.Label(input.PaymentMethod)}. Remaining ₱{Remaining(payment):N2}."
+                Summary = $"Collected ₱{input.Amount:N2} via {PaymentMethods.Label(input.PaymentMethod)}. Remaining ₱{balanceLeft:N2}."
             });
 
             var student = db.Students.FirstOrDefault(s => s.StudentId == ResolveStudentId(db, payment));
@@ -226,9 +234,9 @@ public class PaymentService
                 NotificationService.Push(
                     db,
                     student.ParentId,
-                    payment.PaymentStatus == PaymentStatuses.Paid
-                        ? $"Payment of ₱{payment.Amount:N2} for {StudentNames.Display(student)} is complete."
-                        : $"Partial payment of ₱{input.Amount:N2} recorded for {StudentNames.Display(student)}. Remaining ₱{PaymentService.Remaining(payment):N2}.",
+                    !teacherPay && StudentTuition.Status(db, student.StudentId) == "paid"
+                        ? $"Payment of ₱{input.Amount:N2} for {StudentNames.Display(student)} is complete."
+                        : $"Partial payment of ₱{input.Amount:N2} recorded for {StudentNames.Display(student)}. Remaining ₱{balanceLeft:N2}.",
                     NotificationKinds.Payment,
                     payment.PaymentStatus == PaymentStatuses.Paid ? "Payment received" : "Partial payment",
                     "payments");

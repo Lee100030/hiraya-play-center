@@ -16,6 +16,16 @@ public static class DatabaseInitializer
                 await db.Database.EnsureCreatedAsync();
                 logger.LogInformation("SQL Server schema is ready (EnsureCreated). MySQL EF migrations are not applied on MSSQL.");
             }
+            else if (IsPostgres(db))
+            {
+                var connection = db.Database.GetConnectionString()
+                    ?? throw new InvalidOperationException("PostgreSQL connection is missing.");
+                var neonOptions = new DbContextOptionsBuilder<HirayaNeonDbContext>();
+                neonOptions.UseNpgsql(connection, npgsql =>
+                    npgsql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null));
+                await using var neon = new HirayaNeonDbContext(neonOptions.Options);
+                await neon.Database.MigrateAsync();
+            }
             else
             {
                 await db.Database.MigrateAsync();
@@ -23,6 +33,11 @@ public static class DatabaseInitializer
         }
         catch (Exception ex)
         {
+            if (string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Production", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogError(ex, "Migrate failed in Production. EnsureCreated was not used.");
+                throw;
+            }
             logger.LogWarning(ex, "Migrate failed; attempting EnsureCreated.");
             await db.Database.EnsureCreatedAsync();
         }
@@ -34,6 +49,13 @@ public static class DatabaseInitializer
             await BackfillParentStudentsAsync(db, logger);
             await BackfillCenterOperationsAsync(db, logger);
             await NormalizeProductAccountsAsync(db, logger);
+            await NormalizeTeacherSpecialtiesAsync(db, logger);
+            return;
+        }
+
+        if (string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Production", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning("Production database has no users. Development seed was not applied. Create the first administrator outside the seed.");
             return;
         }
 
@@ -81,6 +103,32 @@ public static class DatabaseInitializer
         if (seed.SessionHistory.Count > 0) db.SessionHistory.AddRange(seed.SessionHistory);
         await db.SaveChangesAsync();
         await NormalizeProductAccountsAsync(db, logger);
+        await NormalizeTeacherSpecialtiesAsync(db, logger);
+    }
+
+    private static async Task NormalizeTeacherSpecialtiesAsync(HirayaLearningCenterDbContext db, ILogger logger)
+    {
+        try
+        {
+            var profiles = await db.TeacherProfiles.ToListAsync();
+            var changed = 0;
+            foreach (var profile in profiles)
+            {
+                var next = StaffService.NormalizeProgramSpecialty(profile.Specialty);
+                if (next == profile.Specialty) continue;
+                profile.Specialty = next;
+                changed++;
+            }
+            if (changed > 0)
+            {
+                await db.SaveChangesAsync();
+                logger.LogInformation("Normalized teacher specialties ({Count} records).", changed);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not normalize teacher specialties.");
+        }
     }
 
     private static async Task NormalizeProductAccountsAsync(HirayaLearningCenterDbContext db, ILogger logger)
@@ -150,6 +198,11 @@ public static class DatabaseInitializer
                 CenterHolidays = await db.CenterHolidays.ToListAsync(),
                 TeacherDuties = await db.TeacherDuties.ToListAsync()
             };
+            if (!CenterOperationsCatalog.RosterReady(data))
+            {
+                logger.LogInformation("Sample roster backfill was skipped because this center database does not already contain that roster.");
+                return;
+            }
             CenterOperationsCatalog.Ensure(data);
 
             var emails = db.Users.Local.Select(u => u.Email).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -186,6 +239,13 @@ public static class DatabaseInitializer
     {
         try
         {
+            if (IsPostgres(db))
+            {
+                await EnsurePostgresWorkflowSchemaAsync(db, logger);
+                return;
+            }
+
+            await TryAddColumn(db, "users", "PersonalEmail", "varchar(191) NOT NULL DEFAULT ''");
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS staff_tasks (
                   TaskId varchar(191) NOT NULL,
@@ -244,6 +304,44 @@ public static class DatabaseInitializer
             await TryAddColumn(db, "notifications", "RelatedRecordId", "varchar(191) NOT NULL DEFAULT ''");
             await TryAddColumn(db, "notifications", "ReadAt", "varchar(191) NOT NULL DEFAULT ''");
             await TryAddColumn(db, "schedules", "ProgramId", "varchar(191) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "students", "ProfileImagePath", "varchar(512) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "payments", "ReceivedBy", "varchar(191) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "payments", "AccountNumber", "varchar(191) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "payments", "FromAccountNumber", "varchar(191) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "payments", "ReceiptPath", "varchar(512) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "payments", "ReceiptName", "varchar(191) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "student_ops", "TuitionFee", "decimal(18,2) NOT NULL DEFAULT 0");
+            await TryAddColumn(db, "programs", "TuitionFee", "decimal(18,2) NOT NULL DEFAULT 0");
+            await TryAddColumn(db, "programs", "PackageSessions", "int NOT NULL DEFAULT 0");
+            await TryAddColumn(db, "payments", "IncomeBucket", "varchar(32) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "enrollment_applications", "ApplicationKind", "varchar(32) NOT NULL DEFAULT 'student'");
+            await TryAddColumn(db, "center_expenses", "Kind", "varchar(16) NOT NULL DEFAULT 'expense'");
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS center_expenses (
+                  ExpenseId varchar(191) NOT NULL,
+                  ExpenseDate varchar(191) NOT NULL,
+                  Item varchar(191) NOT NULL,
+                  Category varchar(64) NOT NULL,
+                  Amount decimal(18,2) NOT NULL DEFAULT 0,
+                  PaidTo varchar(191) NOT NULL,
+                  PaidBy varchar(191) NOT NULL,
+                  Note text NOT NULL,
+                  CreatedAt varchar(191) NOT NULL,
+                  UpdatedAt varchar(191) NOT NULL,
+                  Kind varchar(16) NOT NULL DEFAULT 'expense',
+                  PRIMARY KEY (ExpenseId)
+                );
+                """);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS opening_balances (
+                  OpeningId varchar(191) NOT NULL,
+                  Month varchar(7) NOT NULL,
+                  Amount decimal(18,2) NOT NULL DEFAULT 0,
+                  Note text NOT NULL,
+                  UpdatedAt varchar(191) NOT NULL,
+                  PRIMARY KEY (OpeningId)
+                );
+                """);
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS teacher_comments (
                   CommentId varchar(191) NOT NULL,
@@ -274,6 +372,33 @@ public static class DatabaseInitializer
                   PRIMARY KEY (NoteId)
                 );
                 """);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS student_documents (
+                  DocumentId varchar(191) NOT NULL,
+                  StudentId varchar(191) NOT NULL,
+                  Kind varchar(191) NOT NULL,
+                  Title varchar(191) NOT NULL,
+                  OriginalName varchar(191) NOT NULL,
+                  StoredPath varchar(512) NOT NULL,
+                  ContentType varchar(128) NOT NULL,
+                  SizeBytes bigint NOT NULL,
+                  UploadedBy varchar(191) NOT NULL,
+                  CreatedAt varchar(191) NOT NULL,
+                  PRIMARY KEY (DocumentId)
+                );
+                """);
+            await db.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS chat_groups (
+                  GroupId varchar(191) NOT NULL,
+                  Name varchar(120) NOT NULL,
+                  MemberIds text NOT NULL,
+                  CreatedBy varchar(191) NOT NULL,
+                  CreatedAt varchar(191) NOT NULL,
+                  UpdatedAt varchar(191) NOT NULL,
+                  Status varchar(32) NOT NULL,
+                  PRIMARY KEY (GroupId)
+                );
+                """);
             logger.LogInformation("Workflow schema is ready (tasks, sessions, teacher workspace notes).");
         }
         catch (Exception ex)
@@ -282,11 +407,42 @@ public static class DatabaseInitializer
         }
     }
 
+    private static bool IsPostgres(HirayaLearningCenterDbContext db) =>
+        db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static async Task EnsurePostgresWorkflowSchemaAsync(HirayaLearningCenterDbContext db, ILogger logger)
+    {
+        await TryAddColumn(db, "users", "PersonalEmail", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "announcements", "Audience", "varchar(64) NOT NULL DEFAULT 'everyone'");
+        await TryAddColumn(db, "announcements", "AudienceId", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "announcements", "Priority", "varchar(32) NOT NULL DEFAULT 'normal'");
+        await TryAddColumn(db, "announcements", "ExpiresAt", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "notifications", "RelatedRecordId", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "notifications", "ReadAt", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "schedules", "ProgramId", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "students", "ProfileImagePath", "varchar(512) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "payments", "ReceivedBy", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "payments", "AccountNumber", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "payments", "FromAccountNumber", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "payments", "ReceiptPath", "varchar(512) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "payments", "ReceiptName", "varchar(191) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "student_ops", "TuitionFee", "decimal(18,2) NOT NULL DEFAULT 0");
+        await TryAddColumn(db, "programs", "TuitionFee", "decimal(18,2) NOT NULL DEFAULT 0");
+        await TryAddColumn(db, "programs", "PackageSessions", "int NOT NULL DEFAULT 0");
+        await TryAddColumn(db, "payments", "IncomeBucket", "varchar(32) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "enrollment_applications", "ApplicationKind", "varchar(32) NOT NULL DEFAULT 'student'");
+        await TryAddColumn(db, "center_expenses", "Kind", "varchar(16) NOT NULL DEFAULT 'expense'");
+        logger.LogInformation("PostgreSQL workflow columns are ready. Tables come from the Neon baseline migration.");
+    }
+
     private static async Task TryAddColumn(HirayaLearningCenterDbContext db, string table, string column, string definition)
     {
         try
         {
-            await db.Database.ExecuteSqlRawAsync($"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition};");
+            var sql = IsPostgres(db)
+                ? $"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS \"{column}\" {definition};"
+                : $"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition};";
+            await db.Database.ExecuteSqlRawAsync(sql);
         }
         catch
         {

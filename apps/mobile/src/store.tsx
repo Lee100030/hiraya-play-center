@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ApiError } from '@hiraya/api';
 import { emptyStore, type HirayaDatabase, type Student } from '@hiraya/types';
 import { isMobileParent } from './rbac';
-import { api, useAuth } from './auth';
+import { api, queueSessionNotice, useAuth } from './auth';
 import { familyStudents, friendlyError } from './selectors';
 
 type StoreValue = {
@@ -17,7 +18,7 @@ type StoreValue = {
 const Ctx = createContext<StoreValue | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { user, setSessionUser } = useAuth();
+  const { user, setSessionUser, logout } = useAuth();
   const [store, setStore] = useState<HirayaDatabase>(emptyStore());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,11 +49,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await setSessionUser({ ...user, profileImagePath: live.profileImagePath, updatedAt: live.updatedAt });
       }
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        queueSessionNotice('Your session expired. Sign in again.');
+        await logout();
+        return;
+      }
       setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
-  }, [setSessionUser, user]);
+  }, [logout, setSessionUser, user]);
 
   useEffect(() => {
     void refresh();

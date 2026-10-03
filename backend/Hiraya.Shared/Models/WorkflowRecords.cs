@@ -97,3 +97,17 @@ public class TeacherAdminNote
     public string CreatedAt { get; set; } = "";
     public string UpdatedAt { get; set; } = "";
 }
+
+public class StudentDocument
+{
+    public string DocumentId { get; set; } = "";
+    public string StudentId { get; set; } = "";
+    public string Kind { get; set; } = "other";
+    public string Title { get; set; } = "";
+    public string OriginalName { get; set; } = "";
+    public string StoredPath { get; set; } = "";
+    public string ContentType { get; set; } = "";
+    public long SizeBytes { get; set; }
+    public string UploadedBy { get; set; } = "";
+    public string CreatedAt { get; set; } = "";
+}

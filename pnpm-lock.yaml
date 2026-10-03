@@ -242,6 +242,9 @@ importers:
       '@hiraya/types':
         specifier: workspace:*
         version: link:../types
+      '@hiraya/utils':
+        specifier: workspace:*
+        version: link:../utils
 
   packages/config: {}
 

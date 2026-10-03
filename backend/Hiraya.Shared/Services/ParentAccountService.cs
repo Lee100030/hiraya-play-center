@@ -13,6 +13,7 @@ public class ParentCreateRequest
     public string MiddleName { get; set; } = "";
     public string LastName { get; set; } = "";
     public string Email { get; set; } = "";
+    public string PersonalEmail { get; set; } = "";
     public string Phone { get; set; } = "";
     public string Address { get; set; } = "";
     public string Notes { get; set; } = "";
@@ -72,6 +73,7 @@ public class ParentAccountService
                 MiddleName = input.MiddleName.Trim(),
                 LastName = input.LastName.Trim(),
                 Email = email,
+                PersonalEmail = PersonalMailbox.KeepOrReplace(input.PersonalEmail, ""),
                 Phone = input.Phone.Trim(),
                 Address = input.Address.Trim(),
                 Notes = input.Notes.Trim(),
@@ -115,6 +117,7 @@ public class ParentAccountService
             user.MiddleName = input.MiddleName.Trim();
             user.LastName = input.LastName.Trim();
             user.Email = email;
+            user.PersonalEmail = PersonalMailbox.KeepOrReplace(input.PersonalEmail, user.PersonalEmail);
             user.Phone = input.Phone.Trim();
             user.Address = input.Address.Trim();
             user.Notes = input.Notes.Trim();
@@ -309,6 +312,120 @@ public class ParentAccountService
     {
         if (actor.Role == UserRoles.Parent || actor.Role == UserRoles.Teacher || actor.Role == UserRoles.Student)
             throw new UnauthorizedAccessException("Only an administrator can change family relationships.");
+    }
+
+    public async Task NotifyEnrollmentAcceptedAsync(EnrollmentApprovalNotice notice)
+    {
+        if (string.IsNullOrWhiteSpace(notice.ParentUserId))
+            return;
+
+        string? token = null;
+        string? expiresAt = null;
+        if (notice.ParentNeedsActivation)
+        {
+            await _repository.MutateAsync(db =>
+            {
+                var parent = db.Users.FirstOrDefault(u =>
+                    string.Equals(u.UserId, notice.ParentUserId, StringComparison.OrdinalIgnoreCase) &&
+                    u.Role == UserRoles.Parent);
+                if (parent is null ||
+                    !string.Equals(parent.Status, AccountStatuses.PendingActivation, StringComparison.OrdinalIgnoreCase))
+                    return Task.CompletedTask;
+                var invite = IssueInvitation(db, parent.UserId, InvitationKinds.Activate);
+                token = invite.Token;
+                expiresAt = invite.ExpiresAt;
+                return Task.CompletedTask;
+            });
+        }
+
+        var canEmail = CanSendMail();
+        var activateUrl = token is null || !CanIncludeActivationLink() ? "" : ActivationUrl(token);
+        var center = await CenterNameAsync();
+        var emailSent = false;
+        if (canEmail && !string.IsNullOrWhiteSpace(notice.ParentEmail))
+        {
+            DateTimeOffset? expires = DateTimeOffset.TryParse(expiresAt, out var when) ? when : null;
+            var (subject, text, html) = InvitationEmail.EnrollmentAccepted(
+                center,
+                notice.ParentName,
+                notice.StudentName,
+                notice.Program,
+                string.IsNullOrWhiteSpace(activateUrl) ? null : activateUrl,
+                string.IsNullOrWhiteSpace(activateUrl) ? null : expires,
+                notice.ParentNeedsActivation);
+            try
+            {
+                await _email!.SendAsync(notice.ParentEmail, subject, text, html);
+                emailSent = true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Could not email enrollment acceptance to {Email}.", notice.ParentEmail);
+            }
+        }
+
+        var adminNote = emailSent
+            ? $"Enrollment accepted for {notice.StudentName} ({notice.Program}). {notice.ParentName} was emailed. The message does not include a password and does not confirm payment."
+            : $"Enrollment accepted for {notice.StudentName} ({notice.Program}). Parent account {notice.ParentEmail} is waiting for portal access. Email was not sent because outbound mail or the public site address is not ready. No password was emailed.";
+        await _repository.MutateAsync(db =>
+        {
+            NotificationService.PushToUsers(
+                db,
+                NotificationService.Recipients(db, NotificationAudiences.Admins).Select(u => u.UserId),
+                adminNote,
+                NotificationKinds.Enrollment,
+                "Enrollment accepted",
+                "enrollment");
+            return Task.CompletedTask;
+        });
+    }
+
+    public async Task NotifyTeacherInterviewAsync(string email, string name, string when, string place, string instructions)
+    {
+        if (!CanSendMail() || string.IsNullOrWhiteSpace(email))
+            return;
+        var center = await CenterNameAsync();
+        var (subject, text, html) = InvitationEmail.TeacherInterview(center, name, when, place, instructions);
+        try
+        {
+            await _email!.SendAsync(email.Trim(), subject, text, html);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Could not email the teacher interview notice to {Email}.", email);
+        }
+    }
+
+    public async Task NotifyApplicationReceivedAsync(string email, string name, string subjectLine, string body)
+    {
+        if (!CanSendMail() || string.IsNullOrWhiteSpace(email))
+            return;
+        var center = await CenterNameAsync();
+        var (subject, text, html) = InvitationEmail.ApplicationReceived(center, name, subjectLine, body);
+        try
+        {
+            await _email!.SendAsync(email.Trim(), subject, text, html);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Could not email application receipt to {Email}.", email);
+        }
+    }
+
+    private bool CanSendMail() =>
+        _smtp.Enabled && _email is { IsConfigured: true };
+
+    private bool CanIncludeActivationLink()
+    {
+        if (!CanSendMail())
+            return false;
+        if (!Uri.TryCreate(_smtp.PublicBaseUrl, UriKind.Absolute, out var uri))
+            return false;
+        var host = uri.Host;
+        return !host.Equals("localhost", StringComparison.OrdinalIgnoreCase) &&
+               host != "127.0.0.1" &&
+               host != "::1" &&
+               host != "0.0.0.0";
     }
 
     private async Task<ParentInviteResult> DeliverInvitationAsync(ParentInviteResult invite, bool reset)

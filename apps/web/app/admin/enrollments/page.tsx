@@ -7,9 +7,15 @@ import { useStore } from '@/components/StoreProvider';
 import { enrollmentStatusLabel } from '@/lib/enrollment';
 import { api } from '@/lib/api';
 import { Alert, Button, EmptyState, Loading, StatusBadge, emptyCell } from '@hiraya/ui';
-import { formatDate } from '@hiraya/utils';
+import { formatDate, isTeacherApplication } from '@hiraya/utils';
 import type { EnrollmentApplication } from '@hiraya/types';
+import { usePathname } from 'next/navigation';
 import { useMemo, useState } from 'react';
+
+const kinds = [
+  { id: 'student', label: 'Student enrollment' },
+  { id: 'teacher', label: 'Teacher applications' },
+];
 
 const tabs = [
   { id: 'all', label: 'All' },
@@ -20,25 +26,35 @@ const tabs = [
 
 export default function AdminEnrollmentsPage() {
   const { store, loading, refresh } = useStore();
+  const pathname = usePathname();
+  const [kind, setKind] = useState(pathname.includes('teacher-applications') ? 'teacher' : 'student');
   const [tab, setTab] = useState('all');
   const [selected, setSelected] = useState<EnrollmentApplication | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [interviewWhen, setInterviewWhen] = useState('');
+  const [interviewPlace, setInterviewPlace] = useState('');
+  const [interviewNote, setInterviewNote] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
 
   const rows = useMemo(() => {
     return store.enrollmentApplications.filter((row) => {
+      const teacher = isTeacherApplication(row);
+      if (kind === 'teacher' ? !teacher : teacher) return false;
       const current = enrollmentStatusLabel(row.status).toLowerCase();
       return tab === 'all' || current === tab;
     });
-  }, [store.enrollmentApplications, tab]);
+  }, [store.enrollmentApplications, tab, kind]);
+  const teacher = kind === 'teacher';
 
   async function setStatusFor(id: string, next: string) {
     try {
       if (next === 'approved') await api.approveEnrollment(id);
       else if (next === 'rejected') await api.rejectEnrollment(id);
       else if (next === 'cancelled') await api.cancelEnrollment(id);
-      else return;
+      else if (next === 'interview') {
+        await api.scheduleTeacherInterview(id, interviewWhen, interviewPlace, interviewNote);
+      } else return;
       await refresh();
       setSelected((current) => (current?.applicationId === id ? { ...current, status: next } : current));
       setOk(true);
@@ -57,9 +73,28 @@ export default function AdminEnrollmentsPage() {
       <AdminPageHeader
         kicker="Admissions"
         title="Enrollments"
-        description="Review website applications and approve, reject, or inspect each family file."
+        description="Student enrollment and teacher applications are listed separately. Approving a teacher does not create a student."
       />
       {message ? <Alert kind={ok ? 'success' : 'danger'}>{message}</Alert> : null}
+      <div className="admin-tabs" role="tablist" aria-label="Application type">
+        {kinds.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={kind === item.id ? 'admin-tab active' : 'admin-tab'}
+            onClick={() => {
+              setKind(item.id);
+              setSelected(null);
+              setConfirm(null);
+            }}
+          >
+            {item.label}
+            {item.id === 'teacher'
+              ? ` (${store.enrollmentApplications.filter((row) => isTeacherApplication(row) && (row.status === 'pending_review' || row.status === 'pending')).length})`
+              : ''}
+          </button>
+        ))}
+      </div>
       <div className="admin-tabs" role="tablist" aria-label="Enrollment status">
         {tabs.map((item) => (
           <button
@@ -75,10 +110,25 @@ export default function AdminEnrollmentsPage() {
       <AdminTable
         rows={rows}
         rowKey={(row) => row.applicationId}
-        empty={<EmptyState title="No enrollments" hint="Submitted applications will appear here." />}
+        empty={
+          <EmptyState
+            title={teacher ? 'No teacher applications' : 'No enrollments'}
+            hint={teacher ? 'Apply as a teacher on the public website. Those applications appear here.' : 'Submitted applications will appear here.'}
+          />
+        }
         columns={[
-          { key: 'name', header: 'Student Name', sortValue: (row) => row.studentFullname, render: (row) => row.studentFullname },
-          { key: 'program', header: 'Program', sortValue: (row) => row.preferredProgram, render: (row) => emptyCell(row.preferredProgram) },
+          { key: 'name', header: teacher ? 'Applicant' : 'Student Name', sortValue: (row) => row.studentFullname, render: (row) => row.studentFullname },
+          { key: 'program', header: teacher ? 'Role' : 'Program', sortValue: (row) => row.preferredProgram, render: (row) => emptyCell(row.preferredProgram) },
+          ...(teacher
+            ? [
+                {
+                  key: 'email',
+                  header: 'Email',
+                  sortValue: (row: EnrollmentApplication) => row.parentEmail,
+                  render: (row: EnrollmentApplication) => emptyCell(row.parentEmail),
+                },
+              ]
+            : []),
           {
             key: 'date',
             header: 'Enrollment Date',
@@ -137,6 +187,11 @@ export default function AdminEnrollmentsPage() {
           footer={
             selected.status === 'pending_review' || selected.status === 'pending' ? (
               <>
+                {isTeacherApplication(selected) ? (
+                  <Button type="button" variant="ghost" onClick={() => setConfirm('interview')}>
+                    Interview
+                  </Button>
+                ) : null}
                 <Button type="button" onClick={() => setConfirm('approved')}>
                   Approve
                 </Button>
@@ -147,15 +202,23 @@ export default function AdminEnrollmentsPage() {
             ) : undefined
           }
         >
-          <p>
-            <strong>Date of birth:</strong> {selected.studentBirthdate || '—'}
-          </p>
-          <p>
-            <strong>Age:</strong> {selected.studentAge || '—'}
-          </p>
-          <p>
-            <strong>Parent / guardian:</strong> {selected.parentFullname}
-          </p>
+          {isTeacherApplication(selected) ? (
+            <p>
+              <strong>Teacher application.</strong> Approving this does not create a student or a teacher account.
+            </p>
+          ) : (
+            <>
+              <p>
+                <strong>Date of birth:</strong> {selected.studentBirthdate || '—'}
+              </p>
+              <p>
+                <strong>Age:</strong> {selected.studentAge || '—'}
+              </p>
+              <p>
+                <strong>Parent / guardian:</strong> {selected.parentFullname}
+              </p>
+            </>
+          )}
           <p>
             <strong>Contact:</strong> {selected.parentPhone} · {selected.parentEmail}
           </p>
@@ -185,7 +248,28 @@ export default function AdminEnrollmentsPage() {
             </>
           }
         >
-          <p>The family record stays in Enrollments with the updated status badge.</p>
+          {confirm === 'interview' ? (
+            <div className="admin-form-grid">
+              <label>
+                Date and time
+                <input value={interviewWhen} onChange={(event) => setInterviewWhen(event.target.value)} placeholder="October 20, 2026, 9:00 AM" />
+              </label>
+              <label>
+                Location or link
+                <input value={interviewPlace} onChange={(event) => setInterviewPlace(event.target.value)} placeholder="Hiraya campus, main office" />
+              </label>
+              <label>
+                Instructions
+                <input value={interviewNote} onChange={(event) => setInterviewNote(event.target.value)} placeholder="Bring a valid ID." />
+              </label>
+            </div>
+          ) : (
+            <p>
+              {isTeacherApplication(selected)
+                ? 'The teacher application stays in Teacher applications. Approving it does not enroll a child.'
+                : 'The family record stays in Student enrollment with the updated status badge.'}
+            </p>
+          )}
         </AdminModal>
       ) : null}
     </>

@@ -1,12 +1,24 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { createHirayaApi } from '@hiraya/api';
+import { ApiError, createHirayaApi } from '@hiraya/api';
 import type { HirayaUser } from '@hiraya/types';
 import { resolveMobileApiUrl } from './apiUrl';
 import { canUseMobileApp, MOBILE_LOGIN_BLOCKED } from './rbac';
 
 const TOKEN_KEY = 'hiraya.session';
 const USER_KEY = 'hiraya.user';
+
+let sessionNotice = '';
+
+export function queueSessionNotice(message: string) {
+  sessionNotice = message;
+}
+
+export function consumeSessionNotice() {
+  const message = sessionNotice;
+  sessionNotice = '';
+  return message;
+}
 
 type AuthValue = {
   user: HirayaUser | null;
@@ -19,6 +31,10 @@ type AuthValue = {
 
 const Ctx = createContext<AuthValue | null>(null);
 let memoryToken: string | null = null;
+
+export function currentSessionToken() {
+  return memoryToken || '';
+}
 let persistSession = true;
 
 function mobileLoginIds(login: string, password: string) {
@@ -82,8 +98,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setUser(live);
                 await SecureStore.setItemAsync(USER_KEY, JSON.stringify(live));
               }
-            } catch {
-              /* keep cached profile until the next sign-in */
+            } catch (err) {
+              if (err instanceof ApiError && err.status === 401) {
+                memoryToken = null;
+                queueSessionNotice('Your session expired. Sign in again.');
+                try {
+                  await SecureStore.deleteItemAsync(TOKEN_KEY);
+                  await SecureStore.deleteItemAsync(USER_KEY);
+                } catch {
+                  /* Expo Go may deny SecureStore */
+                }
+                setUser(null);
+              }
             }
           } else {
             memoryToken = null;
@@ -122,9 +148,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return next;
       },
       logout: async () => {
-        await api.logout();
+        try {
+          await api.logout();
+        } catch {
+          /* Still clear this device if the API is unreachable. */
+        }
         memoryToken = null;
+        persistSession = true;
         persist.current = true;
+        try {
+          await SecureStore.deleteItemAsync(TOKEN_KEY);
+          await SecureStore.deleteItemAsync(USER_KEY);
+        } catch {
+          /* Expo Go may deny SecureStore */
+        }
         await writeUser(null);
       },
       refreshUser: async () => {

@@ -20,6 +20,7 @@ export default function ProfileTab() {
   const router = useRouter();
   const settings = store.settings;
   const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [message, setMessage] = useState('');
   const [phone, setPhone] = useState(profile?.phone || '');
   const [address, setAddress] = useState(profile?.address || '');
@@ -123,13 +124,19 @@ export default function ProfileTab() {
         <RowLink icon="lock-closed-outline" label="Change password" hint="Update the password for this device." onPress={() => router.push('/password')} />
         <RowLink
           icon="chatbubble-ellipses-outline"
-          label="Message admin"
+          label="Messages"
           hint={
             store.alerts.some((item) => item.kind === 'direct' && !item.read && item.status !== 'sent')
-              ? 'You have a reply from the center.'
-              : 'Write the Super Administrator. Replies stay in this conversation.'
+              ? 'You have a reply waiting.'
+              : 'Message admin, teachers, co-parents, or your groups.'
           }
           onPress={() => router.push('/messages')}
+        />
+        <RowLink
+          icon="heart-outline"
+          label="Send feedback"
+          hint="Rate a teacher or Hiraya Kids Learning Center."
+          onPress={() => router.push('/feedback')}
         />
         <RowLink
           icon="notifications-outline"
@@ -162,13 +169,18 @@ export default function ProfileTab() {
           label="Contact the center"
           hint={[settings.phone, settings.email].filter(Boolean).join(' · ') || 'Use the public website contact page.'}
           onPress={() =>
-            Alert.alert(settings.centerName || 'HIRAYA', `${settings.address || ''}\n${settings.phone || ''}\n${settings.email || ''}`.trim())
+            Alert.alert(
+              settings.centerName || 'Hiraya Kids Learning Center',
+              `${settings.address || ''}\n${settings.phone || ''}\n${settings.email || ''}`.trim(),
+            )
           }
         />
       </Card>
       <AppButton
-        label="Log out"
+        label={signingOut ? 'Signing out…' : 'Log out'}
         variant="danger"
+        loading={signingOut}
+        disabled={busy || signingOut}
         onPress={() => {
           Alert.alert('Log out', 'Sign out of this device?', [
             { text: 'Cancel', style: 'cancel' },
@@ -176,7 +188,13 @@ export default function ProfileTab() {
               text: 'Log out',
               style: 'destructive',
               onPress: () => {
-                void logout().then(() => router.replace('/login'));
+                setSigningOut(true);
+                void logout()
+                  .catch(() => undefined)
+                  .finally(() => {
+                    router.replace('/login');
+                    setSigningOut(false);
+                  });
               },
             },
           ]);

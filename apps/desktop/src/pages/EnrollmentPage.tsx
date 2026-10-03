@@ -1,5 +1,5 @@
 import type { Enrollment, EnrollmentApplication, HirayaDatabase, HirayaUser } from '@hiraya/types';
-import { formatDate, newId, studentDisplay } from '@hiraya/utils';
+import { formatDate, isTeacherApplication, newId, studentDisplay } from '@hiraya/utils';
 import { Button, Field, Input, Select } from '@hiraya/ui';
 import { FormEvent, useState } from 'react';
 import { EditorModal, FormSection } from '../components/EditorModal';
@@ -13,15 +13,19 @@ export function EnrollmentPage({
   user,
   saveStore,
   onStore,
+  initialKind = 'student',
 }: {
   store: HirayaDatabase;
   user: HirayaUser;
   saveStore: (next: HirayaDatabase) => Promise<void>;
   onStore: (next: HirayaDatabase) => void;
+  initialKind?: 'student' | 'teacher';
 }) {
+  const [kind, setKind] = useState<'student' | 'teacher'>(initialKind);
   const [appForm, setAppForm] = useState(false);
   const [seatForm, setSeatForm] = useState(false);
   const [approving, setApproving] = useState<EnrollmentApplication | null>(null);
+  const [interviewing, setInterviewing] = useState<EnrollmentApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -61,6 +65,39 @@ export function EnrollmentPage({
       setApproving(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not approve application');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onInterview(event: FormEvent<HTMLFormElement>) {
+    if (!interviewing) return;
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    setError(null);
+    try {
+      onStore(await api.scheduleTeacherInterview(
+        interviewing.applicationId,
+        String(form.get('when') || ''),
+        String(form.get('place') || ''),
+        String(form.get('instructions') || ''),
+      ));
+      setInterviewing(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not schedule the interview');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveTeacher(row: EnrollmentApplication) {
+    if (!window.confirm(`Approve ${row.studentFullname} as a teacher applicant? This does not create a student.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onStore(await api.approveEnrollment(row.applicationId));
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not approve the teacher application');
     } finally {
       setBusy(false);
     }
@@ -128,31 +165,49 @@ export function EnrollmentPage({
   return (
     <>
       <RecordTable
-        title={PAGE_COPY.enrollment.title}
-        description="Applications from the website or this desk. Approve creates the student and parent; then assign the learner to a class."
-        rows={store.enrollmentApplications}
+        title={kind === 'teacher' ? 'Teacher applications' : PAGE_COPY.enrollment.title}
+        description={
+          kind === 'teacher'
+            ? 'Teacher applications from the public website. Approving one does not create a student or a teacher account.'
+            : 'Student applications from the website or this desk. Approve creates the student and parent; then assign the learner to a class.'
+        }
+        rows={store.enrollmentApplications.filter((row) =>
+          kind === 'teacher' ? isTeacherApplication(row) : !isTeacherApplication(row),
+        )}
         rowKey={(row) => row.applicationId}
         search={(row, q) =>
           `${row.studentFullname} ${row.parentFullname} ${row.parentEmail} ${row.preferredProgram}`.toLowerCase().includes(q)
         }
         searchPlaceholder="Search applications"
-        emptyTitle="No enrollments found"
-        emptyHint="Submit an application here or from the public website."
+        emptyTitle={kind === 'teacher' ? 'No teacher applications' : 'No enrollments found'}
+        emptyHint={
+          kind === 'teacher'
+            ? 'Teacher applications sent from the public website appear here.'
+            : 'Submit an application here or from the public website.'
+        }
         statusOf={(row) => row.status}
         actions={
           <div className="row-actions">
-            <Button type="button" onClick={() => setAppForm(true)}>
-              New application
+            <Button type="button" variant={kind === 'student' ? 'primary' : 'ghost'} onClick={() => setKind('student')}>
+              Student enrollment
             </Button>
+            <Button type="button" variant={kind === 'teacher' ? 'primary' : 'ghost'} onClick={() => setKind('teacher')}>
+              Teacher applications
+            </Button>
+            {kind === 'student' ? (
+              <Button type="button" onClick={() => setAppForm(true)}>
+                New application
+              </Button>
+            ) : null}
             <Button type="button" variant="ghost" onClick={() => setSeatForm(true)}>
               Assign to class
             </Button>
           </div>
         }
         columns={[
-          { key: 'student', header: 'Student', render: (row) => row.studentFullname },
-          { key: 'program', header: 'Program', render: (row) => row.preferredProgram },
-          { key: 'parent', header: 'Parent', render: (row) => row.parentFullname },
+          { key: 'student', header: kind === 'teacher' ? 'Applicant' : 'Student', render: (row) => row.studentFullname },
+          { key: 'program', header: kind === 'teacher' ? 'Role' : 'Program', render: (row) => row.preferredProgram },
+          { key: 'parent', header: kind === 'teacher' ? 'Email' : 'Parent', render: (row) => (kind === 'teacher' ? row.parentEmail : row.parentFullname) },
           { key: 'contact', header: 'Contact', render: (row) => row.parentPhone || row.parentEmail },
           { key: 'status', header: 'Status', render: (row) => <StatusCell value={row.status} /> },
           { key: 'date', header: 'Submitted', render: (row) => formatDate(row.submittedAt) },
@@ -163,7 +218,18 @@ export function EnrollmentPage({
               <div className="row-actions">
                 {row.status === 'pending_review' || row.status === 'pending' ? (
                   <>
-                    <Button type="button" onClick={() => setApproving(row)}>
+                    {isTeacherApplication(row) ? (
+                      <Button type="button" variant="ghost" onClick={() => setInterviewing(row)}>
+                        Interview
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (isTeacherApplication(row)) void approveTeacher(row);
+                        else setApproving(row);
+                      }}
+                    >
                       Approve
                     </Button>
                     <Button type="button" variant="ghost" onClick={() => void decide('reject', row.applicationId)}>
@@ -271,6 +337,30 @@ export function EnrollmentPage({
             </Field>
             <Field label="Parent phone" required>
               <Input name="parentPhone" required />
+            </Field>
+          </FormSection>
+        </EditorModal>
+      ) : null}
+
+      {interviewing ? (
+        <EditorModal
+          title={`Interview for ${interviewing.studentFullname}`}
+          error={error}
+          busy={busy}
+          submitLabel="Schedule interview"
+          onClose={() => setInterviewing(null)}
+          onSubmit={onInterview}
+        >
+          <FormSection title="Interview">
+            <p className="form-span muted">This tells the applicant the interview time. It does not hire them.</p>
+            <Field label="Date and time" required>
+              <Input name="when" required placeholder="October 20, 2026, 9:00 AM" />
+            </Field>
+            <Field label="Location or link" required>
+              <Input name="place" required placeholder="Hiraya campus, main office" />
+            </Field>
+            <Field label="Instructions" optional>
+              <Input name="instructions" placeholder="Bring a valid ID." />
             </Field>
           </FormSection>
         </EditorModal>

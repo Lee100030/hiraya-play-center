@@ -2,8 +2,8 @@
 
 import { useStore } from '@/components/StoreProvider';
 import { api } from '@/lib/api';
-import { Button, EmptyState, Field, Input, Loading, Select, StatusBadge, Table } from '@hiraya/ui';
-import { displayName } from '@hiraya/utils';
+import { Button, EmptyState, Field, Input, Loading, ProgramSpecialtySelect, Select, StatusBadge, Table } from '@hiraya/ui';
+import { displayName, specialtyLaneLabel } from '@hiraya/utils';
 import type { HirayaUser } from '@hiraya/types';
 import { FormEvent, useState } from 'react';
 
@@ -67,8 +67,11 @@ export default function StaffPage() {
           <Field label="Phone">
             <Input name="phone" defaultValue={current?.phone || ''} />
           </Field>
-          <Field label="Specialty">
-            <Input name="specialty" defaultValue={store.teacherProfiles.find((p) => p.userId === current?.userId)?.specialty} />
+          <Field
+            label="Specialization"
+            hint="Playgroup, Pre-kinder, Kinder, Nursery, Grade 1–3, ABA Therapy, or Tutorial Session. That teacher appears in the matching Teachers Management list."
+          >
+            <ProgramSpecialtySelect value={store.teacherProfiles.find((p) => p.userId === current?.userId)?.specialty} store={store} />
           </Field>
           <Field label="Status">
             <Select name="status" defaultValue={current?.status || 'active'}>
@@ -96,7 +99,7 @@ export default function StaffPage() {
               <th>Name</th>
               <th>Role</th>
               <th>Email</th>
-              <th>Specialty</th>
+              <th>Program</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -107,7 +110,7 @@ export default function StaffPage() {
                 <td>{displayName(person)}</td>
                 <td>{person.role}</td>
                 <td>{person.email}</td>
-                <td>{store.teacherProfiles.find((p) => p.userId === person.userId)?.specialty}</td>
+                <td>{specialtyLaneLabel(store.teacherProfiles.find((p) => p.userId === person.userId)?.specialty)}</td>
                 <td>
                   <StatusBadge status={person.status} />
                 </td>

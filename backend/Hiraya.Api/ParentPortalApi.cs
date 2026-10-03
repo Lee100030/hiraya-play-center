@@ -263,11 +263,25 @@ public static class ParentPortalApi
     {
         var tokens = request.HttpContext.RequestServices.GetService<SessionTokenOptions>();
         var packed = request.Headers["X-Hiraya-Session"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(packed))
+            packed = request.Query["session"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(packed) && request.HasFormContentType)
+        {
+            try
+            {
+                var form = await request.ReadFormAsync();
+                packed = form["session"].FirstOrDefault();
+            }
+            catch (InvalidOperationException)
+            {
+                packed = null;
+            }
+        }
         var ticket = tokens is null ? null : SessionTokens.TryRead(packed, tokens.Secret);
         if (ticket is null)
             return null;
         var gate = request.HttpContext.RequestServices.GetService<SessionGate>();
-        if (gate is not null && gate.IsRevoked(ticket.Jti))
+        if (gate is not null && await gate.IsRevokedAsync(ticket.Jti, request.HttpContext.RequestAborted))
             return null;
         var user = await repo.FindUserAsync(ticket.UserId, null);
         if (user is null || !AccountStatuses.AllowsPortalLogin(user.Status))

@@ -9,6 +9,7 @@ export function AdminModal({
   children,
   footer,
   size = 'md',
+  stacked,
 }: {
   title: string;
   description?: string;
@@ -16,6 +17,7 @@ export function AdminModal({
   children: ReactNode;
   footer?: ReactNode;
   size?: 'md' | 'lg';
+  stacked?: boolean;
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -31,7 +33,7 @@ export function AdminModal({
   }, [onClose]);
 
   return (
-    <div className="admin-modal-overlay" onClick={onClose} role="presentation">
+    <div className={['admin-modal-overlay', stacked ? 'is-stack' : ''].filter(Boolean).join(' ')} onClick={onClose} role="presentation">
       <div
         className={`admin-modal admin-modal-${size}`}
         role="dialog"

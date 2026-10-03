@@ -1,8 +1,11 @@
-import type { HirayaDatabase, HirayaUser } from '@hiraya/types';
-import { displayName } from '@hiraya/utils';
+import type { HirayaDatabase, HirayaUser, StaffTask } from '@hiraya/types';
+import { displayName, laneLabel, newId, openTaskCountForTeacher, specialtyLaneLabel, staffDisplayRole, teacherInLane, type ManagementLaneId } from '@hiraya/utils';
+import { Button, Field, Input, Select, Textarea, assignedCount } from '@hiraya/ui';
 import { FormEvent, useEffect, useState } from 'react';
 import { DirectMessageModal } from '../components/DirectMessageModal';
 import { CertificateModal } from '../components/CertificateModal';
+import { EditorModal } from '../components/EditorModal';
+import { ProfileFact, ProfileModal } from '../components/ProfileModal';
 import { saveAccountPhoto } from '../components/ProfilePhotoField';
 import { EmptyCell, NameCell, RecordTable, StatusCell, assigned } from '../components/RecordTable';
 import { api } from '../lib/api';
@@ -17,21 +20,39 @@ export function TeachersPage({
   saveStore,
   onRefresh,
   actor,
+  lane,
 }: {
   store: HirayaDatabase;
   onStore: (next: HirayaDatabase) => void;
   saveStore: (next: HirayaDatabase) => Promise<void>;
   onRefresh?: () => Promise<void> | void;
   actor: HirayaUser;
+  lane?: ManagementLaneId | null;
 }) {
-  const rows = store.users.filter((item) => item.role === 'teacher');
+  const rows = store.users.filter((item) => item.role === 'teacher' && teacherInLane(store, item.userId, lane));
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [editing, setEditing] = useState<HirayaUser | null | 'new'>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [messaging, setMessaging] = useState<HirayaUser | null>(null);
   const [certificate, setCertificate] = useState<HirayaUser | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState<HirayaUser | null>(null);
   const [busy, setBusy] = useState(false);
+  const viewing = openId ? store.users.find((item) => item.userId === openId) : undefined;
+  const viewingProfile = viewing ? (store.teacherProfiles || []).find((item) => item.userId === viewing.userId) : undefined;
+
+  function staffPhoto(row: HirayaUser) {
+    return row.profileImagePath ? api.profileMediaUrl(row.userId, row.updatedAt || row.profileImagePath) : undefined;
+  }
+
+  function teacherStat(row: HirayaUser) {
+    const specialty = (store.teacherProfiles || []).find((item) => item.userId === row.userId)?.specialty;
+    const open = openTaskCountForTeacher(store, row.userId);
+    const kids = assignedStudentsForTeacher(store, row.userId).length;
+    const program = specialtyLaneLabel(specialty) || 'Program not set';
+    return `${program} · ${open} open tasks · ${kids} assigned students`;
+  }
 
   useEffect(() => {
     function apply(event: Event) {
@@ -75,6 +96,7 @@ export function TeachersPage({
         middleName: String(form.get('middleName') || ''),
         lastName: String(form.get('lastName') || ''),
         email,
+        personalEmail: String(form.get('personalEmail') || '').trim(),
         phone: String(form.get('phone') || ''),
         address: String(form.get('address') || ''),
         notes: String(form.get('notes') || ''),
@@ -146,6 +168,60 @@ export function TeachersPage({
     setNotice(picked.length === 1 ? 'Teacher deleted.' : `${picked.length} teachers deleted.`);
   }
 
+  async function setTeacherActive(row: HirayaUser, active: boolean) {
+    if (!active && !window.confirm(`Deactivate ${displayName(row)}? They can be restored from this profile.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onStore(await api.setStaffActive(row.userId, active));
+      setNotice(active ? `${displayName(row)} is active.` : `${displayName(row)} is inactive.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update teacher status.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function assignTask(event: FormEvent<HTMLFormElement>) {
+    if (!assigning) return;
+    const form = new FormData(event.currentTarget);
+    const title = String(form.get('title') || '').trim();
+    if (!title) {
+      setError('Task title is required.');
+      return;
+    }
+    const stamp = new Date().toISOString();
+    const next: StaffTask = {
+      taskId: newId('tsk'),
+      title,
+      description: String(form.get('description') || '').trim(),
+      priority: String(form.get('priority') || 'normal'),
+      dueAt: String(form.get('dueAt') || ''),
+      teacherIds: assigning.userId,
+      classId: '',
+      studentId: '',
+      status: 'assigned',
+      response: '',
+      attachmentName: '',
+      assignedBy: actor.userId,
+      completedAt: '',
+      completedBy: '',
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    setBusy(true);
+    setError(null);
+    try {
+      await saveStore({ ...store, staffTasks: [...(store.staffTasks || []), next] });
+      setAssigning(null);
+      setNotice(`Task assigned to ${displayName(assigning)}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not assign that task.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (workspaceId) {
     return (
       <TeacherWorkspacePage
@@ -167,8 +243,9 @@ export function TeachersPage({
         </p>
       ) : null}
       <RecordTable
-        title={PAGE_COPY.teachers.title}
-        description={PAGE_COPY.teachers.description}
+        kicker="Management"
+        title={lane ? `Teacher management · ${laneLabel(lane)}` : PAGE_COPY.teachers.title}
+        description={lane ? `Teachers assigned to ${laneLabel(lane)}.` : PAGE_COPY.teachers.description}
         rows={rows}
         rowKey={(row) => row.userId}
         search={(row, q) => `${displayName(row)} ${row.email} ${row.phone}`.toLowerCase().includes(q)}
@@ -191,6 +268,15 @@ export function TeachersPage({
           onDelete: removeRows,
           onRefresh,
           singleActions: [
+            {
+              icon: 'eye',
+              label: 'Open profile',
+              needOneMessage: 'Please select only one teacher to open.',
+              onClick: (row) => {
+                setNotice(null);
+                setOpenId(row.userId);
+              },
+            },
             {
               icon: 'file',
               label: 'Certificate',
@@ -222,15 +308,18 @@ export function TeachersPage({
             key: 'name',
             header: 'Teacher',
             render: (row) => (
-              <NameCell name={displayName(row)} photo={row.profileImagePath ? api.profileMediaUrl(row.userId, row.updatedAt || row.profileImagePath) : undefined} />
+              <NameCell name={displayName(row)} photo={staffPhoto(row)} />
             ),
           },
           { key: 'contact', header: 'Contact', render: (row) => assigned(row.phone || row.email) },
           {
             key: 'specialty',
-            header: 'Specialization',
+            header: 'Program',
             render: (row) =>
-              assigned((store.teacherProfiles || []).find((item) => item.userId === row.userId)?.specialty || row.position),
+              assigned(
+                specialtyLaneLabel((store.teacherProfiles || []).find((item) => item.userId === row.userId)?.specialty) ||
+                  row.position,
+              ),
           },
           {
             key: 'programs',
@@ -254,7 +343,126 @@ export function TeachersPage({
           },
           { key: 'status', header: 'Status', render: (row) => <StatusCell value={row.status} /> },
         ]}
+        card={{
+          name: (row) => displayName(row),
+          photo: (row) => staffPhoto(row),
+          role: (row) =>
+            staffDisplayRole(row.role, (store.teacherProfiles || []).find((item) => item.userId === row.userId)?.specialty),
+          stat: (row) => teacherStat(row),
+        }}
+        onRowOpen={(row) => {
+          setNotice(null);
+          setOpenId(row.userId);
+        }}
       />
+      {viewing ? (
+        <ProfileModal
+          title="Teacher profile"
+          name={displayName(viewing)}
+          subtitle={staffDisplayRole(viewing.role, viewingProfile?.specialty)}
+          status={viewing.status}
+          photo={staffPhoto(viewing)}
+          active={viewing.status === 'active'}
+          toggleBusy={busy}
+          onToggleActive={(next) => void setTeacherActive(viewing, next)}
+          onClose={() => setOpenId(null)}
+          actions={
+            <div className="profile-modal-actions">
+              <Button type="button" variant="ghost" onClick={() => setOpenId(null)}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  setOpenId(null);
+                  setMessaging(viewing);
+                }}
+              >
+                Message
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setOpenId(null);
+                  setAssigning(viewing);
+                }}
+              >
+                Assign task
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setOpenId(null);
+                  setWorkspaceId(viewing.userId);
+                }}
+              >
+                Open workspace
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setOpenId(null);
+                  setEditing(viewing);
+                }}
+              >
+                Edit
+              </Button>
+            </div>
+          }
+        >
+          <ProfileFact label="Contact">{assigned(viewing.phone || viewing.email)}</ProfileFact>
+          <ProfileFact label="Email">{assigned(viewing.email)}</ProfileFact>
+          <ProfileFact label="Program">
+            {assigned(specialtyLaneLabel(viewingProfile?.specialty) || viewing.position)}
+          </ProfileFact>
+          <ProfileFact label="Programs">
+            {assigned(programsForTeacher(store, viewing.userId).map((item) => item.name).join(', '))}
+          </ProfileFact>
+          <ProfileFact label="Classes">
+            {assigned(
+              store.classes
+                .filter((item) => item.teacherId === viewing.userId)
+                .map((item) => item.name)
+                .join(', '),
+            )}
+          </ProfileFact>
+          <ProfileFact label="Assigned students">{assignedCount(assignedStudentsForTeacher(store, viewing.userId).length)}</ProfileFact>
+        </ProfileModal>
+      ) : null}
+      {assigning ? (
+        <EditorModal
+          title={`Assign task · ${displayName(assigning)}`}
+          error={error}
+          busy={busy}
+          submitLabel="Assign task"
+          onClose={() => {
+            setAssigning(null);
+            setError(null);
+          }}
+          onSubmit={(event) => void assignTask(event)}
+        >
+          <Field label="Task title" required>
+            <Input name="title" required />
+          </Field>
+          <Field label="Description" optional>
+            <Textarea name="description" />
+          </Field>
+          <Field label="Priority">
+            <Select name="priority" defaultValue="normal">
+              <option value="low">low</option>
+              <option value="normal">normal</option>
+              <option value="high">high</option>
+            </Select>
+          </Field>
+          <Field label="Due date" optional>
+            <Input name="dueAt" type="date" />
+          </Field>
+        </EditorModal>
+      ) : null}
       {certificate ? (
         <CertificateModal
           user={certificate}
@@ -297,7 +505,7 @@ export function TeachersPage({
         <StaffForm
           user={current}
           profile={profile}
-          specialties={store.teacherRoleOptions.map((item) => item.name).filter(Boolean)}
+          store={store}
           error={error}
           busy={busy}
           onClose={() => setEditing(null)}

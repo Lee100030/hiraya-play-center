@@ -171,9 +171,9 @@ public class ReportService
             ApplicationsPending = user.Role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Staff
                 ? db.EnrollmentApplications.Count(a => a.Status == "pending_review")
                 : 0,
-            PaymentsBilled = payments.Sum(p => p.Amount),
-            PaymentsCollected = payments.Sum(p => p.AmountPaid > 0 ? p.AmountPaid : p.PaymentStatus == PaymentStatuses.Paid ? p.Amount : 0),
-            PaymentsOpen = payments.Sum(PaymentService.Remaining),
+            PaymentsBilled = students.Sum(s => StudentTuition.TuitionFee(db, s.StudentId)),
+            PaymentsCollected = students.Sum(s => StudentTuition.TotalPaid(db, s.StudentId)),
+            PaymentsOpen = students.Sum(s => StudentTuition.Remaining(db, s.StudentId)),
             PaymentsOverdue = payments.Count(p => PaymentService.EffectiveStatus(p) == PaymentStatuses.Overdue),
             ProgressPublished = progress.Count(r => r.Status == ProgressStatuses.Published),
             ProgressDraft = progress.Count(r => r.Status == ProgressStatuses.Draft)
@@ -197,12 +197,12 @@ public class ReportService
             .OrderByDescending(x => x.Count)
             .ToList();
 
-        report.PaymentsByStatus = payments
-            .GroupBy(p => PaymentService.EffectiveStatus(p))
-            .Select(g => new NamedAmount
+        report.PaymentsByStatus = students
+            .GroupBy(student => StudentTuition.Status(db, student.StudentId))
+            .Select(group => new NamedAmount
             {
-                Name = g.Key,
-                Amount = g.Sum(p => PaymentStatuses.IsOpen(g.Key) ? PaymentService.Remaining(p) : p.AmountPaid > 0 ? p.AmountPaid : p.Amount)
+                Name = group.Key,
+                Amount = group.Sum(student => StudentTuition.Remaining(db, student.StudentId))
             })
             .OrderByDescending(x => x.Amount)
             .ToList();

@@ -1,13 +1,14 @@
 import { Body, Caption, Card, EmptyState, ErrorState, Heading, LoadingState, Screen, StatusBadge, Title } from '../src/components/ui';
 import { useCenter } from '../src/store';
-import { studentDisplay } from '@hiraya/utils';
+import { studentDisplay, studentSessionPackage } from '@hiraya/utils';
 import { isMobileParent } from '../src/rbac';
 import { useAuth } from '../src/auth';
 
 export default function SessionsScreen() {
   const { user } = useAuth();
   const { store, loading, error, refresh, selected } = useCenter();
-  const packages = (store.sessionPackages || []).filter((row) => !selected || row.studentId === selected.studentId);
+  const canonical = selected ? studentSessionPackage(store, selected.studentId) : null;
+  const packages = canonical ? [canonical] : [];
   const history = (store.sessionHistory || []).filter((row) => !selected || row.studentId === selected.studentId);
 
   if (!isMobileParent(user?.role)) {

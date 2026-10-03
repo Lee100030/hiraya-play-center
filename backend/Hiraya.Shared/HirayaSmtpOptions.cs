@@ -11,8 +11,10 @@ public class HirayaSmtpOptions
     public string User { get; set; } = "";
     public string Password { get; set; } = "";
     public string From { get; set; } = "";
-    public string FromName { get; set; } = "HIRAYA Learning Center";
+    public string FromName { get; set; } = "Hiraya Kids Learning Center";
+    public string GmailPassword { get; set; } = "";
     public string PublicBaseUrl { get; set; } = "http://127.0.0.1:5288";
+    public string PickupDirectory { get; set; } = "";
 
     public static HirayaSmtpOptions Resolved(HirayaSmtpOptions source)
     {
@@ -25,8 +27,10 @@ public class HirayaSmtpOptions
             User = FirstEnv("HIRAYA_SMTP_USER", source.User),
             Password = FirstEnv("HIRAYA_SMTP_PASSWORD", source.Password),
             From = FirstEnv("HIRAYA_SMTP_FROM", source.From),
-            FromName = string.IsNullOrWhiteSpace(source.FromName) ? "HIRAYA Learning Center" : source.FromName.Trim(),
-            PublicBaseUrl = FirstEnv("HIRAYA_PUBLIC_URL", source.PublicBaseUrl)
+            FromName = string.IsNullOrWhiteSpace(source.FromName) ? "Hiraya Kids Learning Center" : source.FromName.Trim(),
+            GmailPassword = FirstEnv("HIRAYA_SMTP_GMAIL_PASSWORD", source.GmailPassword).Replace(" ", ""),
+            PublicBaseUrl = FirstEnv("HIRAYA_PUBLIC_URL", source.PublicBaseUrl),
+            PickupDirectory = FirstEnv("HIRAYA_SMTP_PICKUP", source.PickupDirectory)
         };
         if (string.Equals(Environment.GetEnvironmentVariable("HIRAYA_SMTP_ENABLED"), "true", StringComparison.OrdinalIgnoreCase))
             next.Enabled = true;

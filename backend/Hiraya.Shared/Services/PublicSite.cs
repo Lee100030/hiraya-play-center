@@ -25,10 +25,10 @@ public sealed class PublicGalleryItemDto
 
 public sealed class PublicSiteDto
 {
-    public string CenterName { get; set; } = "HIRAYA Learning Center";
+    public string CenterName { get; set; } = "Hiraya Kids Learning Center";
     public string Description { get; set; } = "";
     public string AboutTitle { get; set; } = "About HIRAYA";
-    public string WelcomeTitle { get; set; } = "Welcome to HIRAYA Learning Center";
+    public string WelcomeTitle { get; set; } = "Welcome to Hiraya Kids Learning Center";
     public string WelcomeMessage { get; set; } = "";
     public string Mission { get; set; } = "";
     public string Vision { get; set; } = "";
@@ -64,6 +64,15 @@ public sealed class PublicEnrollmentRequest
     public string Notes { get; set; } = "";
 }
 
+public sealed class TeacherApplyRequest
+{
+    public string Fullname { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public string Position { get; set; } = "";
+    public string Notes { get; set; } = "";
+}
+
 public sealed class PublicEnrollmentResult
 {
     public bool Submitted { get; set; }
@@ -76,18 +85,18 @@ public static class PublicSiteCatalog
     {
         var settings = db.Settings;
         var description = string.IsNullOrWhiteSpace(settings.Description)
-            ? "Hiraya Learning Center supports early learning, guided play, and family partnership in a safe, welcoming environment."
+            ? "Hiraya Kids Learning Center supports early learning, guided play, and family partnership in a safe, welcoming environment."
             : settings.Description;
 
         return new PublicSiteDto
         {
             CenterName = string.IsNullOrWhiteSpace(settings.CenterName)
-                ? "HIRAYA Learning Center"
+                ? "Hiraya Kids Learning Center"
                 : settings.CenterName,
             Description = description,
             AboutTitle = string.IsNullOrWhiteSpace(settings.AboutTitle) ? "About HIRAYA" : settings.AboutTitle,
             WelcomeTitle = string.IsNullOrWhiteSpace(settings.WelcomeTitle)
-                ? "Welcome to HIRAYA Learning Center"
+                ? "Welcome to Hiraya Kids Learning Center"
                 : settings.WelcomeTitle,
             WelcomeMessage = string.IsNullOrWhiteSpace(settings.WelcomeMessage)
                 ? description

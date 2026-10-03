@@ -5,6 +5,7 @@ import {
   type HirayaUser,
   type Student,
 } from '@hiraya/types';
+import { specialtyLaneId } from './managementLanes';
 
 export function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -30,6 +31,19 @@ export function formatDate(value?: string | null) {
   return parsed.toLocaleDateString('en-PH', { dateStyle: 'medium' });
 }
 
+export function localDateKey(value?: string | Date | null) {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return '';
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  }
+  const raw = (value || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw) && !raw.includes('T')) return raw.slice(0, 10);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw.slice(0, 10);
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+}
+
 export function displayName(user?: Pick<HirayaUser, 'fullname' | 'firstName' | 'lastName'> | null): string {
   if (!user) return '';
   const first = (user.firstName || '').trim();
@@ -46,23 +60,55 @@ export function studentDisplay(student: Student): string {
   return [student.firstName, student.middleName, student.lastName].filter(Boolean).join(' ').trim();
 }
 
+export function compareStudentNames(a: Student, b: Student) {
+  return studentDisplay(a).localeCompare(studentDisplay(b), undefined, { sensitivity: 'base' });
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: 'Super Administrator',
+  admin: 'Administrator',
+  teacher: 'Teacher',
+  staff: 'Staff',
+  parent: 'Parent / Guardian',
+  student: 'Student',
+  aba: 'ABA Therapist',
+  aba_therapist: 'ABA Therapist',
+  therapist: 'ABA Therapist',
+  ava: 'ABA Therapist',
+};
+
 export function roleLabel(role?: string | null): string {
-  switch (role) {
-    case UserRoles.SuperAdmin:
-      return 'Super Administrator';
-    case UserRoles.Admin:
-      return 'Administrator';
-    case UserRoles.Teacher:
-      return 'Teacher';
-    case UserRoles.Staff:
-      return 'Staff';
-    case UserRoles.Parent:
-      return 'Parent / Guardian';
-    case UserRoles.Student:
-      return 'Student';
-    default:
-      return role || '';
+  const key = (role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (!key) return 'Role not set';
+  return ROLE_LABELS[key] || 'Role not set';
+}
+
+/** Teacher cards: known role only. Never render raw specialty junk like "ava". */
+export function staffDisplayRole(role?: string | null, specialty?: string | null): string {
+  const labeled = roleLabel(role);
+  const spec = (specialty || '').trim().toLowerCase();
+  const aba =
+    specialtyLaneId(specialty) === 'aba' || /\baba\b/.test(spec) || spec === 'ava' || spec.includes('therapist');
+  if (aba && (labeled === 'Teacher' || labeled === 'Role not set' || labeled === 'ABA Therapist')) {
+    return 'ABA Therapist';
   }
+  return labeled;
+}
+
+export const STUDENT_FILE_KINDS = [
+  { id: 'birth_certificate', label: 'Birth certificate' },
+  { id: 'medical_record', label: 'Medical record' },
+  { id: 'immunization', label: 'Immunization record' },
+  { id: 'assessment', label: 'Assessment / evaluation' },
+  { id: 'id', label: 'ID / photo ID' },
+  { id: 'other', label: 'Other' },
+] as const;
+
+export type StudentFileKindId = (typeof STUDENT_FILE_KINDS)[number]['id'];
+
+export function studentFileKindLabel(kind?: string | null): string {
+  const id = (kind || '').trim().toLowerCase();
+  return STUDENT_FILE_KINDS.find((item) => item.id === id)?.label || 'Other';
 }
 
 export function isAdmin(role?: string | null): boolean {
@@ -73,20 +119,8 @@ export function isFamilyRole(role?: string | null): boolean {
   return role === UserRoles.Parent;
 }
 
-/** Demo seed passwords are accepted case-insensitively (admin123 → Admin123). */
-export function resolveLoginPassword(login: string, password: string): string {
-  const key = (login || '').trim().split('@')[0].toLowerCase();
-  const canonical =
-    key === 'admin' || key === 'ops'
-      ? 'Admin123'
-      : key === 'teacher'
-        ? 'Teacher123'
-        : key === 'staff'
-          ? 'Staff123'
-          : key === 'parent'
-            ? 'Parent123'
-            : '';
-  if (canonical && password.toLowerCase() === canonical.toLowerCase()) return canonical;
+/** Returns the password the person typed. Demo passwords are not rewritten. */
+export function resolveLoginPassword(_login: string, password: string): string {
   return password;
 }
 
@@ -155,17 +189,164 @@ export function statusTone(status?: string): 'success' | 'warn' | 'danger' | 'mu
   return 'muted';
 }
 
-export { remainingSessions, remainingSessionsFor, normalizeSessionPackage, completeOneSession } from './sessionPackage';
+export { remainingSessions, remainingSessionsFor, normalizeSessionPackage, completeOneSession, upsertStudentSessions, studentSessionPackage, studentSessionAccount, placeStudentSessionPackage, useOneSession } from './sessionPackage';
+export {
+  EXPENSE_CATEGORIES,
+  INCOME_BUCKETS,
+  bookIncomeForMonth,
+  cashFlowLines,
+  cashFlowTeacherNames,
+  cashIncomeForMonth,
+  currentMonthKey,
+  centerExpenseTotal,
+  expenseCategoryLabel,
+  expenseTotalForMonth,
+  financeMonth,
+  financeSeries,
+  incomeBucketFor,
+  incomeBucketLabel,
+  invoiceForMonth,
+  isBookIncome,
+  monthLabel,
+  openingBalanceFor,
+  remittanceForDay,
+  removeCenterExpense,
+  teacherSalaryForMonth,
+  upsertCenterExpense,
+  upsertOpeningBalance,
+  type CashFlowLine,
+} from './finance';
 export { studentDayAttendance, isStudentHereToday, confirmStudentPresentToday } from './studentAttendance';
+export {
+  isTeacherAttendanceRow,
+  isTeacherOnSite,
+  isTeacherSalaryMonthPaid,
+  markTeacherAttendance,
+  markTeacherSalaryMonthPaid,
+  nextAttendanceMonth,
+  setTeacherMonthAttendanceCounts,
+  staffTeachers,
+  teacherAttendanceInMonth,
+  teacherAttendanceSummaries,
+  teacherAttendanceSummary,
+  teacherDayAttendance,
+  teacherSalaryMonthRef,
+  upsertTeacherAttendanceDay,
+  type TeacherAttendanceSummary,
+} from './teacherAttendance';
+export {
+  findDuplicateStaffGroups,
+  mergeDuplicateStaffUsers,
+  normalizeStaffEmail,
+  normalizeStaffName,
+  staffDisplayName,
+  staffIdentityKey,
+  uniqueStaffTeachers,
+} from './staffDedupe';
+export {
+  sessionLeftFor,
+  sessionLeftLabel,
+  studentPaymentBalance,
+  paymentBalanceLabel,
+  upsertStudentBalance,
+  recordStudentAmountReceived,
+  updateStudentPayment,
+  cancelStudentPayment,
+  studentTuitionFee,
+  studentTotalPaid,
+  studentRemainingBalance,
+  studentPaymentStanding,
+  studentPaymentTypeLabel,
+  centerTuitionTotals,
+  paymentCountsTowardPaid,
+  studentPayments,
+  studentBalanceDueAt,
+  studentBalanceReceivedBy,
+  parentsForStudent,
+  notifyStudentBalance,
+} from './studentBilling';
+export {
+  TEACHER_PAYMENT_MARK,
+  isTeacherPayment,
+  parsePaymentLane,
+  paymentLaneLabel,
+  type PaymentLaneId,
+  PAYMENT_LANES,
+  isPaymentLane,
+} from './paymentLanes';
+export {
+  FEEDBACK_LANES,
+  feedbackLaneLabel,
+  isFeedbackLane,
+  parseFeedbackLane,
+  type FeedbackLaneId,
+} from './feedbackLanes';
+export { normalizePersonalEmail, ownedPersonalEmail, personalEmailError, personalEmailOwnerError } from './personalEmail';
+export { scrubLeftoverPaymentData } from './paymentCleanup';
+export { downloadStudentRecord } from './studentRecordSheet';
+export { applyStorePatch, diffStore, STORE_ROW_IDS, type StorePatchBody } from './storePatch';
+export {
+  teacherPaymentRows,
+  findTeacherPayment,
+  buildTeacherPayslip,
+  notifyTeacherPayment,
+  openTeacherPayslipMailto,
+} from './teacherPayments';
+export { addLearningProgram, assignLaneSessionPackage, moduleTuitionLanes, programForLane, programForStudent, removeLearningProgram, saveProgramTuition } from './programs';
 export {
   defaultCoeDraft,
   downloadCertificateOfEmployment,
   buildCoeParagraphs,
+  formatPeso,
   type CoeDraft,
   type CoeHonorific,
 } from './certificateOfEmployment';
-export { operationsStats } from './operationsStats';
-export { assignedStudentsForTeacher, programsForTeacher, studentPlacement } from './assignments';
+export { isTeacherApplication, operationsStats } from './operationsStats';
+export {
+  assignedStudentsForTeacher,
+  teachersForStudents,
+  openTaskCountForTeacher,
+  packedTeacherIds,
+  programsForTeacher,
+  scheduleAssignedTo,
+  studentPlacement,
+} from './assignments';
+export {
+  areCoParents,
+  canDirectMessage,
+  directThreadKey,
+  groupMemberNames,
+  groupThreadKey,
+  isDirectAlert,
+  markThreadRead,
+  messageContacts,
+  myChatGroups,
+  packedMemberIds,
+  threadMessages,
+} from './messaging';
+export {
+  MANAGEMENT_LANES,
+  MANAGEMENT_LANE_VIEWS,
+  PEOPLE_LANE_VIEWS,
+  childrenOfParent,
+  isBuiltinManagementLane,
+  isManagementLaneView,
+  laneLabel,
+  managementLanesFor,
+  moduleInLane,
+  parentInLane,
+  parsePeopleLane,
+  programLane,
+  resolveStudentProgramValue,
+  sessionPackageInLane,
+  specialtyLaneId,
+  specialtyLaneLabel,
+  studentInLane,
+  teacherInLane,
+  type ManagementLane,
+  type ManagementLaneId,
+  type ManagementLaneViewId,
+} from './managementLanes';
 
 export {
   HKLC_NAV_GROUPS,

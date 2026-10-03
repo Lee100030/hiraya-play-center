@@ -14,7 +14,15 @@ export default function TasksScreen() {
   const [open, setOpen] = useState<StaffTask | null>(null);
   const [remarks, setRemarks] = useState('');
   const [busy, setBusy] = useState(false);
-  const rows = (store.staffTasks || []).slice().sort((a, b) => (a.dueAt || '').localeCompare(b.dueAt || ''));
+  const rows = (store.staffTasks || [])
+    .filter((row) =>
+      (row.teacherIds || '')
+        .split(',')
+        .map((item) => item.trim())
+        .includes(user?.userId || ''),
+    )
+    .slice()
+    .sort((a, b) => (a.dueAt || '').localeCompare(b.dueAt || ''));
 
   if (!isMobileTeacher(user?.role)) {
     return (
@@ -41,7 +49,9 @@ export default function TasksScreen() {
               }
             : item,
         ),
-      });
+      },
+      store,
+    );
       setOpen(null);
       setRemarks('');
       await refresh();

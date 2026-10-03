@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hiraya Kids Learning Center",
+    "output": "hiraya-architecture.html",
+    "quality_profile": "showcase",
+    "viewBox": [1200, 620],
+    "views": [
+      {
+        "id": "ops-path",
+        "label": "Desktop to database",
+        "focus": ["desktop", "api", "mysql"],
+        "note": "The desktop app signs in and saves through Hiraya.Api into MySQL."
+      },
+      {
+        "id": "all-clients",
+        "label": "Every client",
+        "focus": ["website", "desktop", "mobile", "api"],
+        "note": "Website, desktop, and mobile all call the same API."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "website",
+      "type": "frontend",
+      "label": "Website",
+      "sublabel": "Next.js :3000",
+      "pos": [80, 36],
+      "size": [210, 78]
+    },
+    {
+      "id": "desktop",
+      "type": "frontend",
+      "label": "Desktop",
+      "sublabel": "Electron :5173",
+      "pos": [495, 36],
+      "size": [210, 78]
+    },
+    {
+      "id": "mobile",
+      "type": "frontend",
+      "label": "Mobile",
+      "sublabel": "Expo",
+      "pos": [910, 36],
+      "size": [210, 78]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Hiraya.Api",
+      "sublabel": "ASP.NET :5188",
+      "pos": [495, 250],
+      "size": [210, 86]
+    },
+    {
+      "id": "mysql",
+      "type": "database",
+      "label": "MySQL",
+      "sublabel": "hiraya_learning_center",
+      "pos": [495, 470],
+      "size": [210, 78]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Only the API opens the database",
+      "wraps": ["api", "mysql"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "website-to-api",
+      "from": "website",
+      "to": "api",
+      "label": "HTTPS",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "desktop-to-api",
+      "from": "desktop",
+      "to": "api",
+      "label": "HTTPS",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "mobile-to-api",
+      "from": "mobile",
+      "to": "api",
+      "label": "HTTPS",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "api-to-mysql",
+      "from": "api",
+      "to": "mysql",
+      "label": "SQL",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Clients",
+      "items": [
+        "Website serves the public site and /admin",
+        "Desktop is the Electron operations window",
+        "Mobile is for parents and teachers"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "One API",
+      "items": [
+        "Hiraya.Api checks X-Hiraya-Session",
+        "Screens load with GET /api/store",
+        "Saves send POST /api/store/patch"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Database",
+      "items": [
+        "MySQL 8 holds the center records",
+        "The website does not open MySQL itself"
+      ]
+    }
+  ]
+}

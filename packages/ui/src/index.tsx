@@ -6,7 +6,14 @@ import type {
   TableHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
-import { statusLabel, statusTone } from '@hiraya/utils';
+import { MANAGEMENT_LANES, managementLanesFor, specialtyLaneId, statusLabel, statusTone } from '@hiraya/utils';
+import type { HirayaDatabase } from '@hiraya/types';
+
+export { CashFlowSheet, type CashFlowDraft } from './CashFlowSheet';
+export { FinanceCategoryChart, FinanceColumnChart, FinanceLegend, type FinanceBar, type FinanceSlice } from './FinanceCharts';
+export { PersonAvatar, personInitial, type PersonAvatarSize } from './PersonAvatar';
+export { PhotoCardPicker, type PhotoCardPerson } from './PhotoCardPicker';
+export { PhotoCropDialog, fileFromPhotoSrc, type PhotoCropShape } from './PhotoCropDialog';
 
 export function Button({
   variant = 'primary',
@@ -25,8 +32,33 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input className="hlc-input" {...props} />;
 }
 
-export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className="hlc-select" {...props} />;
+export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={['hlc-select', className].filter(Boolean).join(' ')} {...props} />;
+}
+
+export function ProgramSpecialtySelect({
+  name = 'specialty',
+  value,
+  id,
+  store,
+}: {
+  name?: string;
+  value?: string | null;
+  id?: string;
+  store?: HirayaDatabase | null;
+}) {
+  const lanes = store ? managementLanesFor(store) : MANAGEMENT_LANES;
+  const selected = specialtyLaneId(value, store) || '';
+  return (
+    <Select name={name} id={id} defaultValue={selected}>
+      <option value="">Not assigned</option>
+      {lanes.map((lane) => (
+        <option key={lane.id} value={lane.id}>
+          {lane.label}
+        </option>
+      ))}
+    </Select>
+  );
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -86,8 +118,13 @@ export function EmptyValue({ label = 'Not assigned' }: { label?: string }) {
 export function emptyCell(value?: string | number | null) {
   if (value == null) return <EmptyValue />;
   const text = String(value).trim();
-  if (!text || text === '—') return <EmptyValue />;
+  if (!text || text === '—' || text.toLowerCase() === 'not assigned') return <EmptyValue />;
   return text;
+}
+
+export function assignedCount(count?: number | null) {
+  if (!count) return <EmptyValue />;
+  return String(count);
 }
 
 export function StatusBadge({ status }: { status?: string }) {

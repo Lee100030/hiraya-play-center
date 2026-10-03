@@ -15,6 +15,8 @@ public interface IHirayaRepository
     Task SetItemAsync<T>(string collection, string id, T item, CancellationToken ct = default);
     Task DeleteItemAsync(string collection, string id, CancellationToken ct = default);
     Task MutateAsync(Func<HirayaDatabase, Task> mutator, CancellationToken ct = default);
+    Task<HirayaDatabase> ApplyClientPatchAsync(StorePatchRequest patch, HirayaUser actor, CancellationToken ct = default)
+        => StorePatch.ApplyThroughAsync(this, patch, actor, ct);
     void InvalidateCache() { }
     Task<HirayaUser?> FindUserAsync(string? userId, string? login, CancellationToken ct = default)
     {

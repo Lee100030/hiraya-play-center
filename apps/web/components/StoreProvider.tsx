@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { emptyStore, type HirayaDatabase } from '@hiraya/types';
 import { api } from '@/lib/api';
 import { useAuth } from './AuthProvider';
@@ -18,6 +18,8 @@ const StoreContext = createContext<StoreState | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [store, setStore] = useState<HirayaDatabase>(emptyStore());
+  const storeRef = useRef(store);
+  storeRef.current = store;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +41,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const save = useCallback(async (next: HirayaDatabase) => {
     try {
-      const saved = await api.putStore(next);
+      const saved = await api.saveChanges(storeRef.current, next);
       setStore(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save to the HIRAYA API');

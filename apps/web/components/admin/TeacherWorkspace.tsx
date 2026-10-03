@@ -4,8 +4,8 @@ import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/components/StoreProvider';
 import { api } from '@/lib/api';
-import { Button, EmptyState, Field, Input, Loading, Select, StatusBadge, Textarea, emptyCell } from '@hiraya/ui';
-import { assignedStudentsForTeacher, displayName, newId, remainingSessionsFor, studentDisplay } from '@hiraya/utils';
+import { assignedStudentsForTeacher, displayName, localDateKey, newId, packedTeacherIds, remainingSessionsFor, scheduleAssignedTo, staffDisplayRole, studentDisplay } from '@hiraya/utils';
+import { Button, EmptyState, Field, Input, Loading, PersonAvatar, PhotoCardPicker, Select, StatusBadge, Textarea, emptyCell } from '@hiraya/ui';
 import type { Schedule, StaffTask } from '@hiraya/types';
 import Link from 'next/link';
 import { FormEvent, useMemo, useState } from 'react';
@@ -24,10 +24,22 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
       .map((item) => item.trim())
       .includes(teacherId),
   );
-  const schedules = store.schedules.filter((row) => row.teacherId === teacherId && row.kind !== 'teacherTask');
+  const schedules = store.schedules.filter((row) => scheduleAssignedTo(row, teacherId) && row.kind !== 'teacherTask');
   const comments = (store.teacherComments || []).filter((row) => row.teacherId === teacherId && row.status !== 'archived');
   const notes = (store.teacherNotes || []).filter((row) => row.teacherId === teacherId && row.status !== 'archived');
   const attendance = store.attendance.filter((row) => row.kind === 'employee' && row.employeeId === teacherId);
+  const teacherPeople = useMemo(
+    () =>
+      store.users
+        .filter((item) => item.role === 'teacher')
+        .map((item) => ({
+          id: item.userId,
+          name: displayName(item),
+          photo: item.profileImagePath ? api.profileMediaUrl(item.userId, item.updatedAt || item.profileImagePath) : undefined,
+          role: staffDisplayRole(item.role, store.teacherProfiles.find((row) => row.userId === item.userId)?.specialty),
+        })),
+    [store.users, store.teacherProfiles],
+  );
   const tabs = useMemo(
     () => [
       ['overview', 'Overview'],
@@ -134,7 +146,7 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
       scheduleType: 'classSession',
       classId: String(form.get('classId') || ''),
       studentId: String(form.get('studentId') || ''),
-      teacherId,
+      teacherId: form.getAll('teacherIds').map(String).filter(Boolean).join(',') || teacherId,
       startAt: new Date(String(form.get('startAt') || '')).toISOString(),
       endAt: new Date(String(form.get('endAt') || '')).toISOString(),
       room: String(form.get('room') || ''),
@@ -155,7 +167,7 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
       description: String(form.get('description') || ''),
       priority: 'normal',
       dueAt: String(form.get('dueAt') || ''),
-      teacherIds: teacherId,
+      teacherIds: form.getAll('teacherIds').map(String).filter(Boolean).join(',') || teacherId,
       classId: '',
       studentId: String(form.get('studentId') || ''),
       status: 'assigned',
@@ -219,19 +231,12 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
         }
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        {teacher.profileImagePath ? (
-          <img
-            src={api.profileMediaUrl(teacher.userId, teacher.updatedAt)}
-            alt=""
-            width={56}
-            height={56}
-            style={{ borderRadius: 28, objectFit: 'cover' }}
-          />
-        ) : (
-          <span className="photo-preview" style={{ width: 56, height: 56, borderRadius: 28 }}>
-            {displayName(teacher).slice(0, 1)}
-          </span>
-        )}
+        <PersonAvatar
+          name={displayName(teacher)}
+          photo={teacher.profileImagePath ? api.profileMediaUrl(teacher.userId, teacher.updatedAt) : undefined}
+          size="md"
+          hint={!teacher.profileImagePath}
+        />
       </div>
       <div className="workspace-tabs" role="tablist">
         {tabs.map(([id, label]) => (
@@ -315,6 +320,9 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
             <Field label="Title" required>
               <Input name="title" required />
             </Field>
+            <Field label="Teachers" required>
+              <PhotoCardPicker name="teacherIds" people={teacherPeople} defaultSelected={[teacherId]} />
+            </Field>
             <Field label="Start" required>
               <Input name="startAt" type="datetime-local" required />
             </Field>
@@ -324,12 +332,20 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
             <Field label="Room">
               <Input name="room" />
             </Field>
-            <Button type="submit">Add schedule</Button>
+            <Button type="submit">Assign schedule</Button>
           </form>
           {schedules.map((row) => (
             <article key={row.scheduleId} className="hlc-card">
               <h3>{row.title}</h3>
-              <p>{row.startAt}</p>
+              <p>{localDateKey(row.startAt)}</p>
+              <p className="month-cal-teacher">
+                {(packedTeacherIds(row.teacherId).length
+                  ? packedTeacherIds(row.teacherId).map((id) => displayName(store.users.find((item) => item.userId === id))).filter(Boolean)
+                  : ['Unassigned']
+                ).map((name) => (
+                  <span key={name}>{name}</span>
+                ))}
+              </p>
             </article>
           ))}
         </>
@@ -340,6 +356,9 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
           <form className="hlc-card form-grid" onSubmit={addTask}>
             <Field label="Title" required>
               <Input name="title" required />
+            </Field>
+            <Field label="Teachers" required>
+              <PhotoCardPicker name="teacherIds" people={teacherPeople} defaultSelected={[teacherId]} />
             </Field>
             <Field label="Due">
               <Input name="dueAt" type="date" />

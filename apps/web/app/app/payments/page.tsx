@@ -2,35 +2,40 @@
 
 import { useStore } from '@/components/StoreProvider';
 import { Button, EmptyState, Field, Input, Loading, Select, StatusBadge, Table } from '@hiraya/ui';
-import { newId, studentDisplay } from '@hiraya/utils';
-import type { Payment } from '@hiraya/types';
+import { formatPeso, isTeacherPayment, recordStudentAmountReceived, studentDisplay, studentPaymentBalance, studentPaymentTypeLabel } from '@hiraya/utils';
 import { FormEvent, useState } from 'react';
 
 export default function PaymentsPage() {
   const { store, loading, save } = useStore();
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState('');
+  const rows = store.payments.filter((row) => !isTeacherPayment(row));
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const next: Payment = {
-      paymentId: newId('pay'),
-      enrollmentId: '',
-      studentId: String(form.get('studentId') || ''),
-      amount: Number(form.get('amount') || 0),
-      amountPaid: Number(form.get('amountPaid') || 0),
-      paymentMethod: String(form.get('paymentMethod') || 'cash'),
-      paymentStatus: String(form.get('paymentStatus') || 'pending'),
-      referenceNumber: String(form.get('referenceNumber') || ''),
-      paymentDate: new Date().toISOString().slice(0, 10),
-      dueAt: String(form.get('dueAt') || ''),
-      paidAt: '',
-      recordedBy: '',
-      notes: String(form.get('notes') || ''),
-      history: [],
-    };
-    await save({ ...store, payments: [...store.payments, next] });
-    setOpen(false);
+    const studentId = String(form.get('studentId') || '');
+    setError('');
+    try {
+      await save(
+        recordStudentAmountReceived(
+          store,
+          studentId,
+          String(form.get('amount') || ''),
+          '',
+          String(form.get('receivedBy') || ''),
+          '',
+          '',
+          String(form.get('paymentMethod') || 'cash'),
+          String(form.get('notes') || ''),
+          String(form.get('paymentDate') || ''),
+          String(form.get('referenceNumber') || ''),
+        ),
+      );
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the payment.');
+    }
   }
 
   if (loading) return <Loading />;
@@ -40,7 +45,7 @@ export default function PaymentsPage() {
       <div className="toolbar">
         <h1>Payments</h1>
         <Button type="button" onClick={() => setOpen(true)}>
-          Add charge
+          Add payment
         </Button>
       </div>
       {open ? (
@@ -50,40 +55,39 @@ export default function PaymentsPage() {
               <option value="" disabled>
                 Select
               </option>
-              {store.students.map((student) => (
-                <option key={student.studentId} value={student.studentId}>
-                  {studentDisplay(student)}
-                </option>
-              ))}
+              {store.students.map((student) => {
+                const bill = studentPaymentBalance(store, student.studentId);
+                return (
+                  <option key={student.studentId} value={student.studentId}>
+                    {studentDisplay(student)} · remaining ₱{formatPeso(bill.due)}
+                  </option>
+                );
+              })}
             </Select>
           </Field>
-          <Field label="Amount">
-            <Input name="amount" type="number" defaultValue={0} />
+          <Field label="Payment amount" required>
+            <Input name="amount" type="number" min={0} step="0.01" required />
           </Field>
-          <Field label="Paid">
-            <Input name="amountPaid" type="number" defaultValue={0} />
+          <Field label="Received by" required>
+            <Input name="receivedBy" required />
           </Field>
-          <Field label="Method">
+          <Field label="Payment method">
             <Select name="paymentMethod" defaultValue="cash">
               <option value="cash">cash</option>
               <option value="bank">bank</option>
               <option value="gcash">gcash</option>
             </Select>
           </Field>
-          <Field label="Status">
-            <Select name="paymentStatus" defaultValue="pending">
-              <option value="pending">pending</option>
-              <option value="partial">partial</option>
-              <option value="paid">paid</option>
-              <option value="overdue">overdue</option>
-            </Select>
+          <Field label="Payment date">
+            <Input name="paymentDate" type="date" />
           </Field>
-          <Field label="Due">
-            <Input name="dueAt" type="date" />
-          </Field>
-          <Field label="Reference">
+          <Field label="Reference number">
             <Input name="referenceNumber" />
           </Field>
+          <Field label="Notes">
+            <Input name="notes" />
+          </Field>
+          {error ? <p className="hlc-field-error">{error}</p> : null}
           <div>
             <Button type="submit">Save</Button>{' '}
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
@@ -92,37 +96,37 @@ export default function PaymentsPage() {
           </div>
         </form>
       ) : null}
-      {store.payments.length === 0 ? (
-        <EmptyState title="No payment records" />
+      {rows.length === 0 ? (
+        <EmptyState title="No payment history" />
       ) : (
         <Table>
           <thead>
             <tr>
               <th>Student</th>
-              <th>Amount</th>
-              <th>Paid</th>
+              <th>Type</th>
+              <th>Payment amount</th>
+              <th>Remaining balance</th>
               <th>Method</th>
-              <th>Status</th>
-              <th>Reference</th>
+              <th>Payment status</th>
             </tr>
           </thead>
           <tbody>
-            {store.payments.map((row) => (
-              <tr key={row.paymentId}>
-                <td>
-                  {store.students.find((s) => s.studentId === row.studentId)
-                    ? studentDisplay(store.students.find((s) => s.studentId === row.studentId)!)
-                    : row.studentId}
-                </td>
-                <td>{row.amount}</td>
-                <td>{row.amountPaid}</td>
-                <td>{row.paymentMethod}</td>
-                <td>
-                  <StatusBadge status={row.paymentStatus} />
-                </td>
-                <td>{row.referenceNumber}</td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const student = store.students.find((item) => item.studentId === row.studentId);
+              const bill = studentPaymentBalance(store, row.studentId);
+              return (
+                <tr key={row.paymentId}>
+                  <td>{student ? studentDisplay(student) : row.studentId}</td>
+                  <td>{studentPaymentTypeLabel(store, row)}</td>
+                  <td>₱{formatPeso(Number(row.amountPaid || 0))}</td>
+                  <td>₱{formatPeso(bill.due)}</td>
+                  <td>{row.paymentMethod}</td>
+                  <td>
+                    <StatusBadge status={bill.status} />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </Table>
       )}

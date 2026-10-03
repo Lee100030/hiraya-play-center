@@ -1,5 +1,5 @@
 import type { HirayaDatabase, HirayaUser } from '@hiraya/types';
-import { displayName, formatDate, operationsStats, studentDisplay } from '@hiraya/utils';
+import { centerTuitionTotals, displayName, formatDate, operationsStats, studentDisplay, type ManagementLaneId } from '@hiraya/utils';
 import { Button } from '@hiraya/ui';
 import { RecordTable, StatusCell } from '../components/RecordTable';
 import { PageHeader } from '../components/PageHeader';
@@ -11,8 +11,11 @@ import { ProgramsPage } from './ProgramsPage';
 import { ClassesPage } from './ClassesPage';
 import { EnrollmentPage } from './EnrollmentPage';
 import { ModulesPage } from './ModulesPage';
-import { SchedulesManagePage, TasksManagePage, AnnouncementsManagePage, SessionsManagePage } from './WorkflowPages';
+import { ProgramTuitionPage } from './ProgramTuitionPage';
+import { CenterCalendarPage } from './CenterCalendarPage';
+import { TasksManagePage, AnnouncementsManagePage, SessionsManagePage, FeedbackManagePage } from './WorkflowPages';
 import { AttendanceManagePage, PaymentsManagePage, ProgressManagePage, SettingsPage, WebsiteCmsPage } from './RecordsPages';
+import { FinancePage } from './FinancePage';
 import { MessagesPage } from './MessagesPage';
 
 function nameOf(store: HirayaDatabase, userId?: string) {
@@ -36,6 +39,7 @@ function opsFor(store: HirayaDatabase, studentId: string) {
 
 export function WorkspacePages({
   view,
+  peopleLane,
   store,
   user,
   onStore,
@@ -44,6 +48,7 @@ export function WorkspacePages({
   onUser,
 }: {
   view: string;
+  peopleLane?: ManagementLaneId | null;
   store: HirayaDatabase;
   user: HirayaUser;
   onStore: (next: HirayaDatabase) => void;
@@ -53,22 +58,39 @@ export function WorkspacePages({
 }) {
   if (view === 'teachers') {
     return (
-      <TeachersPage store={store} onStore={onStore} saveStore={saveStore} onRefresh={onRefresh} actor={user} />
+      <TeachersPage store={store} onStore={onStore} saveStore={saveStore} onRefresh={onRefresh} actor={user} lane={peopleLane} />
     );
   }
-  if (view === 'parents') return <ParentsPage store={store} onStore={onStore} onRefresh={onRefresh} actor={user} />;
+  if (view === 'parents') return <ParentsPage store={store} onStore={onStore} onRefresh={onRefresh} actor={user} lane={peopleLane} />;
   if (view === 'students' || view === 'monitoring') {
-    return <StudentsPage store={store} saveStore={saveStore} onRefresh={onRefresh} actor={user} />;
+    return <StudentsPage store={store} onStore={onStore} saveStore={saveStore} onRefresh={onRefresh} actor={user} lane={peopleLane} />;
   }
   if (view === 'programs') return <ProgramsPage store={store} saveStore={saveStore} />;
   if (view === 'classes') return <ClassesPage store={store} saveStore={saveStore} />;
-  if (view === 'modules') return <ModulesPage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} />;
-  if (view === 'calendar') return <SchedulesManagePage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} />;
+  if (view === 'modules') {
+    return <ModulesPage store={store} user={user} onStore={onStore} onRefresh={onRefresh} lane={peopleLane} />;
+  }
+  if (view === 'programTuition') {
+    return <ProgramTuitionPage store={store} saveStore={saveStore} />;
+  }
+  if (view === 'calendar') return <CenterCalendarPage store={store} user={user} saveStore={saveStore} />;
   if (view === 'tasks') return <TasksManagePage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} />;
   if (view === 'announcements') return <AnnouncementsManagePage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} />;
-  if (view === 'sessions') return <SessionsManagePage store={store} saveStore={saveStore} onRefresh={onRefresh} />;
-  if (view === 'enrollment') {
-    return <EnrollmentPage store={store} user={user} saveStore={saveStore} onStore={onStore} />;
+  if (view === 'feedback') return <FeedbackManagePage store={store} user={user} saveStore={saveStore} lane={peopleLane} />;
+  if (view === 'sessions') {
+    return <SessionsManagePage store={store} saveStore={saveStore} onRefresh={onRefresh} lane={peopleLane} />;
+  }
+  if (view === 'enrollment' || view === 'teacherApplications') {
+    return (
+      <EnrollmentPage
+        key={view}
+        store={store}
+        user={user}
+        saveStore={saveStore}
+        onStore={onStore}
+        initialKind={view === 'teacherApplications' ? 'teacher' : 'student'}
+      />
+    );
   }
   if (view === 'messages') {
     return <MessagesPage store={store} user={user} onStore={onStore} saveStore={saveStore} />;
@@ -82,8 +104,10 @@ export function WorkspacePages({
     return <ProgressManagePage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} />;
   }
 
+  if (view === 'finance') return <FinancePage store={store} saveStore={saveStore} />;
+
   if (view === 'payments') {
-    return <PaymentsManagePage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} />;
+    return <PaymentsManagePage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} lane={peopleLane} />;
   }
 
   if (view === 'notifications') {
@@ -333,7 +357,7 @@ export function WorkspacePages({
 
   if (view === 'reports') {
     const stats = operationsStats(store);
-    const revenue = store.payments.reduce((sum, row) => sum + (Number(row.amountPaid) || 0), 0);
+    const collected = centerTuitionTotals(store);
     function exportCsv() {
       const lines = [
         'Report,Value',
@@ -343,7 +367,12 @@ export function WorkspacePages({
         `Pending applications,${stats.pendingEnrollments}`,
         `Sessions today,${stats.todayClasses}`,
         `Open tasks,${stats.pendingTasks}`,
-        `Total revenue,${revenue}`,
+        `Total Tuition,${collected.tuition}`,
+        `Total Paid,${collected.paid}`,
+        `Outstanding Balance,${collected.outstanding}`,
+        `Paid students,${collected.paidCount}`,
+        `Partially paid students,${collected.partialCount}`,
+        `Unpaid students,${collected.unpaidCount}`,
         `Attendance records,${store.attendance.length}`,
         `Progress notes,${store.reports.length}`,
       ];
@@ -373,7 +402,8 @@ export function WorkspacePages({
           <article className="stat-card"><div><p>Open tasks</p><strong>{stats.pendingTasks}</strong></div></article>
           <article className="stat-card"><div><p>Attendance records</p><strong>{store.attendance.length}</strong></div></article>
           <article className="stat-card"><div><p>Progress notes</p><strong>{store.reports.length}</strong></div></article>
-          <article className="stat-card"><div><p>Payments</p><strong>{store.payments.length}</strong></div></article>
+          <article className="stat-card"><div><p>Total paid</p><strong>₱{collected.paid.toLocaleString()}</strong></div></article>
+          <article className="stat-card"><div><p>Outstanding balance</p><strong>₱{collected.outstanding.toLocaleString()}</strong></div></article>
           <article className="stat-card"><div><p>Audit entries</p><strong>{store.auditLogs.length}</strong></div></article>
         </section>
       </>

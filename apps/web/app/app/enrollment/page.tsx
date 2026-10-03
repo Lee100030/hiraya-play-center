@@ -3,7 +3,7 @@
 import { useStore } from '@/components/StoreProvider';
 import { api } from '@/lib/api';
 import { Button, EmptyState, Loading, StatusBadge, Table } from '@hiraya/ui';
-import { newId, studentDisplay } from '@hiraya/utils';
+import { isTeacherApplication, newId, studentDisplay } from '@hiraya/utils';
 
 export default function EnrollmentPage() {
   const { store, loading, refresh } = useStore();
@@ -20,8 +20,8 @@ export default function EnrollmentPage() {
   return (
     <>
       <h1>Enrollment</h1>
-      <h2>Applications</h2>
-      {store.enrollmentApplications.length === 0 ? (
+      <h2>Student enrollment</h2>
+      {store.enrollmentApplications.filter((row) => !isTeacherApplication(row)).length === 0 ? (
         <EmptyState title="No applications" />
       ) : (
         <Table>
@@ -35,7 +35,7 @@ export default function EnrollmentPage() {
             </tr>
           </thead>
           <tbody>
-            {store.enrollmentApplications.map((row) => (
+            {store.enrollmentApplications.filter((row) => !isTeacherApplication(row)).map((row) => (
               <tr key={row.applicationId}>
                 <td>{row.studentFullname}</td>
                 <td>
@@ -58,6 +58,47 @@ export default function EnrollmentPage() {
                         variant="ghost"
                         onClick={() => setApplicationStatus(row.applicationId, 'rejected')}
                       >
+                        Reject
+                      </Button>
+                    </>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      <h2>Teacher applications</h2>
+      <p>These are job applications. Approving one does not create a student.</p>
+      {store.enrollmentApplications.filter((row) => isTeacherApplication(row)).length === 0 ? (
+        <EmptyState title="No teacher applications" />
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <th>Applicant</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {store.enrollmentApplications.filter((row) => isTeacherApplication(row)).map((row) => (
+              <tr key={row.applicationId}>
+                <td>{row.studentFullname}</td>
+                <td>{row.parentEmail}</td>
+                <td>{row.preferredProgram}</td>
+                <td>
+                  <StatusBadge status={row.status} />
+                </td>
+                <td>
+                  {row.status === 'pending_review' || row.status === 'pending' ? (
+                    <>
+                      <Button type="button" onClick={() => setApplicationStatus(row.applicationId, 'approved')}>
+                        Approve
+                      </Button>{' '}
+                      <Button type="button" variant="ghost" onClick={() => setApplicationStatus(row.applicationId, 'rejected')}>
                         Reject
                       </Button>
                     </>

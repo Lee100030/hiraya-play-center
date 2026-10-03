@@ -44,6 +44,7 @@ public static class HirayaCollections
     public const string CenterHolidays = "centerHolidays";
     public const string TeacherDuties = "teacherDuties";
     public const string WebsiteGallery = "websiteGallery";
+    public const string StudentDocuments = "studentDocuments";
 }
 
 public class HirayaUser
@@ -55,6 +56,7 @@ public class HirayaUser
     public string LastName { get; set; } = "";
     public string Fullname { get; set; } = "";
     public string Email { get; set; } = "";
+    public string PersonalEmail { get; set; } = "";
     public string Role { get; set; } = UserRoles.Parent;
     public string Status { get; set; } = "active";
     public string? Phone { get; set; }
@@ -121,6 +123,7 @@ public class Student
     public string Status { get; set; } = "active";
     public string EnrollmentDate { get; set; } = "";
     public string Notes { get; set; } = "";
+    public string ProfileImagePath { get; set; } = "";
 }
 
 public class StudentOpsRecord
@@ -132,6 +135,7 @@ public class StudentOpsRecord
     public bool HasFetcherId { get; set; }
     public bool HasNametag { get; set; }
     public decimal FeeAmount { get; set; }
+    public decimal TuitionFee { get; set; }
     public decimal LaceAmount { get; set; }
     public string CurrentSlot { get; set; } = "";
     public string Package { get; set; } = "";
@@ -238,6 +242,8 @@ public class LearningProgram
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public string Status { get; set; } = "active";
+    public decimal TuitionFee { get; set; }
+    public int PackageSessions { get; set; }
 }
 
 public class LearningClass
@@ -280,6 +286,7 @@ public class EnrollmentApplication
     public string Status { get; set; } = "pending_review";
     public string? StudentNumber { get; set; }
     public string Notes { get; set; } = "";
+    public string ApplicationKind { get; set; } = "student";
 }
 
 public class AttendanceRecord
@@ -519,8 +526,38 @@ public class Payment
     public string DueAt { get; set; } = "";
     public string PaidAt { get; set; } = "";
     public string RecordedBy { get; set; } = "";
+    public string ReceivedBy { get; set; } = "";
+    public string AccountNumber { get; set; } = "";
+    public string FromAccountNumber { get; set; } = "";
+    public string ReceiptPath { get; set; } = "";
+    public string ReceiptName { get; set; } = "";
     public string Notes { get; set; } = "";
+    public string IncomeBucket { get; set; } = "";
     public List<PaymentHistoryEntry> History { get; set; } = new();
+}
+
+public class CenterExpense
+{
+    public string ExpenseId { get; set; } = "";
+    public string ExpenseDate { get; set; } = "";
+    public string Item { get; set; } = "";
+    public string Category { get; set; } = "";
+    public decimal Amount { get; set; }
+    public string PaidTo { get; set; } = "";
+    public string PaidBy { get; set; } = "";
+    public string Note { get; set; } = "";
+    public string CreatedAt { get; set; } = "";
+    public string UpdatedAt { get; set; } = "";
+    public string Kind { get; set; } = "expense";
+}
+
+public class OpeningBalance
+{
+    public string OpeningId { get; set; } = "";
+    public string Month { get; set; } = "";
+    public decimal Amount { get; set; }
+    public string Note { get; set; } = "";
+    public string UpdatedAt { get; set; } = "";
 }
 
 public static class NotificationKinds
@@ -651,6 +688,8 @@ public class HirayaDatabase
     public List<NewsItem> News { get; set; } = new();
     public List<LeaveRequest> LeaveRequests { get; set; } = new();
     public List<Payment> Payments { get; set; } = new();
+    public List<CenterExpense> CenterExpenses { get; set; } = new();
+    public List<OpeningBalance> OpeningBalances { get; set; } = new();
     public List<SystemAlert> Alerts { get; set; } = new();
     public List<AuditLogEntry> AuditLogs { get; set; } = new();
     public List<RolePermission> RolePermissions { get; set; } = new();
@@ -669,7 +708,20 @@ public class HirayaDatabase
     public List<SessionHistoryEntry> SessionHistory { get; set; } = new();
     public List<TeacherComment> TeacherComments { get; set; } = new();
     public List<TeacherAdminNote> TeacherNotes { get; set; } = new();
+    public List<StudentDocument> StudentDocuments { get; set; } = new();
+    public List<ChatGroup> ChatGroups { get; set; } = new();
     public CenterSettings Settings { get; set; } = new();
+}
+
+public class ChatGroup
+{
+    public string GroupId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string MemberIds { get; set; } = "";
+    public string CreatedBy { get; set; } = "";
+    public string CreatedAt { get; set; } = "";
+    public string UpdatedAt { get; set; } = "";
+    public string Status { get; set; } = "active";
 }
 
 public class AppRole
@@ -700,7 +752,7 @@ public class RolePermission
 public class CenterSettings
 {
     public string SettingsId { get; set; } = "center";
-    public string CenterName { get; set; } = "HIRAYA Learning Center";
+    public string CenterName { get; set; } = "Hiraya Kids Learning Center";
     public string LogoPath { get; set; } = "";
     public string Address { get; set; } = "";
     public string Phone { get; set; } = "";
@@ -708,7 +760,7 @@ public class CenterSettings
     public string Website { get; set; } = "";
     public string Description { get; set; } = "";
     public string AboutTitle { get; set; } = "About HIRAYA";
-    public string WelcomeTitle { get; set; } = "Welcome to HIRAYA Learning Center";
+    public string WelcomeTitle { get; set; } = "Welcome to Hiraya Kids Learning Center";
     public string WelcomeMessage { get; set; } = "";
     public string Mission { get; set; } = "";
     public string Vision { get; set; } = "";

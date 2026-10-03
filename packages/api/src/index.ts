@@ -1,5 +1,6 @@
 import { resolveApiBaseUrl, SESSION_HEADER } from '@hiraya/config';
-import { emptyStore, type AuthSession, type EnrollmentApplyInput, type HirayaDatabase, type HirayaUser, type PublicSite } from '@hiraya/types';
+import { emptyStore, type AuthSession, type EnrollmentApplyInput, type HirayaDatabase, type HirayaUser, type PublicSite, type TeacherApplyInput } from '@hiraya/types';
+import { diffStore } from '@hiraya/utils';
 
 export class ApiError extends Error {
   constructor(
@@ -17,6 +18,8 @@ export type TokenStore = {
 };
 
 export class HirayaApi {
+  private cachedToken = '';
+
   constructor(
     private readonly tokenStore: TokenStore,
     private readonly baseUrl = resolveApiBaseUrl(),
@@ -26,6 +29,7 @@ export class HirayaApi {
     const headers: Record<string, string> = {};
     if (json) headers['Content-Type'] = 'application/json';
     const token = await this.tokenStore.getToken();
+    if (typeof token === 'string' && token) this.cachedToken = token;
     if (token) headers[SESSION_HEADER] = token;
     return headers;
   }
@@ -96,17 +100,26 @@ export class HirayaApi {
     });
     const session = await this.parse<AuthSession>(res);
     await this.tokenStore.setToken?.(session.token);
+    if (session.token) this.cachedToken = session.token;
     return session;
   }
 
   async logout(): Promise<void> {
     try {
+      const signal =
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(4000)
+          : undefined;
       await fetch(this.url('/api/auth/logout'), {
         method: 'POST',
         headers: await this.headers(),
+        signal,
       });
+    } catch {
+      /* Local sign-out still proceeds if the API is offline. */
     } finally {
       await this.tokenStore.setToken?.(null);
+      this.cachedToken = '';
     }
   }
 
@@ -156,7 +169,20 @@ export class HirayaApi {
     return { ...emptyStore(), ...(data || {}) };
   }
 
-  async putStore(db: HirayaDatabase): Promise<HirayaDatabase> {
+  async saveChanges(base: HirayaDatabase, next: HirayaDatabase): Promise<HirayaDatabase> {
+    const patch = diffStore(base as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
+    if (patch.collections.length === 0) return base;
+    const res = await fetch(this.url('/api/store/patch'), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify(patch),
+    });
+    const saved = await this.parse<HirayaDatabase | undefined>(res);
+    return saved ? { ...emptyStore(), ...saved } : this.getStore();
+  }
+
+  async putStore(db: HirayaDatabase, base?: HirayaDatabase): Promise<HirayaDatabase> {
+    if (base) return this.saveChanges(base, db);
     const res = await fetch(this.url('/api/store'), {
       method: 'PUT',
       headers: await this.headers(),
@@ -167,8 +193,8 @@ export class HirayaApi {
     return saved ?? this.getStore();
   }
 
-  async sendDirectMessage(toUserId: string, body: string): Promise<HirayaDatabase> {
-    const payload = JSON.stringify({ toUserId, body });
+  async sendDirectMessage(toUserId: string, body: string, groupId = ''): Promise<HirayaDatabase> {
+    const payload = JSON.stringify({ toUserId, groupId, body });
     const headers = await this.headers();
     let res = await fetch(this.url('/api/messages'), { method: 'POST', headers, body: payload });
     if (res.status === 404) {
@@ -176,6 +202,36 @@ export class HirayaApi {
     }
     const saved = await this.parse<HirayaDatabase | undefined>(res);
     return saved ? { ...emptyStore(), ...saved } : this.getStore();
+  }
+
+  async deleteDirectMessage(alertId: string): Promise<HirayaDatabase> {
+    const id = encodeURIComponent((alertId || '').trim());
+    const headers = await this.headers();
+    let res = await fetch(this.url(`/api/messages/${id}`), { method: 'DELETE', headers });
+    if (res.status === 404) {
+      res = await fetch(this.url(`/api/direct-messages/${id}`), { method: 'DELETE', headers });
+    }
+    const saved = await this.parse<HirayaDatabase | undefined>(res);
+    return saved ? { ...emptyStore(), ...saved } : this.getStore();
+  }
+
+  async createChatGroup(name: string, memberIds: string[]): Promise<HirayaDatabase> {
+    const res = await fetch(this.url('/api/chat-groups'), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify({ name, memberIds }),
+    });
+    const saved = await this.parse<HirayaDatabase | undefined>(res);
+    return saved ? { ...emptyStore(), ...saved } : this.getStore();
+  }
+
+  async scheduleTeacherInterview(applicationId: string, when: string, place: string, instructions?: string): Promise<HirayaDatabase> {
+    const res = await fetch(this.url(`/api/enrollment/applications/${applicationId}/interview`), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify({ when, place, instructions: instructions || '' }),
+    });
+    return this.parse<HirayaDatabase>(res);
   }
 
   async approveEnrollment(applicationId: string, classId?: string): Promise<HirayaDatabase> {
@@ -221,6 +277,7 @@ export class HirayaApi {
     middleName?: string;
     lastName?: string;
     email: string;
+    personalEmail?: string;
     password?: string;
     confirmPassword?: string;
     phone?: string;
@@ -283,9 +340,37 @@ export class HirayaApi {
     return this.getStore();
   }
 
+  studentPhotoUrl(studentId: string, version?: string | number | null): string {
+    return this.profileMediaUrl(studentId, version);
+  }
+
+  async uploadStudentPhoto(studentId: string, file: Blob, fileName = 'photo.jpg'): Promise<HirayaDatabase> {
+    const headers = (await this.headers(false)) as Record<string, string>;
+    const body = new FormData();
+    body.append('file', file, fileName);
+    const res = await fetch(this.url(`/api/students/${encodeURIComponent(studentId)}/photo`), {
+      method: 'POST',
+      headers,
+      body,
+    });
+    await this.parse(res);
+    return this.getStore();
+  }
+
+  async removeStudentPhoto(studentId: string): Promise<HirayaDatabase> {
+    const res = await fetch(this.url(`/api/students/${encodeURIComponent(studentId)}/photo`), {
+      method: 'DELETE',
+      headers: await this.headers(false),
+    });
+    await this.parse(res);
+    return this.getStore();
+  }
+
   profileMediaUrl(userId: string, version?: string | number | null): string {
     const stamp = version != null && String(version).trim() ? String(version) : String(Date.now());
-    return `${this.url(`/api/media/profile/${encodeURIComponent(userId)}`)}?v=${encodeURIComponent(stamp)}`;
+    const token = this.cachedToken;
+    const session = token ? `&session=${encodeURIComponent(token)}` : '';
+    return `${this.url(`/api/media/profile/${encodeURIComponent(userId)}`)}?v=${encodeURIComponent(stamp)}${session}`;
   }
 
   async setStaffActive(userId: string, active: boolean): Promise<HirayaDatabase> {
@@ -312,11 +397,12 @@ export class HirayaApi {
     firstName: string;
     middleName?: string;
     lastName: string;
-    email: string;
-    phone?: string;
-    address?: string;
-    notes?: string;
-    password: string;
+      email: string;
+      personalEmail?: string;
+      phone?: string;
+      address?: string;
+      notes?: string;
+      password: string;
     confirmPassword: string;
     relationship?: string;
     studentId?: string;
@@ -337,6 +423,7 @@ export class HirayaApi {
       middleName?: string;
       lastName: string;
       email: string;
+      personalEmail?: string;
       phone?: string;
       address?: string;
       notes?: string;
@@ -371,6 +458,7 @@ export class HirayaApi {
       middleName?: string;
       lastName: string;
       email: string;
+      personalEmail?: string;
       phone?: string;
       address?: string;
       notes?: string;
@@ -382,7 +470,7 @@ export class HirayaApi {
     const firstName = input.firstName.trim();
     const lastName = input.lastName.trim();
     const middleName = (input.middleName || '').trim();
-    return this.putStore({
+    return this.saveChanges(store, {
       ...store,
       users: store.users.map((item) =>
         item.userId === parentId
@@ -393,6 +481,7 @@ export class HirayaApi {
               lastName,
               fullname: [firstName, middleName, lastName].filter(Boolean).join(' '),
               email: input.email.trim(),
+              personalEmail: (input.personalEmail || item.personalEmail || '').trim(),
               phone: input.phone || '',
               address: input.address || '',
               notes: input.notes || item.notes || '',
@@ -443,6 +532,85 @@ export class HirayaApi {
     return this.getStore();
   }
 
+  studentFileUrl(documentId: string, version?: string | number | null): string {
+    const stamp = version != null && String(version).trim() ? String(version) : String(Date.now());
+    return `${this.url(`/api/media/student-files/${encodeURIComponent(documentId)}`)}?v=${encodeURIComponent(stamp)}`;
+  }
+
+  async openStudentFile(documentId: string, version?: string | number | null): Promise<void> {
+    const res = await fetch(this.studentFileUrl(documentId, version), {
+      headers: await this.headers(false),
+    });
+    if (!res.ok) {
+      await this.parse(res);
+      return;
+    }
+    const blob = await res.blob();
+    const href = URL.createObjectURL(blob);
+    window.open(href, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  }
+
+  async uploadStudentFile(
+    studentId: string,
+    file: Blob,
+    fileName: string,
+    kind: string,
+    title?: string,
+  ): Promise<HirayaDatabase> {
+    const headers = (await this.headers(false)) as Record<string, string>;
+    const body = new FormData();
+    body.append('file', file, fileName);
+    body.append('kind', kind);
+    if (title) body.append('title', title);
+    const res = await fetch(this.url(`/api/students/${encodeURIComponent(studentId)}/files`), {
+      method: 'POST',
+      headers,
+      body,
+    });
+    await this.parse(res);
+    return this.getStore();
+  }
+
+  async uploadPaymentReceipt(paymentId: string, file: Blob, fileName: string): Promise<HirayaDatabase> {
+    const headers = (await this.headers(false)) as Record<string, string>;
+    const body = new FormData();
+    body.append('file', file, fileName);
+    const res = await fetch(this.url(`/api/payments/${encodeURIComponent(paymentId)}/receipt`), {
+      method: 'POST',
+      headers,
+      body,
+    });
+    await this.parse(res);
+    return this.getStore();
+  }
+
+  async openPaymentReceipt(paymentId: string): Promise<void> {
+    const res = await fetch(this.url(`/api/payments/${encodeURIComponent(paymentId)}/receipt`), {
+      headers: await this.headers(false),
+    });
+    if (!res.ok) {
+      await this.parse(res);
+      return;
+    }
+    const blob = await res.blob();
+    const href = URL.createObjectURL(blob);
+    window.open(href, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  }
+
+  async deleteStudentFile(studentId: string, documentId: string): Promise<HirayaDatabase> {
+    const res = await fetch(
+      this.url(`/api/students/${encodeURIComponent(studentId)}/files/${encodeURIComponent(documentId)}`),
+      {
+        method: 'DELETE',
+        headers: await this.headers(false),
+      },
+    );
+    await this.parse(res);
+    return this.getStore();
+  }
+
   async me(): Promise<HirayaUser> {
     const res = await fetch(this.url('/api/auth/me'), {
       headers: await this.headers(false),
@@ -453,6 +621,16 @@ export class HirayaApi {
 
   async applyEnrollment(input: EnrollmentApplyInput): Promise<{ submitted?: boolean; applicationId?: string }> {
     const res = await fetch(this.url('/api/public/enrollment'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(20000) : undefined,
+    });
+    return this.parse(res);
+  }
+
+  async applyTeacher(input: TeacherApplyInput): Promise<{ submitted?: boolean; applicationId?: string }> {
+    const res = await fetch(this.url('/api/public/teacher-application'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -484,6 +662,85 @@ export class HirayaApi {
     return this.parse(res);
   }
 
+  async saveModule(
+    fields: {
+      moduleId?: string;
+      title: string;
+      description?: string;
+      programId?: string;
+      subject?: string;
+      gradeLevel?: string;
+      moduleType?: string;
+      classIds?: string[];
+      version?: string;
+      changeDescription?: string;
+      publish?: boolean;
+      notifyTeachers?: boolean;
+      status?: string;
+    },
+    file?: File | null,
+  ): Promise<HirayaDatabase> {
+    const headers = (await this.headers(false)) as Record<string, string>;
+    const body = new FormData();
+    if (fields.moduleId) body.append('moduleId', fields.moduleId);
+    body.append('title', fields.title || '');
+    body.append('description', fields.description || '');
+    body.append('programId', fields.programId || '');
+    body.append('subject', fields.subject || '');
+    body.append('gradeLevel', fields.gradeLevel || '');
+    body.append('moduleType', fields.moduleType || '');
+    body.append('classIds', (fields.classIds || []).join(','));
+    body.append('version', fields.version || '');
+    body.append('changeDescription', fields.changeDescription || '');
+    body.append('publish', fields.publish === true || fields.status === 'published' ? 'true' : 'false');
+    body.append('notifyTeachers', fields.notifyTeachers === false ? 'false' : 'true');
+    if (file) body.append('file', file, file.name);
+    const res = await fetch(this.url('/api/modules'), { method: 'POST', headers, body });
+    const saved = await this.parse<{ moduleId?: string }>(res);
+    const moduleId = saved?.moduleId || fields.moduleId;
+    if (moduleId && fields.status && fields.status !== 'published') {
+      await this.setModuleStatus(moduleId, fields.status);
+    }
+    return this.getStore();
+  }
+
+  async setModuleStatus(moduleId: string, status: string): Promise<HirayaDatabase> {
+    const res = await fetch(this.url(`/api/modules/${encodeURIComponent(moduleId)}/status`), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify({ status }),
+    });
+    await this.parse(res);
+    return this.getStore();
+  }
+
+  async openModuleFile(moduleId: string, versionId?: string | null): Promise<void> {
+    const query = new URLSearchParams();
+    if (versionId) query.set('versionId', versionId);
+    query.set('inline', 'true');
+    const res = await fetch(
+      this.url(`/api/modules/${encodeURIComponent(moduleId)}/file?${query.toString()}`),
+      { headers: await this.headers(false) },
+    );
+    if (!res.ok) {
+      await this.parse(res);
+      return;
+    }
+    const blob = await res.blob();
+    const href = URL.createObjectURL(blob);
+    const disposition = res.headers.get('content-disposition') || '';
+    const named = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition)?.[1];
+    const name = named ? decodeURIComponent(named.replace(/"/g, '')) : '';
+    const opened = window.open(href, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = name || 'module';
+      link.click();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  }
+
   async saveWebsiteLanding(welcomeTitle: string, welcomeMessage: string): Promise<void> {
     const res = await fetch(this.url('/api/admin/website/landing'), {
       method: 'PUT',
@@ -504,6 +761,104 @@ export class HirayaApi {
       method: 'PUT',
       headers: await this.headers(),
       body: JSON.stringify(input),
+    });
+    await this.parse(res);
+  }
+
+  async notifyStudentBalance(
+    studentId: string,
+    recipients?: { userId: string; personalEmail: string }[],
+    accountNumber?: string,
+    fromAccountNumber?: string,
+  ): Promise<{
+    notified: boolean;
+    emailed: boolean;
+    to: string;
+    accountCount: number;
+    smtpReady: boolean;
+    emailError?: string | null;
+  }> {
+    const id = encodeURIComponent((studentId || '').trim());
+    const res = await fetch(this.url(`/api/students/${id}/balance-notice`), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify({
+        recipients: recipients || [],
+        accountNumber: (accountNumber || '').trim(),
+        fromAccountNumber: (fromAccountNumber || '').trim(),
+      }),
+    });
+    return this.parse(res);
+  }
+
+  async notifyTeacherPayment(
+    paymentId: string,
+    personalEmail?: string,
+    accountNumber?: string,
+    fromAccountNumber?: string,
+    amount?: number,
+    amountPaid?: number,
+  ): Promise<{
+    notified: boolean;
+    emailed: boolean;
+    to: string;
+    accountCount: number;
+    smtpReady: boolean;
+    emailError?: string | null;
+  }> {
+    const id = encodeURIComponent((paymentId || '').trim());
+    const res = await fetch(this.url(`/api/payments/${id}/notify`), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify({
+        personalEmail: (personalEmail || '').trim(),
+        accountNumber: (accountNumber || '').trim(),
+        fromAccountNumber: (fromAccountNumber || '').trim(),
+        amount: Number.isFinite(amount) ? amount : undefined,
+        amountPaid: Number.isFinite(amountPaid) ? amountPaid : undefined,
+      }),
+    });
+    return this.parse(res);
+  }
+
+  async sendTeacherPayslip(
+    paymentId: string,
+    personalEmail?: string,
+    accountNumber?: string,
+    fromAccountNumber?: string,
+    amount?: number,
+    amountPaid?: number,
+  ): Promise<{ emailed: boolean; notified: boolean; to: string }> {
+    const id = encodeURIComponent((paymentId || '').trim());
+    const res = await fetch(this.url(`/api/payments/${id}/payslip`), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify({
+        personalEmail: (personalEmail || '').trim(),
+        accountNumber: (accountNumber || '').trim(),
+        fromAccountNumber: (fromAccountNumber || '').trim(),
+        amount: Number.isFinite(amount) ? amount : undefined,
+        amountPaid: Number.isFinite(amountPaid) ? amountPaid : undefined,
+      }),
+    });
+    return this.parse(res);
+  }
+
+  async sendParentFeedback(input: {
+    targetType: 'center' | 'teacher';
+    teacherId?: string;
+    rating?: number;
+    message: string;
+  }): Promise<void> {
+    const res = await fetch(this.url('/api/feedback'), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify({
+        targetType: input.targetType,
+        teacherId: input.teacherId || '',
+        rating: input.rating ?? 0,
+        message: input.message,
+      }),
     });
     await this.parse(res);
   }

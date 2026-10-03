@@ -4,7 +4,7 @@ import { AdminModal } from '@/components/admin/AdminModal';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { useStore } from '@/components/StoreProvider';
 import { Button, EmptyState, Field, Input, Loading, Select, StatusBadge, Textarea } from '@hiraya/ui';
-import { newId } from '@hiraya/utils';
+import { isTeacherApplication, newId } from '@hiraya/utils';
 import type { LearningProgram } from '@hiraya/types';
 import { FormEvent, useState } from 'react';
 
@@ -24,7 +24,10 @@ export default function AdminProgramsPage() {
   function enrolledCount(name: string) {
     const fromStudents = store.students.filter((item) => (item.program || '').toLowerCase() === name.toLowerCase()).length;
     const fromApps = store.enrollmentApplications.filter(
-      (item) => (item.preferredProgram || '').toLowerCase() === name.toLowerCase() && (item.status === 'approved'),
+      (item) =>
+        !isTeacherApplication(item) &&
+        (item.preferredProgram || '').toLowerCase() === name.toLowerCase() &&
+        item.status === 'approved',
     ).length;
     return Math.max(fromStudents, fromApps);
   }

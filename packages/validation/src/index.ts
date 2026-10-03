@@ -59,6 +59,14 @@ export const enrollPublicSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const teacherApplySchema = z.object({
+  fullname: z.string().min(2, 'Full name is required'),
+  email: z.string().email('Enter a valid email'),
+  phone,
+  position: z.string().min(1, 'Select the role you want to teach'),
+  notes: z.string().optional(),
+});
+
 export const paymentSchema = z.object({
   studentId: z.string().min(1),
   amount: z.coerce.number().positive(),

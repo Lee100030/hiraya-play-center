@@ -64,6 +64,24 @@ public class EfHirayaRepository : IHirayaRepository
         }
     }
 
+    public async Task<HirayaDatabase> ApplyClientPatchAsync(StorePatchRequest patch, HirayaUser actor, CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            var current = await LoadUnlockedAsync(ct);
+            var edited = Clone(current);
+            StorePatch.Apply(edited, patch);
+            var merged = StoreSanitizer.MergeStoreWrite(current, edited, actor);
+            await SaveChangedAsync(current, merged, ct);
+            return merged;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public Task SetItemAsync<T>(string collection, string id, T item, CancellationToken ct = default) =>
         MutateAsync(_ => Task.CompletedTask, ct);
 
@@ -88,43 +106,128 @@ public class EfHirayaRepository : IHirayaRepository
 
     private async Task<HirayaDatabase> LoadUnlockedAsync(CancellationToken ct)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
+        using var limiter = new SemaphoreSlim(8);
+        async Task<List<T>> ReadAsync<T>(Func<HirayaLearningCenterDbContext, IQueryable<T>> query, bool optional) where T : class
+        {
+            await limiter.WaitAsync(ct);
+            try
+            {
+                await using var db = await _factory.CreateDbContextAsync(ct);
+                try
+                {
+                    return await query(db).AsNoTracking().ToListAsync(ct);
+                }
+                catch (Exception) when (optional && !ct.IsCancellationRequested)
+                {
+                    return [];
+                }
+            }
+            finally
+            {
+                limiter.Release();
+            }
+        }
+
+        async Task<CenterSettings> ReadSettingsAsync()
+        {
+            await limiter.WaitAsync(ct);
+            try
+            {
+                await using var db = await _factory.CreateDbContextAsync(ct);
+                return await db.Settings.AsNoTracking().OrderBy(s => s.SettingsId).FirstOrDefaultAsync(ct) ?? new CenterSettings();
+            }
+            finally
+            {
+                limiter.Release();
+            }
+        }
+
+        var users = ReadAsync(db => db.Users, false);
+        var roles = ReadAsync(db => db.Roles, false);
+        var rolePermissions = ReadAsync(db => db.RolePermissions, false);
+        var teacherProfiles = ReadAsync(db => db.TeacherProfiles, false);
+        var students = ReadAsync(db => db.Students, false);
+        var programs = ReadAsync(db => db.Programs, false);
+        var classes = ReadAsync(db => db.Classes, false);
+        var rooms = ReadAsync(db => db.Rooms, false);
+        var enrollments = ReadAsync(db => db.Enrollments, false);
+        var enrollmentApplications = ReadAsync(db => db.EnrollmentApplications, false);
+        var attendance = ReadAsync(db => db.Attendance, false);
+        var reports = ReadAsync(db => db.ProgressRecords, false);
+        var schedules = ReadAsync(db => db.Schedules, false);
+        var teacherWorkShifts = ReadAsync(db => db.TeacherWorkShifts, false);
+        var teacherRoleOptions = ReadAsync(db => db.TeacherRoleOptions, false);
+        var news = ReadAsync(db => db.News, false);
+        var leaveRequests = ReadAsync(db => db.LeaveRequests, false);
+        var payments = ReadAsync(db => db.Payments, false);
+        var centerExpenses = ReadAsync(db => db.CenterExpenses, true);
+        var openingBalances = ReadAsync(db => db.OpeningBalances, true);
+        var alerts = ReadAsync(db => db.Notifications, false);
+        var auditLogs = ReadAsync(db => db.AuditLogs, false);
+        var learningModules = ReadAsync(db => db.LearningModules, false);
+        var learningModuleVersions = ReadAsync(db => db.LearningModuleVersions, false);
+        var parentStudents = ReadAsync(db => db.ParentStudents, false);
+        var accountInvitations = ReadAsync(db => db.AccountInvitations, false);
+        var studentOps = ReadAsync(db => db.StudentOps, false);
+        var centerHolidays = ReadAsync(db => db.CenterHolidays, false);
+        var teacherDuties = ReadAsync(db => db.TeacherDuties, false);
+        var websiteGallery = ReadAsync(db => db.WebsiteGallery, false);
+        var staffTasks = ReadAsync(db => db.StaffTasks, false);
+        var sessionPackages = ReadAsync(db => db.SessionPackages, false);
+        var sessionHistory = ReadAsync(db => db.SessionHistory, false);
+        var teacherComments = ReadAsync(db => db.TeacherComments, true);
+        var teacherNotes = ReadAsync(db => db.TeacherNotes, true);
+        var studentDocuments = ReadAsync(db => db.StudentDocuments, true);
+        var chatGroups = ReadAsync(db => db.ChatGroups, true);
+        var settings = ReadSettingsAsync();
+        await Task.WhenAll(
+            users, roles, rolePermissions, teacherProfiles, students, programs, classes, rooms,
+            enrollments, enrollmentApplications, attendance, reports, schedules, teacherWorkShifts,
+            teacherRoleOptions, news, leaveRequests, payments, centerExpenses, openingBalances,
+            alerts, auditLogs, learningModules, learningModuleVersions, parentStudents, accountInvitations,
+            studentOps, centerHolidays, teacherDuties, websiteGallery, staffTasks, sessionPackages,
+            sessionHistory, teacherComments, teacherNotes, studentDocuments, chatGroups, settings);
+
         var data = new HirayaDatabase
         {
-            Users = await db.Users.AsNoTracking().ToListAsync(ct),
-            Roles = await db.Roles.AsNoTracking().ToListAsync(ct),
-            RolePermissions = await db.RolePermissions.AsNoTracking().ToListAsync(ct),
-            TeacherProfiles = await db.TeacherProfiles.AsNoTracking().ToListAsync(ct),
-            Students = await db.Students.AsNoTracking().ToListAsync(ct),
-            Programs = await db.Programs.AsNoTracking().ToListAsync(ct),
-            Classes = await db.Classes.AsNoTracking().ToListAsync(ct),
-            Rooms = await db.Rooms.AsNoTracking().ToListAsync(ct),
-            Enrollments = await db.Enrollments.AsNoTracking().ToListAsync(ct),
-            EnrollmentApplications = await db.EnrollmentApplications.AsNoTracking().ToListAsync(ct),
-            Attendance = await db.Attendance.AsNoTracking().ToListAsync(ct),
-            Reports = await db.ProgressRecords.AsNoTracking().ToListAsync(ct),
-            Schedules = await db.Schedules.AsNoTracking().ToListAsync(ct),
-            TeacherWorkShifts = await db.TeacherWorkShifts.AsNoTracking().ToListAsync(ct),
-            TeacherRoleOptions = await db.TeacherRoleOptions.AsNoTracking().ToListAsync(ct),
-            News = await db.News.AsNoTracking().ToListAsync(ct),
-            LeaveRequests = await db.LeaveRequests.AsNoTracking().ToListAsync(ct),
-            Payments = await db.Payments.AsNoTracking().ToListAsync(ct),
-            Alerts = await db.Notifications.AsNoTracking().ToListAsync(ct),
-            AuditLogs = await db.AuditLogs.AsNoTracking().ToListAsync(ct),
-            LearningModules = await db.LearningModules.AsNoTracking().ToListAsync(ct),
-            LearningModuleVersions = await db.LearningModuleVersions.AsNoTracking().ToListAsync(ct),
-            ParentStudents = await db.ParentStudents.AsNoTracking().ToListAsync(ct),
-            AccountInvitations = await db.AccountInvitations.AsNoTracking().ToListAsync(ct),
-            StudentOps = await db.StudentOps.AsNoTracking().ToListAsync(ct),
-            CenterHolidays = await db.CenterHolidays.AsNoTracking().ToListAsync(ct),
-            TeacherDuties = await db.TeacherDuties.AsNoTracking().ToListAsync(ct),
-            WebsiteGallery = await db.WebsiteGallery.AsNoTracking().ToListAsync(ct),
-            StaffTasks = await db.StaffTasks.AsNoTracking().ToListAsync(ct),
-            SessionPackages = await db.SessionPackages.AsNoTracking().ToListAsync(ct),
-            SessionHistory = await db.SessionHistory.AsNoTracking().ToListAsync(ct),
-            TeacherComments = await SafeToListAsync(db.TeacherComments, ct),
-            TeacherNotes = await SafeToListAsync(db.TeacherNotes, ct),
-            Settings = await db.Settings.AsNoTracking().OrderBy(s => s.SettingsId).FirstOrDefaultAsync(ct) ?? new CenterSettings()
+            Users = await users,
+            Roles = await roles,
+            RolePermissions = await rolePermissions,
+            TeacherProfiles = await teacherProfiles,
+            Students = await students,
+            Programs = await programs,
+            Classes = await classes,
+            Rooms = await rooms,
+            Enrollments = await enrollments,
+            EnrollmentApplications = await enrollmentApplications,
+            Attendance = await attendance,
+            Reports = await reports,
+            Schedules = await schedules,
+            TeacherWorkShifts = await teacherWorkShifts,
+            TeacherRoleOptions = await teacherRoleOptions,
+            News = await news,
+            LeaveRequests = await leaveRequests,
+            Payments = await payments,
+            CenterExpenses = await centerExpenses,
+            OpeningBalances = await openingBalances,
+            Alerts = await alerts,
+            AuditLogs = await auditLogs,
+            LearningModules = await learningModules,
+            LearningModuleVersions = await learningModuleVersions,
+            ParentStudents = await parentStudents,
+            AccountInvitations = await accountInvitations,
+            StudentOps = await studentOps,
+            CenterHolidays = await centerHolidays,
+            TeacherDuties = await teacherDuties,
+            WebsiteGallery = await websiteGallery,
+            StaffTasks = await staffTasks,
+            SessionPackages = await sessionPackages,
+            SessionHistory = await sessionHistory,
+            TeacherComments = await teacherComments,
+            TeacherNotes = await teacherNotes,
+            StudentDocuments = await studentDocuments,
+            ChatGroups = await chatGroups,
+            Settings = await settings
         };
         FamilyAccess.EnsureLegacyLinks(data);
         WorkflowOps.EnsureLists(data);
@@ -177,6 +280,8 @@ public class EfHirayaRepository : IHirayaRepository
                 await ReplaceAsync(db.News, data.News, ct);
                 await ReplaceAsync(db.LeaveRequests, data.LeaveRequests, ct);
                 await ReplaceAsync(db.Payments, data.Payments, ct);
+                await ReplaceAsync(db.CenterExpenses, data.CenterExpenses, ct);
+                await ReplaceAsync(db.OpeningBalances, data.OpeningBalances, ct);
                 await ReplaceAsync(db.Notifications, data.Alerts, ct);
                 await ReplaceAsync(db.AuditLogs, data.AuditLogs, ct);
                 await ReplaceAsync(db.LearningModules, data.LearningModules, ct);
@@ -192,6 +297,8 @@ public class EfHirayaRepository : IHirayaRepository
                 await ReplaceAsync(db.SessionHistory, data.SessionHistory, ct);
                 await ReplaceAsync(db.TeacherComments, data.TeacherComments, ct);
                 await ReplaceAsync(db.TeacherNotes, data.TeacherNotes, ct);
+                await ReplaceAsync(db.StudentDocuments, data.StudentDocuments, ct);
+                await ReplaceAsync(db.ChatGroups, data.ChatGroups, ct);
 
                 var settings = await db.Settings.ToListAsync(ct);
                 db.Settings.RemoveRange(settings);
@@ -208,17 +315,85 @@ public class EfHirayaRepository : IHirayaRepository
         }
     }
 
-    private static async Task<List<T>> SafeToListAsync<T>(DbSet<T> set, CancellationToken ct) where T : class
+    private async Task SaveChangedAsync(HirayaDatabase before, HirayaDatabase after, CancellationToken ct)
     {
+        WorkflowOps.EnsureLists(before);
+        WorkflowOps.EnsureLists(after);
+        foreach (var user in after.Users)
+        {
+            if (!string.IsNullOrWhiteSpace(user.Password))
+                continue;
+            var prior = before.Users.FirstOrDefault(item => item.UserId == user.UserId);
+            if (prior != null)
+                user.Password = prior.Password;
+        }
+        if (string.IsNullOrWhiteSpace(after.Settings.SettingsId))
+            after.Settings.SettingsId = "center";
+
+        await using var probe = await _factory.CreateDbContextAsync(ct);
+        var strategy = probe.Database.CreateExecutionStrategy();
         try
         {
-            return await set.AsNoTracking().ToListAsync(ct);
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var db = await _factory.CreateDbContextAsync(ct);
+                await using var tx = await db.Database.BeginTransactionAsync(ct);
+                if (!Same(before.Users, after.Users)) await ReplaceAsync(db.Users, after.Users, ct);
+                if (!Same(before.Roles, after.Roles)) await ReplaceAsync(db.Roles, after.Roles, ct);
+                if (!Same(before.RolePermissions, after.RolePermissions)) await ReplaceAsync(db.RolePermissions, after.RolePermissions, ct);
+                if (!Same(before.TeacherProfiles, after.TeacherProfiles)) await ReplaceAsync(db.TeacherProfiles, after.TeacherProfiles, ct);
+                if (!Same(before.Students, after.Students)) await ReplaceAsync(db.Students, after.Students, ct);
+                if (!Same(before.Programs, after.Programs)) await ReplaceAsync(db.Programs, after.Programs, ct);
+                if (!Same(before.Classes, after.Classes)) await ReplaceAsync(db.Classes, after.Classes, ct);
+                if (!Same(before.Rooms, after.Rooms)) await ReplaceAsync(db.Rooms, after.Rooms, ct);
+                if (!Same(before.Enrollments, after.Enrollments)) await ReplaceAsync(db.Enrollments, after.Enrollments, ct);
+                if (!Same(before.EnrollmentApplications, after.EnrollmentApplications)) await ReplaceAsync(db.EnrollmentApplications, after.EnrollmentApplications, ct);
+                if (!Same(before.Attendance, after.Attendance)) await ReplaceAsync(db.Attendance, after.Attendance, ct);
+                if (!Same(before.Reports, after.Reports)) await ReplaceAsync(db.ProgressRecords, after.Reports, ct);
+                if (!Same(before.Schedules, after.Schedules)) await ReplaceAsync(db.Schedules, after.Schedules, ct);
+                if (!Same(before.TeacherWorkShifts, after.TeacherWorkShifts)) await ReplaceAsync(db.TeacherWorkShifts, after.TeacherWorkShifts, ct);
+                if (!Same(before.TeacherRoleOptions, after.TeacherRoleOptions)) await ReplaceAsync(db.TeacherRoleOptions, after.TeacherRoleOptions, ct);
+                if (!Same(before.News, after.News)) await ReplaceAsync(db.News, after.News, ct);
+                if (!Same(before.LeaveRequests, after.LeaveRequests)) await ReplaceAsync(db.LeaveRequests, after.LeaveRequests, ct);
+                if (!Same(before.Payments, after.Payments)) await ReplaceAsync(db.Payments, after.Payments, ct);
+                if (!Same(before.CenterExpenses, after.CenterExpenses)) await ReplaceAsync(db.CenterExpenses, after.CenterExpenses, ct);
+                if (!Same(before.OpeningBalances, after.OpeningBalances)) await ReplaceAsync(db.OpeningBalances, after.OpeningBalances, ct);
+                if (!Same(before.Alerts, after.Alerts)) await ReplaceAsync(db.Notifications, after.Alerts, ct);
+                if (!Same(before.AuditLogs, after.AuditLogs)) await ReplaceAsync(db.AuditLogs, after.AuditLogs, ct);
+                if (!Same(before.LearningModules, after.LearningModules)) await ReplaceAsync(db.LearningModules, after.LearningModules, ct);
+                if (!Same(before.LearningModuleVersions, after.LearningModuleVersions)) await ReplaceAsync(db.LearningModuleVersions, after.LearningModuleVersions, ct);
+                if (!Same(before.ParentStudents, after.ParentStudents)) await ReplaceAsync(db.ParentStudents, after.ParentStudents, ct);
+                if (!Same(before.AccountInvitations, after.AccountInvitations)) await ReplaceAsync(db.AccountInvitations, after.AccountInvitations, ct);
+                if (!Same(before.StudentOps, after.StudentOps)) await ReplaceAsync(db.StudentOps, after.StudentOps, ct);
+                if (!Same(before.CenterHolidays, after.CenterHolidays)) await ReplaceAsync(db.CenterHolidays, after.CenterHolidays, ct);
+                if (!Same(before.TeacherDuties, after.TeacherDuties)) await ReplaceAsync(db.TeacherDuties, after.TeacherDuties, ct);
+                if (!Same(before.WebsiteGallery, after.WebsiteGallery)) await ReplaceAsync(db.WebsiteGallery, after.WebsiteGallery, ct);
+                if (!Same(before.StaffTasks, after.StaffTasks)) await ReplaceAsync(db.StaffTasks, after.StaffTasks, ct);
+                if (!Same(before.SessionPackages, after.SessionPackages)) await ReplaceAsync(db.SessionPackages, after.SessionPackages, ct);
+                if (!Same(before.SessionHistory, after.SessionHistory)) await ReplaceAsync(db.SessionHistory, after.SessionHistory, ct);
+                if (!Same(before.TeacherComments, after.TeacherComments)) await ReplaceAsync(db.TeacherComments, after.TeacherComments, ct);
+                if (!Same(before.TeacherNotes, after.TeacherNotes)) await ReplaceAsync(db.TeacherNotes, after.TeacherNotes, ct);
+                if (!Same(before.StudentDocuments, after.StudentDocuments)) await ReplaceAsync(db.StudentDocuments, after.StudentDocuments, ct);
+                if (!Same(before.ChatGroups, after.ChatGroups)) await ReplaceAsync(db.ChatGroups, after.ChatGroups, ct);
+                if (!Same(before.Settings, after.Settings))
+                {
+                    var settings = await db.Settings.ToListAsync(ct);
+                    db.Settings.RemoveRange(settings);
+                    db.Settings.Add(after.Settings);
+                }
+                await db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+            });
         }
-        catch
+        catch (Exception ex)
         {
-            return [];
+            _logger.LogError(ex, "Failed saving HLCMS store patch to MySQL.");
+            throw new InvalidOperationException("The database could not save those changes. Check that MySQL is running and try again.");
         }
     }
+
+    private static bool Same<T>(T before, T after) =>
+        JsonSerializer.Serialize(before, JsonDefaults.Options) == JsonSerializer.Serialize(after, JsonDefaults.Options);
 
     private static async Task ReplaceAsync<T>(DbSet<T> set, List<T>? next, CancellationToken ct) where T : class
     {

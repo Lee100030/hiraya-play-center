@@ -24,7 +24,10 @@ export function DirectMessageModal({
   onClose: () => void;
   onSend: (body: string) => void | Promise<void>;
 }) {
-  const rows = useMemo(() => threadMessages(alerts, actorId, person.userId), [alerts, actorId, person.userId]);
+  const rows = useMemo(
+    () => threadMessages(alerts, actorId, directThreadKey(actorId, person.userId)),
+    [alerts, actorId, person.userId],
+  );
   const name = displayName(person);
 
   return (

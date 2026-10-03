@@ -35,7 +35,7 @@ export function resolveApiBaseUrl(explicit?: string): string {
 }
 
 export const brand = {
-  name: 'HIRAYA Learning Center',
+  name: 'Hiraya Kids Learning Center',
   shortName: 'HIRAYA',
   green: '#0B3D2E',
   greenDeep: '#041009',

@@ -44,7 +44,7 @@ public class WebsiteContentService
         await _repository.MutateAsync(async db =>
         {
             db.Settings.WelcomeTitle = string.IsNullOrWhiteSpace(input.WelcomeTitle)
-                ? "Welcome to HIRAYA Learning Center"
+                ? "Welcome to Hiraya Kids Learning Center"
                 : input.WelcomeTitle.Trim();
             db.Settings.WelcomeMessage = (input.WelcomeMessage ?? "").Trim();
             db.Settings.UpdatedAt = DateTime.UtcNow.ToString("o");

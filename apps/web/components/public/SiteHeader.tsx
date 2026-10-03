@@ -3,7 +3,7 @@
 import { publicNav } from '@/lib/nav';
 import { crestSrc } from '@/lib/publicSite';
 import type { PublicSite } from '@hiraya/types';
-import { EnrollTrigger } from '@/components/public/enrollment';
+import { EnrollTrigger, TeacherApplyTrigger } from '@/components/public/enrollment';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -18,10 +18,10 @@ export function SiteHeader({ site }: { site: PublicSite }) {
     <header className="site-header">
       <Link href="/" className="site-brand">
         {src.startsWith('/') ? (
-          <Image src="/images/hiraya-crest.png" alt="HIRAYA Learning Center crest" width={48} height={48} />
+          <Image src="/images/hiraya-crest.png" alt="Hiraya Kids Learning Center crest" width={48} height={48} />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="HIRAYA Learning Center crest" width={48} height={48} />
+          <img src={src} alt="Hiraya Kids Learning Center crest" width={48} height={48} />
         )}
         <span>HIRAYA</span>
       </Link>
@@ -48,11 +48,15 @@ export function SiteHeader({ site }: { site: PublicSite }) {
             </Link>
           </span>
         ))}
+        <TeacherApplyTrigger className="site-nav-cta" onClick={() => setOpen(false)}>
+          Apply as a teacher
+        </TeacherApplyTrigger>
         <EnrollTrigger className="site-nav-cta" onClick={() => setOpen(false)}>
           Enroll now
         </EnrollTrigger>
       </nav>
       <div className="site-header-end">
+        <TeacherApplyTrigger className="btn-header-outline">Apply as a teacher</TeacherApplyTrigger>
         <EnrollTrigger className="btn-hero">Enroll now</EnrollTrigger>
       </div>
     </header>

@@ -1,5 +1,6 @@
 'use client';
 
+import { AdminProfileFact, AdminProfileModal } from '@/components/admin/AdminProfileModal';
 import { AdminModal } from '@/components/admin/AdminModal';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { AdminTable } from '@/components/admin/AdminTable';
@@ -7,28 +8,32 @@ import { CertificateModal } from '@/components/admin/CertificateModal';
 import { useStore } from '@/components/StoreProvider';
 import { api } from '@/lib/api';
 import { ProfilePhotoField, saveAccountPhoto } from '@/components/admin/ProfilePhotoField';
-import { Button, EmptyState, Field, FieldLegend, Input, Loading, Select, StatusBadge, emptyCell } from '@hiraya/ui';
-import { displayName, roleLabel } from '@hiraya/utils';
+import { Button, EmptyState, Field, FieldLegend, Input, Loading, PersonAvatar, ProgramSpecialtySelect, Select, StatusBadge, assignedCount, emptyCell } from '@hiraya/ui';
+import { displayName, laneLabel, parsePeopleLane, specialtyLaneLabel, staffDisplayRole, teacherInLane, assignedStudentsForTeacher, openTaskCountForTeacher } from '@hiraya/utils';
 import type { HirayaUser } from '@hiraya/types';
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 export default function AdminStaffPage() {
   const { store, loading, refresh } = useStore();
+  const lane = parsePeopleLane(useSearchParams().get('lane'), store);
   const [editing, setEditing] = useState<HirayaUser | null>(null);
   const [creating, setCreating] = useState(false);
   const [removing, setRemoving] = useState<HirayaUser | null>(null);
   const [certificate, setCertificate] = useState<HirayaUser | null>(null);
+  const [viewing, setViewing] = useState<HirayaUser | null>(null);
   const [error, setError] = useState('');
 
-  const people = store.users.filter((user) => user.role === 'teacher');
+  const people = store.users.filter((user) => user.role === 'teacher' && teacherInLane(store, user.userId, lane));
   const current = editing;
+  const viewingLive = viewing ? store.users.find((item) => item.userId === viewing.userId) || viewing : null;
 
   function assignedText(user: HirayaUser) {
     const cls = store.classes.find((item) => item.teacherId === user.userId);
     const program = store.programs.find((item) => item.programId === cls?.programId);
     const specialty = store.teacherProfiles.find((item) => item.userId === user.userId)?.specialty;
-    return program?.name || cls?.name || specialty || '';
+    return program?.name || cls?.name || specialtyLaneLabel(specialty) || '';
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -63,18 +68,22 @@ export default function AdminStaffPage() {
     if (!removing) return;
     setError('');
     try {
-      await api.saveStaff({
-        userId: removing.userId,
-        fullname: displayName(removing),
-        email: removing.email,
-        phone: removing.phone || '',
-        role: removing.role,
-        status: 'deactivated',
-      });
+      await api.setStaffActive(removing.userId, false);
       await refresh();
       setRemoving(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update staff');
+    }
+  }
+
+  async function setTeacherActive(row: HirayaUser, active: boolean) {
+    setError('');
+    try {
+      await api.setStaffActive(row.userId, active);
+      await refresh();
+      setViewing((currentView) => (currentView?.userId === row.userId ? { ...currentView, status: active ? 'active' : 'deactivated' } : currentView));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update teacher status');
     }
   }
 
@@ -84,8 +93,8 @@ export default function AdminStaffPage() {
     <>
       <AdminPageHeader
         kicker="Management"
-        title="Teachers Management"
-        description="Create and monitor teachers, their specialty, and assigned classes."
+        title={lane ? `Teachers Management · ${laneLabel(lane)}` : 'Teachers Management'}
+        description={lane ? `Teachers assigned to ${laneLabel(lane)}.` : 'Create and monitor teachers, their program, and assigned classes.'}
         actions={
           <button
             type="button"
@@ -103,10 +112,29 @@ export default function AdminStaffPage() {
       <AdminTable
         rows={people}
         rowKey={(row) => row.userId}
+        preferCards
+        selectable
+        onRefresh={() => void refresh()}
+        cardName={(row) => displayName(row)}
         empty={<EmptyState title="No teachers found" hint="Add a teacher to assign classes and students." />}
+        onRowOpen={(row) => setViewing(row)}
         columns={[
-          { key: 'name', header: 'Teacher', sortValue: (row) => displayName(row), render: (row) => displayName(row) },
-          { key: 'role', header: 'Role', sortValue: (row) => row.role, render: (row) => roleLabel(row.role) },
+          {
+            key: 'name',
+            header: 'Teacher',
+            sortValue: (row) => displayName(row),
+            render: (row) => (
+              <span className="name-cell">
+                <PersonAvatar
+                  name={displayName(row)}
+                  photo={row.profileImagePath ? api.profileMediaUrl(row.userId, row.updatedAt || row.profileImagePath) : undefined}
+                  size="sm"
+                />
+                {displayName(row)}
+              </span>
+            ),
+          },
+          { key: 'role', header: 'Role', sortValue: (row) => row.role, render: (row) => staffDisplayRole(row.role, store.teacherProfiles.find((item) => item.userId === row.userId)?.specialty) },
           { key: 'contact', header: 'Contact', sortValue: (row) => row.email, render: (row) => emptyCell(row.phone || row.email) },
           { key: 'assigned', header: 'Assigned Program / Class', sortValue: (row) => assignedText(row), render: (row) => emptyCell(assignedText(row)) },
           {
@@ -133,32 +161,71 @@ export default function AdminStaffPage() {
               ),
           },
         ]}
-        renderCard={(row) => (
-          <article className="admin-stack-card">
-            <h3>{displayName(row)}</h3>
-            <p>{roleLabel(row.role)}</p>
-            <p>{row.phone || row.email}</p>
-            <p>{emptyCell(assignedText(row))}</p>
-            {row.role === 'teacher' ? (
-              <div className="icon-actions">
-                <button type="button" className="table-action" onClick={() => setCertificate(row)}>
-                  COE
-                </button>
-                <Link className="icon-btn" href={`/admin/staff/${row.userId}`}>
-                  Workspace
-                </Link>
-                <button type="button" className="icon-btn" onClick={() => setEditing(row)}>
-                  ✎
-                </button>
-                <button type="button" className="icon-btn danger" onClick={() => setRemoving(row)}>
-                  ⌫
-                </button>
-              </div>
-            ) : null}
-          </article>
-        )}
+        renderCard={(row) => {
+          const specialty = store.teacherProfiles.find((item) => item.userId === row.userId)?.specialty;
+          const kids = assignedStudentsForTeacher(store, row.userId).length;
+          const open = openTaskCountForTeacher(store, row.userId);
+          const program = specialtyLaneLabel(specialty) || 'Program not set';
+          return (
+            <article className="people-card">
+              <PersonAvatar
+                name={displayName(row)}
+                photo={row.profileImagePath ? api.profileMediaUrl(row.userId, row.updatedAt || row.profileImagePath) : undefined}
+                size="lg"
+              />
+              <h3>{displayName(row)}</h3>
+              <p className="people-card-role">{staffDisplayRole(row.role, specialty)}</p>
+              <p className="people-card-stat">{`${program} · ${open} open tasks · ${kids} assigned students`}</p>
+            </article>
+          );
+        }}
       />
 
+      {viewingLive ? (
+        <AdminProfileModal
+          title="Teacher profile"
+          name={displayName(viewingLive)}
+          subtitle={staffDisplayRole(viewingLive.role, store.teacherProfiles.find((item) => item.userId === viewingLive.userId)?.specialty)}
+          status={viewingLive.status}
+          photo={viewingLive.profileImagePath ? api.profileMediaUrl(viewingLive.userId, viewingLive.updatedAt || viewingLive.profileImagePath) : undefined}
+          active={viewingLive.status === 'active'}
+          onToggleActive={(next) => void setTeacherActive(viewingLive, next)}
+          onClose={() => setViewing(null)}
+          actions={
+            <>
+              <Button type="button" variant="ghost" onClick={() => setViewing(null)}>
+                Close
+              </Button>
+              <Link className="hlc-btn hlc-btn-ghost" href={`/admin/staff/${viewingLive.userId}`}>
+                Open workspace
+              </Link>
+              <Link className="hlc-btn hlc-btn-ghost" href={`/admin/staff/${viewingLive.userId}`}>
+                Assign task
+              </Link>
+              <Button
+                type="button"
+                onClick={() => {
+                  setEditing(viewingLive);
+                  setCreating(false);
+                  setViewing(null);
+                }}
+              >
+                Edit
+              </Button>
+            </>
+          }
+        >
+          <AdminProfileFact label="Contact">{emptyCell(viewingLive.phone || viewingLive.email)}</AdminProfileFact>
+          <AdminProfileFact label="Program">{emptyCell(specialtyLaneLabel(store.teacherProfiles.find((item) => item.userId === viewingLive.userId)?.specialty) || assignedText(viewingLive))}</AdminProfileFact>
+          <AdminProfileFact label="Assigned students">
+            {assignedCount(
+              store.enrollments.filter((item) =>
+                store.classes.some((cls) => cls.classId === item.classId && cls.teacherId === viewingLive.userId),
+              ).length,
+            )}
+          </AdminProfileFact>
+        </AdminProfileModal>
+      ) : null}
       {certificate ? (
         <CertificateModal
           user={certificate}
@@ -204,8 +271,14 @@ export default function AdminStaffPage() {
             <Field label="Phone">
               <Input name="phone" defaultValue={current?.phone || ''} />
             </Field>
-            <Field label="Assigned program / specialty">
-              <Input name="specialty" defaultValue={store.teacherProfiles.find((item) => item.userId === current?.userId)?.specialty} />
+            <Field
+              label="Specialization"
+              hint="Playgroup, Pre-kinder, Kinder, Nursery, Grade 1–3, ABA Therapy, or Tutorial Session. That teacher appears in the matching Teachers Management list."
+            >
+              <ProgramSpecialtySelect
+                value={store.teacherProfiles.find((item) => item.userId === current?.userId)?.specialty}
+                store={store}
+              />
             </Field>
             <Field label="Position / job title">
               <Input

@@ -48,7 +48,7 @@ export function AdminLoginForm() {
   return (
     <main className="login-stage public-frame">
       <form className="login-card" onSubmit={onSubmit} noValidate>
-        <Image src="/images/hiraya-crest.png" alt="HIRAYA Learning Center crest" width={88} height={88} />
+        <Image src="/images/hiraya-crest.png" alt="Hiraya Kids Learning Center crest" width={88} height={88} />
         <p className="eyebrow">Staff entrance</p>
         <h1>Admin sign in</h1>
         <p>Use your HIRAYA username or email.</p>

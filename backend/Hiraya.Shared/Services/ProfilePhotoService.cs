@@ -1,4 +1,5 @@
 using Hiraya.Shared;
+using Hiraya.Shared.Models;
 using Hiraya.Shared.Services.Firebase;
 
 namespace Hiraya.Shared.Services;
@@ -13,11 +14,13 @@ public class ProfilePhotoService
 
     private readonly IHirayaAppPaths _paths;
     private readonly AccountService _accounts;
+    private readonly IHirayaRepository _repo;
 
-    public ProfilePhotoService(IHirayaAppPaths paths, AccountService accounts)
+    public ProfilePhotoService(IHirayaAppPaths paths, AccountService accounts, IHirayaRepository repo)
     {
         _paths = paths;
         _accounts = accounts;
+        _repo = repo;
     }
 
     public string Root => Path.Combine(_paths.DataDirectory, "media", "profiles");
@@ -48,6 +51,37 @@ public class ProfilePhotoService
         await WriteReplacingAsync(full, bytes);
         var stored = relative.Replace('\\', '/');
         await _accounts.SetProfileImageAsync(userId, stored);
+        return stored;
+    }
+
+    public async Task<string> SaveStudentAsync(string studentId, string fileName, Stream content, long length)
+    {
+        using var ms = new MemoryStream();
+        await content.CopyToAsync(ms);
+        var bytes = ms.ToArray();
+        if (bytes.Length == 0)
+            throw new InvalidOperationException("The selected file was empty.");
+        if (bytes.Length > MaxBytes)
+            throw new InvalidOperationException("Image must be 8 MB or smaller. Compress or crop the photo and try again.");
+
+        var ext = ResolveExtension(fileName, bytes);
+        Directory.CreateDirectory(Root);
+        var relative = Path.Combine("media", "profiles", $"{studentId}{ext}");
+        var full = Path.Combine(_paths.DataDirectory, relative);
+        foreach (var leftover in Directory.GetFiles(Root, studentId + ".*"))
+        {
+            try { File.Delete(leftover); } catch { /* ignore locked files */ }
+        }
+
+        await WriteReplacingAsync(full, bytes);
+        var stored = relative.Replace('\\', '/');
+        await _repo.MutateAsync(async db =>
+        {
+            var student = db.Students.FirstOrDefault(s => s.StudentId == studentId)
+                ?? throw new InvalidOperationException("That student was not found.");
+            student.ProfileImagePath = stored;
+            await Task.CompletedTask;
+        });
         return stored;
     }
 
@@ -85,6 +119,24 @@ public class ProfilePhotoService
             }
         }
         await _accounts.SetProfileImageAsync(userId, "");
+    }
+
+    public async Task RemoveStudentAsync(string studentId)
+    {
+        if (Directory.Exists(Root))
+        {
+            foreach (var leftover in Directory.GetFiles(Root, studentId + ".*"))
+            {
+                try { File.Delete(leftover); } catch { /* ignore */ }
+            }
+        }
+        await _repo.MutateAsync(async db =>
+        {
+            var student = db.Students.FirstOrDefault(s => s.StudentId == studentId);
+            if (student is not null)
+                student.ProfileImagePath = "";
+            await Task.CompletedTask;
+        });
     }
 
     public string? ToDataUrl(string? relativePath)

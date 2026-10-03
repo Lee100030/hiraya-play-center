@@ -79,9 +79,9 @@ public class ScheduleService
             if (!TryRange(other.StartAt, other.EndAt, out var otherStart, out var otherEnd)) continue;
             if (!Overlaps(start, end, otherStart, otherEnd)) continue;
 
-            if (!string.IsNullOrWhiteSpace(candidate.TeacherId) &&
-                candidate.TeacherId == other.TeacherId)
-                issues.Add($"Teacher already has \"{other.Title}\" at this time.");
+            var assigned = WorkflowOps.TeacherIdList(candidate.TeacherId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (assigned.Count > 0 && assigned.Overlaps(WorkflowOps.TeacherIdList(other.TeacherId)))
+                issues.Add($"A selected teacher already has \"{other.Title}\" at this time.");
 
             if (!string.IsNullOrWhiteSpace(candidate.Room) &&
                 string.Equals(candidate.Room, other.Room, StringComparison.OrdinalIgnoreCase))
@@ -296,7 +296,7 @@ public class ScheduleService
         if (user.Role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Staff)
             return true;
         if (user.Role == UserRoles.Teacher)
-            return schedule.TeacherId == user.UserId;
+            return WorkflowOps.ScheduleAssignedTo(schedule, user.UserId);
         if (user.Role == UserRoles.Parent || user.Role == UserRoles.Student)
         {
             var kids = FamilyPortal.StudentIds(db, user);

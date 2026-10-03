@@ -1,7 +1,7 @@
 import type { HirayaDatabase } from '@hiraya/types';
-import { hklcTaskBoards, operationsStats } from '@hiraya/utils';
-import { StatusBadge } from '@hiraya/ui';
-import type { ReactNode } from 'react';
+import { currentMonthKey, financeMonth, formatPeso, hklcTaskBoards, isAdmin, isTeacherApplication, operationsStats } from '@hiraya/utils';
+import { FinanceCategoryChart, FinanceColumnChart, FinanceLegend, StatusBadge } from '@hiraya/ui';
+import { type ReactNode, useState } from 'react';
 import { Icons } from '../icons';
 import { greeting, statusLabel, type ViewId } from '../lib/views';
 
@@ -39,8 +39,12 @@ export function DashboardPage({
 }) {
   const today = todayKey();
   const stats = operationsStats(store);
-  const pending = store.enrollmentApplications.filter((row) =>
-    ['pending', 'pending_review'].includes((row.status || '').toLowerCase()),
+  const pending = store.enrollmentApplications.filter(
+    (row) =>
+      !isTeacherApplication(row) && ['pending', 'pending_review'].includes((row.status || '').toLowerCase()),
+  );
+  const teacherPending = store.enrollmentApplications.filter(
+    (row) => isTeacherApplication(row) && ['pending', 'pending_review'].includes((row.status || '').toLowerCase()),
   );
   const todaySessions = store.schedules.filter(
     (row) => row.kind !== 'teacherTask' && (row.startAt || '').slice(0, 10) === today && row.status !== 'cancelled',
@@ -53,6 +57,8 @@ export function DashboardPage({
   const draftNews = store.news.filter((row) => !row.isPublished && row.status !== 'published');
   const unreadAlerts = (store.alerts || []).filter((row) => !row.read && (row.kind || '').toLowerCase() !== 'direct');
   const activity = [...store.auditLogs].slice(0, 6);
+  const [financeMonthKey, setFinanceMonthKey] = useState(currentMonthKey);
+  const book = isAdmin(role) ? financeMonth(store, financeMonthKey) : null;
 
   return (
     <>
@@ -104,10 +110,57 @@ export function DashboardPage({
           icon={<Icons.announcements />}
           label="Announcements"
           value={publishedNews.length}
-          hint={draftNews.length ? `${draftNews.length} draft` : `${unreadAlerts.length} unread alerts`}
+          hint={draftNews.length ? `${draftNews.length} draft${draftNews.length === 1 ? '' : 's'} not published` : 'Published'}
           onClick={() => onView('announcements')}
         />
       </section>
+
+      {book ? (
+        <section className="finance-board" aria-label="Center income and expenses">
+          <div className="finance-board-head">
+            <div>
+              <h2>Income and expenses</h2>
+              <p>Counted student payments are income. Teacher pay plus center expenses are costs. Opening cash is carried money, not a new sale.</p>
+            </div>
+            <label>
+              Month
+              <input type="month" value={book.month} onChange={(event) => setFinanceMonthKey(event.target.value)} />
+            </label>
+          </div>
+          <div className="finance-kpis">
+            <article>
+              <p>Income</p>
+              <strong>₱{formatPeso(book.income)}</strong>
+            </article>
+            <article>
+              <p>Expenses</p>
+              <strong>₱{formatPeso(book.expenses)}</strong>
+            </article>
+            <article>
+              <p>Net</p>
+              <strong>₱{formatPeso(book.net)}</strong>
+            </article>
+            <article>
+              <p>Opening cash</p>
+              <strong>₱{formatPeso(book.opening)}</strong>
+            </article>
+          </div>
+          <div className="finance-charts">
+            <article className="panel">
+              <h3>Last six months</h3>
+              <FinanceColumnChart months={book.series} />
+              <FinanceLegend />
+            </article>
+            <article className="panel">
+              <h3>Expenses this month</h3>
+              <FinanceCategoryChart rows={book.categories} />
+            </article>
+          </div>
+          <button type="button" className="linkish" onClick={() => onView('finance')}>
+            Open Center Cash flow
+          </button>
+        </section>
+      ) : null}
 
       <div className="dash-section">
         <h2>Needs attention</h2>
@@ -136,8 +189,15 @@ export function DashboardPage({
         </article>
         <article className="panel dash-panel">
           <h2>Pending applications</h2>
+          {teacherPending.length > 0 ? (
+            <p className="muted">
+              <button type="button" className="linkish" onClick={() => onView('teacherApplications')}>
+                {teacherPending.length} teacher application{teacherPending.length === 1 ? '' : 's'} waiting
+              </button>
+            </p>
+          ) : null}
           {pending.length === 0 ? (
-            <p className="panel-empty">No applications waiting for approval.</p>
+            <p className="panel-empty">No student applications waiting for approval.</p>
           ) : (
             <ul className="feed-list">
               {pending.slice(0, 6).map((row) => (

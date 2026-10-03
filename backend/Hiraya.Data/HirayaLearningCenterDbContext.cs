@@ -12,6 +12,11 @@ public class HirayaLearningCenterDbContext : DbContext
     {
     }
 
+    protected HirayaLearningCenterDbContext(DbContextOptions options)
+        : base(options)
+    {
+    }
+
     public DbSet<HirayaUser> Users => Set<HirayaUser>();
     public DbSet<AppRole> Roles => Set<AppRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
@@ -30,6 +35,8 @@ public class HirayaLearningCenterDbContext : DbContext
     public DbSet<NewsItem> News => Set<NewsItem>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<CenterExpense> CenterExpenses => Set<CenterExpense>();
+    public DbSet<OpeningBalance> OpeningBalances => Set<OpeningBalance>();
     public DbSet<SystemAlert> Notifications => Set<SystemAlert>();
     public DbSet<AuditLogEntry> AuditLogs => Set<AuditLogEntry>();
     public DbSet<CenterSettings> Settings => Set<CenterSettings>();
@@ -46,6 +53,9 @@ public class HirayaLearningCenterDbContext : DbContext
     public DbSet<SessionHistoryEntry> SessionHistory => Set<SessionHistoryEntry>();
     public DbSet<TeacherComment> TeacherComments => Set<TeacherComment>();
     public DbSet<TeacherAdminNote> TeacherNotes => Set<TeacherAdminNote>();
+    public DbSet<StudentDocument> StudentDocuments => Set<StudentDocument>();
+    public DbSet<ChatGroup> ChatGroups => Set<ChatGroup>();
+    public DbSet<RevokedSession> RevokedSessions => Set<RevokedSession>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -77,13 +87,18 @@ public class HirayaLearningCenterDbContext : DbContext
         Key<Student>(modelBuilder, "students", x => x.StudentId);
         modelBuilder.Entity<Student>(e =>
         {
+            e.Property(x => x.ProfileImagePath).HasMaxLength(512);
             e.HasIndex(x => x.ParentId);
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.QrCode);
         });
 
         Key<LearningProgram>(modelBuilder, "programs", x => x.ProgramId);
-        modelBuilder.Entity<LearningProgram>().HasIndex(x => x.Name);
+        modelBuilder.Entity<LearningProgram>(e =>
+        {
+            e.HasIndex(x => x.Name);
+            e.Property(x => x.TuitionFee).HasPrecision(18, 2);
+        });
 
         Key<LearningClass>(modelBuilder, "classes", x => x.ClassId);
         modelBuilder.Entity<LearningClass>().HasIndex(x => x.ProgramId);
@@ -102,6 +117,7 @@ public class HirayaLearningCenterDbContext : DbContext
         });
 
         Key<EnrollmentApplication>(modelBuilder, "enrollment_applications", x => x.ApplicationId);
+        modelBuilder.Entity<EnrollmentApplication>().Property(x => x.ApplicationKind).HasMaxLength(32);
 
         Key<AttendanceRecord>(modelBuilder, "attendance", x => x.AttendanceId);
         modelBuilder.Entity<AttendanceRecord>(e =>
@@ -150,8 +166,28 @@ public class HirayaLearningCenterDbContext : DbContext
             e.HasIndex(x => x.PaymentStatus);
             e.Property(x => x.Amount).HasPrecision(18, 2);
             e.Property(x => x.AmountPaid).HasPrecision(18, 2);
+            e.Property(x => x.ReceiptPath).HasMaxLength(512);
+            e.Property(x => x.IncomeBucket).HasMaxLength(32);
             e.Property(x => x.History).HasConversion(JsonLists.For<PaymentHistoryEntry>());
             e.Property(x => x.History).Metadata.SetValueComparer(JsonLists.Comparer<PaymentHistoryEntry>());
+        });
+
+        Key<CenterExpense>(modelBuilder, "center_expenses", x => x.ExpenseId);
+        modelBuilder.Entity<CenterExpense>(e =>
+        {
+            e.HasIndex(x => x.ExpenseDate);
+            e.HasIndex(x => x.Category);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.Note).HasColumnType("text");
+            e.Property(x => x.Kind).HasMaxLength(16);
+        });
+
+        Key<OpeningBalance>(modelBuilder, "opening_balances", x => x.OpeningId);
+        modelBuilder.Entity<OpeningBalance>(e =>
+        {
+            e.HasIndex(x => x.Month);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.Note).HasColumnType("text");
         });
 
         Key<SystemAlert>(modelBuilder, "notifications", x => x.AlertId);
@@ -212,6 +248,7 @@ public class HirayaLearningCenterDbContext : DbContext
         modelBuilder.Entity<StudentOpsRecord>(e =>
         {
             e.Property(x => x.FeeAmount).HasPrecision(18, 2);
+            e.Property(x => x.TuitionFee).HasPrecision(18, 2);
             e.Property(x => x.LaceAmount).HasPrecision(18, 2);
         });
 
@@ -272,6 +309,24 @@ public class HirayaLearningCenterDbContext : DbContext
             e.Property(x => x.Content).HasColumnType("text");
         });
 
+        Key<StudentDocument>(modelBuilder, "student_documents", x => x.DocumentId);
+        modelBuilder.Entity<StudentDocument>(e =>
+        {
+            e.HasIndex(x => x.StudentId);
+            e.HasIndex(x => x.Kind);
+            e.Property(x => x.StoredPath).HasMaxLength(512);
+            e.Property(x => x.OriginalName).HasMaxLength(255);
+            e.Property(x => x.ContentType).HasMaxLength(128);
+        });
+
+        Key<ChatGroup>(modelBuilder, "chat_groups", x => x.GroupId);
+        modelBuilder.Entity<ChatGroup>(e =>
+        {
+            e.Property(x => x.Name).HasMaxLength(120);
+            e.Property(x => x.MemberIds).HasColumnType("text");
+            e.Property(x => x.Status).HasMaxLength(32);
+        });
+
         modelBuilder.Entity<NewsItem>(e =>
         {
             e.Property(x => x.Audience).HasMaxLength(64);
@@ -283,6 +338,22 @@ public class HirayaLearningCenterDbContext : DbContext
         {
             e.Property(x => x.RelatedRecordId).HasMaxLength(191);
         });
+
+        modelBuilder.Entity<RevokedSession>(e =>
+        {
+            e.ToTable("revoked_sessions");
+            e.HasKey(x => x.Jti);
+            e.Property(x => x.Jti).HasMaxLength(64);
+        });
+
+        foreach (var entity in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entity.GetProperties())
+            {
+                if (string.Equals(property.GetColumnType(), "text", StringComparison.OrdinalIgnoreCase))
+                    property.SetMaxLength(null);
+            }
+        }
     }
 
     private static void Key<T>(ModelBuilder modelBuilder, string table, System.Linq.Expressions.Expression<Func<T, object?>> key)

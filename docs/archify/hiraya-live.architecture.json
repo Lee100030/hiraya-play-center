@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hiraya Kids Learning Center",
+    "quality_profile": "showcase",
+    "output": "hiraya-live.architecture.html",
+    "views": [
+      {
+        "id": "live-path",
+        "label": "Live data path",
+        "focus": ["website", "api", "neon"],
+        "note": "The public site proxies to Hiraya.Api, and the API reads and writes Neon."
+      },
+      {
+        "id": "clients",
+        "label": "All three apps",
+        "focus": ["website", "desktop", "mobile", "api"],
+        "note": "Website, desktop, and mobile each call Hiraya.Api. None of them open the database."
+      },
+      {
+        "id": "mail",
+        "label": "Mail",
+        "focus": ["api", "brevo"],
+        "note": "Brevo is the SMTP host. Sending stays off until the SMTP login and key are saved."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "website",
+      "type": "frontend",
+      "label": "Public website",
+      "sublabel": "Next.js :3000",
+      "tag": "this PC",
+      "pos": [80, 300],
+      "size": [190, 76]
+    },
+    {
+      "id": "desktop",
+      "type": "frontend",
+      "label": "Desktop",
+      "sublabel": "Electron",
+      "tag": "this PC",
+      "pos": [475, 90],
+      "size": [180, 72]
+    },
+    {
+      "id": "mobile",
+      "type": "frontend",
+      "label": "Mobile",
+      "sublabel": "Expo",
+      "tag": "phone",
+      "pos": [475, 540],
+      "size": [180, 72]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Hiraya.Api",
+      "sublabel": "ASP.NET Core :5188",
+      "tag": "this PC",
+      "pos": [460, 300],
+      "size": [210, 80]
+    },
+    {
+      "id": "neon",
+      "type": "database",
+      "label": "Neon",
+      "sublabel": "PostgreSQL neondb",
+      "tag": "production",
+      "pos": [860, 300],
+      "size": [210, 80]
+    },
+    {
+      "id": "brevo",
+      "type": "external",
+      "label": "Brevo",
+      "sublabel": "SMTP, mail off",
+      "tag": "not sending",
+      "pos": [860, 540],
+      "size": [200, 72]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "This PC",
+      "wraps": ["website", "desktop", "api"]
+    },
+    {
+      "kind": "region",
+      "label": "Neon cloud",
+      "wraps": ["neon"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "website-to-api",
+      "from": "website",
+      "to": "api",
+      "label": "HTTP proxy",
+      "variant": "emphasis"
+    },
+    {
+      "id": "desktop-to-api",
+      "from": "desktop",
+      "to": "api",
+      "label": "session HTTP",
+      "labelDy": 24
+    },
+    {
+      "id": "mobile-to-api",
+      "from": "mobile",
+      "to": "api",
+      "label": "session HTTP"
+    },
+    {
+      "id": "api-to-neon",
+      "from": "api",
+      "to": "neon",
+      "label": "PostgreSQL SSL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-to-brevo",
+      "from": "api",
+      "to": "brevo",
+      "label": "SMTP, mail off",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Apps",
+      "items": [
+        "The public website, desktop, and mobile call Hiraya.Api",
+        "None of the apps open Neon directly"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Database",
+      "items": [
+        "Hiraya.Api uses Neon PostgreSQL, database neondb, branch production",
+        "XAMPP MySQL remains on this PC as the rollback copy"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Mail",
+      "items": [
+        "Brevo is the SMTP host",
+        "Sending stays off until the SMTP login and key are saved"
+      ]
+    }
+  ]
+}

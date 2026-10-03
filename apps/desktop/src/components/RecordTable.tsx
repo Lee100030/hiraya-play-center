@@ -1,4 +1,4 @@
-import { Button, EmptyState, StatusBadge, Table } from '@hiraya/ui';
+import { Button, EmptyState, PersonAvatar, StatusBadge, Table } from '@hiraya/ui';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Icons } from '../icons';
 import { statusLabel } from '../lib/views';
@@ -37,9 +37,17 @@ export function assigned(value?: string | number | null) {
   return text;
 }
 
+export type RecordCard<T> = {
+  name: (row: T) => string;
+  photo?: (row: T) => string | undefined;
+  role: (row: T) => string;
+  stat: (row: T) => ReactNode;
+};
+
 export function RecordTable<T>({
   title,
   description,
+  kicker,
   rows,
   columns,
   search,
@@ -50,9 +58,12 @@ export function RecordTable<T>({
   actions,
   rowKey,
   crud,
+  onRowOpen,
+  card,
 }: {
   title: string;
   description: string;
+  kicker?: string;
   rows: T[];
   columns: Column<T>[];
   search: (row: T, query: string) => boolean;
@@ -63,6 +74,8 @@ export function RecordTable<T>({
   actions?: ReactNode;
   rowKey?: (row: T, index: number) => string;
   crud?: RecordCrud<T>;
+  onRowOpen?: (row: T) => void;
+  card?: RecordCard<T>;
 }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
@@ -71,6 +84,14 @@ export function RecordTable<T>({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [overflow, setOverflow] = useState({ left: false, right: false });
+  const [layout, setLayout] = useState<'table' | 'cards'>(() => {
+    if (!card) return 'table';
+    try {
+      return localStorage.getItem('hiraya.peopleLayout') === 'table' ? 'table' : 'cards';
+    } catch {
+      return 'cards';
+    }
+  });
   const headerCheck = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageSize = 12;
@@ -151,7 +172,16 @@ export function RecordTable<T>({
     const onResize = () => measureOverflow();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [slice, columns]);
+  }, [slice, columns, layout]);
+
+  useEffect(() => {
+    if (!card) return;
+    try {
+      localStorage.setItem('hiraya.peopleLayout', layout);
+    } catch {
+      /* ignore */
+    }
+  }, [layout, card]);
 
   function toggle(key: string) {
     setSelected((current) => {
@@ -221,7 +251,7 @@ export function RecordTable<T>({
 
   return (
     <>
-      {title || description ? <PageHeader title={title} description={description} actions={selectable ? undefined : actions} /> : null}
+      {title || description ? <PageHeader kicker={kicker} crumb={`HIRAYA / ${title}`} title={title} description={description} actions={selectable ? undefined : actions} /> : null}
       {crud ? (
         <div className="crud-bar" role="toolbar" aria-label="Record actions">
           {crud.onAdd ? (
@@ -284,14 +314,35 @@ export function RecordTable<T>({
           {crud.onRefresh ? (
             <Button
               type="button"
-              variant="icon"
+              variant="ghost"
               disabled={busy}
               aria-label="Refresh this list"
               title="Refresh this list"
               onClick={() => void run(() => crud.onRefresh!())}
             >
               <Icons.refresh width={14} height={14} />
+              Refresh
             </Button>
+          ) : null}
+          {card ? (
+            <>
+              <Button
+                type="button"
+                variant={layout === 'cards' ? 'primary' : 'ghost'}
+                aria-pressed={layout === 'cards'}
+                onClick={() => setLayout('cards')}
+              >
+                Cards
+              </Button>
+              <Button
+                type="button"
+                variant={layout === 'table' ? 'primary' : 'ghost'}
+                aria-pressed={layout === 'table'}
+                onClick={() => setLayout('table')}
+              >
+                Table
+              </Button>
+            </>
           ) : null}
           {crud.extra}
           {selectable ? (
@@ -346,6 +397,65 @@ export function RecordTable<T>({
       />
       {filtered.length === 0 ? (
         <EmptyState title={emptyTitle} hint={emptyHint} />
+      ) : layout === 'cards' && card ? (
+        <>
+          <div className="people-grid">
+            {slice.map((row, index) => {
+              const absolute = current * pageSize + index;
+              const key = keyOf(row, absolute);
+              const isOn = selected.has(key);
+              return (
+                <article
+                  key={key}
+                  className={['people-card', isOn ? 'is-selected' : '', onRowOpen ? 'is-openable' : ''].filter(Boolean).join(' ')}
+                  onClick={(event) => {
+                    if (!onRowOpen) return;
+                    const target = event.target as HTMLElement;
+                    if (target.closest('input, button, label')) return;
+                    onRowOpen(row);
+                  }}
+                >
+                  {selectable ? (
+                    <label className="people-card-select" onClick={(event) => event.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isOn}
+                        onChange={() => toggle(key)}
+                        aria-label={`Select ${card.name(row)}`}
+                      />
+                    </label>
+                  ) : null}
+                  {isOn ? (
+                    <span className="people-card-check" aria-hidden>
+                      ✓
+                    </span>
+                  ) : null}
+                  <PersonAvatar name={card.name(row)} photo={card.photo?.(row)} size="lg" />
+                  <h3>{card.name(row)}</h3>
+                  <p className="people-card-role">{card.role(row)}</p>
+                  <p className="people-card-stat">{card.stat(row)}</p>
+                </article>
+              );
+            })}
+          </div>
+          <div className="pager">
+            <span className="pager-count">
+              {filtered.length} record{filtered.length === 1 ? '' : 's'}
+              {selected.size ? ` · ${selected.size} selected` : ''}
+            </span>
+            <span className="pager-page">
+              Page {current + 1} of {pages}
+            </span>
+            <div className="pager-nav">
+              <button type="button" disabled={current === 0} onClick={() => setPage(current - 1)}>
+                Previous
+              </button>
+              <button type="button" disabled={current >= pages - 1} onClick={() => setPage(current + 1)}>
+                Next
+              </button>
+            </div>
+          </div>
+        </>
       ) : (
         <>
           <div className="table-card">
@@ -379,8 +489,22 @@ export function RecordTable<T>({
                   return (
                     <tr
                       key={key}
-                      className={[isOn ? 'row-selected' : '', crud?.onEdit ? 'row-open' : ''].filter(Boolean).join(' ') || undefined}
-                      title={crud?.onEdit ? 'Double-click to edit' : undefined}
+                      className={[isOn ? 'row-selected' : '', onRowOpen || crud?.onEdit ? 'row-open' : ''].filter(Boolean).join(' ') || undefined}
+                      title={
+                        onRowOpen && crud?.onEdit
+                          ? 'Click to open profile. Double-click to edit.'
+                          : onRowOpen
+                            ? 'Click to open profile'
+                            : crud?.onEdit
+                              ? 'Double-click to edit'
+                              : undefined
+                      }
+                      onClick={(event) => {
+                        if (!onRowOpen) return;
+                        const target = event.target as HTMLElement;
+                        if (target.closest('input, button, a, label, select, textarea')) return;
+                        onRowOpen(row);
+                      }}
                       onDoubleClick={(event) => {
                         if (!crud?.onEdit) return;
                         const target = event.target as HTMLElement;
@@ -440,10 +564,9 @@ export function StatusCell({ value }: { value?: string }) {
 }
 
 export function NameCell({ name, photo }: { name: string; photo?: string }) {
-  const initial = (name || '?').trim().slice(0, 1).toUpperCase();
   return (
     <div className="name-cell">
-      {photo ? <img className="row-avatar" src={photo} alt="" /> : <span className="row-avatar row-avatar-empty">{initial}</span>}
+      <PersonAvatar name={name} photo={photo} size="sm" />
       <span title={name}>{name}</span>
     </div>
   );

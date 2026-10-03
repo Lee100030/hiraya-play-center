@@ -3,7 +3,8 @@
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/components/StoreProvider';
 import { Loading, StatusBadge } from '@hiraya/ui';
-import { formatDate, operationsStats } from '@hiraya/utils';
+import { FinanceCategoryChart, FinanceColumnChart, FinanceLegend } from '@hiraya/ui';
+import { centerTuitionTotals, currentMonthKey, financeMonth, formatDate, formatPeso, isAdmin, isTeacherApplication, operationsStats } from '@hiraya/utils';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
@@ -20,12 +21,15 @@ export default function AdminDashboardPage() {
   const [sort, setSort] = useState<'date' | 'name'>('date');
   const [page, setPage] = useState(0);
   const [query, setQuery] = useState('');
+  const [financeMonthKey, setFinanceMonthKey] = useState(currentMonthKey);
+  const book = isAdmin(user?.role) ? financeMonth(store, financeMonthKey) : null;
 
   const stats = operationsStats(store);
-  const pending = store.enrollmentApplications.filter((row) => row.status === 'pending_review' || row.status === 'pending');
+  const learnerApplications = store.enrollmentApplications.filter((row) => !isTeacherApplication(row));
+  const pending = learnerApplications.filter((row) => row.status === 'pending_review' || row.status === 'pending');
   const thisMonth = new Date().toISOString().slice(0, 7);
-  const newEnrollments = store.enrollmentApplications.filter((row) => (row.submittedAt || '').startsWith(thisMonth));
-  const revenue = store.payments.reduce((sum, row) => sum + (Number(row.amountPaid) || 0), 0);
+  const newEnrollments = learnerApplications.filter((row) => (row.submittedAt || '').startsWith(thisMonth));
+  const collected = centerTuitionTotals(store);
 
   const months = useMemo(() => {
     const keys: string[] = [];
@@ -36,13 +40,13 @@ export default function AdminDashboardPage() {
     }
     return keys.map((key) => ({
       key,
-      count: store.enrollmentApplications.filter((row) => monthKey(row.submittedAt || '') === key).length,
+      count: learnerApplications.filter((row) => monthKey(row.submittedAt || '') === key).length,
     }));
-  }, [store.enrollmentApplications]);
+  }, [learnerApplications]);
 
   const programBars = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const row of store.enrollmentApplications) {
+    for (const row of learnerApplications) {
       const name = row.preferredProgram || 'Unspecified';
       counts.set(name, (counts.get(name) || 0) + 1);
     }
@@ -51,7 +55,7 @@ export default function AdminDashboardPage() {
     }
     const max = Math.max(1, ...counts.values());
     return [...counts.entries()].slice(0, 6).map(([name, count]) => ({ name, count, pct: (count / max) * 100 }));
-  }, [store.enrollmentApplications, store.programs]);
+  }, [learnerApplications, store.programs]);
 
   const maxMonth = Math.max(1, ...months.map((item) => item.count));
   const chartPad = 8;
@@ -65,7 +69,7 @@ export default function AdminDashboardPage() {
 
   const rows = useMemo(() => {
     const q = query.toLowerCase();
-    const list = store.enrollmentApplications
+    const list = learnerApplications
       .filter((row) => `${row.studentFullname} ${row.preferredProgram} ${row.parentFullname}`.toLowerCase().includes(q))
       .slice()
       .sort((a, b) =>
@@ -74,7 +78,7 @@ export default function AdminDashboardPage() {
           : String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')),
       );
     return list;
-  }, [store.enrollmentApplications, query, sort]);
+  }, [learnerApplications, query, sort]);
 
   const pageSize = 5;
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -104,7 +108,7 @@ export default function AdminDashboardPage() {
             ✎
           </div>
           <p className="kpi-label">New Enrollments</p>
-          <strong className="kpi-value">{newEnrollments.length || store.enrollmentApplications.length}</strong>
+          <strong className="kpi-value">{newEnrollments.length || learnerApplications.length}</strong>
         </Link>
         <Link className="kpi-card" href="/admin/enrollments">
           <div className="kpi-icon" aria-hidden="true">
@@ -112,13 +116,19 @@ export default function AdminDashboardPage() {
           </div>
           <p className="kpi-label">Pending Applications</p>
           <strong className="kpi-value">{stats.pendingEnrollments}</strong>
+          {stats.pendingTeacherApplications > 0 ? (
+            <p className="kpi-label">
+              {stats.pendingTeacherApplications} teacher application{stats.pendingTeacherApplications === 1 ? '' : 's'} in Enrollment
+            </p>
+          ) : null}
         </Link>
         <Link className="kpi-card" href="/admin/payments">
           <div className="kpi-icon" aria-hidden="true">
             ₱
           </div>
-          <p className="kpi-label">Revenue</p>
-          <strong className="kpi-value">₱{revenue.toLocaleString()}</strong>
+          <p className="kpi-label">Total paid</p>
+          <strong className="kpi-value">₱{collected.paid.toLocaleString()}</strong>
+          <p className="kpi-label">Outstanding balance ₱{collected.outstanding.toLocaleString()}</p>
         </Link>
       </div>
 
@@ -133,6 +143,53 @@ export default function AdminDashboardPage() {
           Send Announcement
         </Link>
       </div>
+
+      {book ? (
+        <section className="finance-board" aria-label="Center income and expenses">
+          <div className="finance-board-head">
+            <div>
+              <h2>Income and expenses</h2>
+              <p>Counted student payments are income. Teacher pay plus center expenses are costs. Opening cash is carried money, not a new sale.</p>
+            </div>
+            <label>
+              Month
+              <input type="month" value={book.month} onChange={(event) => setFinanceMonthKey(event.target.value)} />
+            </label>
+          </div>
+          <div className="finance-kpis">
+            <article>
+              <p>Income</p>
+              <strong>₱{formatPeso(book.income)}</strong>
+            </article>
+            <article>
+              <p>Expenses</p>
+              <strong>₱{formatPeso(book.expenses)}</strong>
+            </article>
+            <article>
+              <p>Net</p>
+              <strong>₱{formatPeso(book.net)}</strong>
+            </article>
+            <article>
+              <p>Opening cash</p>
+              <strong>₱{formatPeso(book.opening)}</strong>
+            </article>
+          </div>
+          <div className="finance-charts">
+            <section className="hlc-card chart-panel">
+              <h2>Last six months</h2>
+              <FinanceColumnChart months={book.series} />
+              <FinanceLegend />
+            </section>
+            <section className="hlc-card chart-panel">
+              <h2>Expenses this month</h2>
+              <FinanceCategoryChart rows={book.categories} />
+            </section>
+          </div>
+          <Link className="dash-action" href="/admin/expenses">
+            Open Center Cash flow
+          </Link>
+        </section>
+      ) : null}
 
       <div className="chart-grid">
         <section className="hlc-card chart-panel">

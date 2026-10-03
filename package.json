@@ -2,7 +2,7 @@
   "name": "hiraya",
   "private": true,
   "version": "1.0.0",
-  "description": "HIRAYA Learning Center — web, mobile, and desktop clients over the existing ASP.NET API",
+  "description": "Hiraya Kids Learning Center — web, mobile, and desktop clients over the existing ASP.NET API",
   "packageManager": "pnpm@9.15.4",
   "scripts": {
     "start": "npm --prefix apps/web run dev",

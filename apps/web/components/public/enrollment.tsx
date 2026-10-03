@@ -4,7 +4,7 @@ import { usePublicSite } from '@/hooks/usePublicSite';
 import { api } from '@/lib/api';
 import { ageFromBirthdate } from '@/lib/enrollment';
 import { Alert, Field, Input, Select, Textarea } from '@hiraya/ui';
-import { enrollPublicSchema } from '@hiraya/validation';
+import { enrollPublicSchema, teacherApplySchema } from '@hiraya/validation';
 import {
   createContext,
   FormEvent,
@@ -20,6 +20,7 @@ import {
 
 type EnrollmentContextValue = {
   open: (program?: string) => void;
+  openTeacher: () => void;
   close: () => void;
 };
 
@@ -43,14 +44,22 @@ export function EnrollmentProvider({
   initialProgram?: string;
 }) {
   const [visible, setVisible] = useState(autoOpen);
+  const [teacherOpen, setTeacherOpen] = useState(false);
   const [program, setProgram] = useState(initialProgram);
 
   const open = useCallback((next = '') => {
+    setTeacherOpen(false);
     setProgram(next);
     setVisible(true);
   }, []);
 
+  const openTeacher = useCallback(() => {
+    setVisible(false);
+    setTeacherOpen(true);
+  }, []);
+
   const close = useCallback(() => setVisible(false), []);
+  const closeTeacher = useCallback(() => setTeacherOpen(false), []);
 
   useEffect(() => {
     if (autoOpen) {
@@ -60,9 +69,10 @@ export function EnrollmentProvider({
   }, [autoOpen, initialProgram]);
 
   return (
-    <EnrollmentContext.Provider value={{ open, close }}>
+    <EnrollmentContext.Provider value={{ open, openTeacher, close }}>
       {children}
       <EnrollmentModal open={visible} program={program} onProgramChange={setProgram} onClose={close} />
+      <TeacherApplyModal open={teacherOpen} onClose={closeTeacher} />
     </EnrollmentContext.Provider>
   );
 }
@@ -89,6 +99,30 @@ export function EnrollTrigger({
       onClick={() => {
         onClick?.();
         open(program);
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function TeacherApplyTrigger({
+  children,
+  className,
+  onClick,
+}: {
+  children: ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  const { openTeacher } = useEnrollment();
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={() => {
+        onClick?.();
+        openTeacher();
       }}
     >
       {children}
@@ -364,6 +398,163 @@ function EnrollmentModal({
               </button>
               <button type="submit" className="enroll-modal-submit" disabled={saving}>
                 {saving ? 'Sending application…' : 'Send application'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const fallbackTeacherRoles = ['Playgroup', 'Pre-Kinder', 'Kinder', 'ABA', 'Tutorial', 'Any program'];
+
+function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { site } = usePublicSite();
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [ok, setOk] = useState(false);
+  const [applicationId, setApplicationId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const roles = site.programs.length ? [...site.programs.map((item) => item.name), 'Any program'] : fallbackTeacherRoles;
+
+  useEffect(() => {
+    if (!open) {
+      setError(null);
+      setFieldErrors({});
+      setOk(false);
+      setApplicationId('');
+      setSaving(false);
+      return;
+    }
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !saving) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const t = window.setTimeout(() => {
+      panelRef.current?.querySelector<HTMLInputElement>('input')?.focus();
+    }, 40);
+    return () => {
+      document.body.style.overflow = prev;
+      window.clearTimeout(t);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose, saving]);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    setError(null);
+    const form = event.currentTarget;
+    const parsed = teacherApplySchema.safeParse(Object.fromEntries(new FormData(form).entries()));
+    if (!parsed.success) {
+      const next: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const key = String(issue.path[0] || '');
+        if (key && !next[key]) next[key] = issue.message;
+      }
+      setFieldErrors(next);
+      setError('Please complete the required fields.');
+      return;
+    }
+    setFieldErrors({});
+    setSaving(true);
+    try {
+      const result = await api.applyTeacher({
+        fullname: parsed.data.fullname,
+        email: parsed.data.email,
+        phone: parsed.data.phone,
+        position: parsed.data.position,
+        notes: parsed.data.notes || '',
+      });
+      setApplicationId(result.applicationId || '');
+      setOk(true);
+      form.reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send the teacher application.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="enroll-overlay"
+      role="presentation"
+      onClick={() => {
+        if (!saving) onClose();
+      }}
+    >
+      <div
+        className="enroll-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        ref={panelRef}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button type="button" className="enroll-modal-close" onClick={onClose} aria-label="Close teacher application">
+          ×
+        </button>
+        <header className="enroll-modal-head">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/hiraya-crest.png" alt="" width={44} height={44} />
+          <p className="enroll-modal-kicker">Careers · Teaching</p>
+          <h2 id={titleId}>Apply for a teacher</h2>
+          <p className="enroll-modal-school">{site.centerName || 'HIRAYA Kids Learning Center'}</p>
+        </header>
+        {ok ? (
+          <div className="enroll-modal-success">
+            <Alert kind="success">
+              Your teacher application was received. It is kept separate from student enrollment. The center will review
+              it and contact you.
+              {applicationId ? ` Reference number: ${applicationId}` : ''}
+            </Alert>
+            <button type="button" className="enroll-modal-submit" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        ) : (
+          <form className="enroll-modal-form" onSubmit={onSubmit} noValidate>
+            {error ? <Alert>{error}</Alert> : null}
+            <p className="enroll-modal-section">Your details</p>
+            <p className="enroll-modal-note">This form is for people who want to teach. It does not enroll a child.</p>
+            <div className="enroll-modal-grid">
+              <Field label="Full name" required error={fieldErrors.fullname}>
+                <Input name="fullname" autoComplete="name" required />
+              </Field>
+              <Field label="Email" required error={fieldErrors.email}>
+                <Input name="email" type="email" autoComplete="email" required />
+              </Field>
+              <Field label="Contact number" required error={fieldErrors.phone}>
+                <Input name="phone" inputMode="tel" autoComplete="tel" required />
+              </Field>
+              <Field label="Role you want to teach" required error={fieldErrors.position}>
+                <Select name="position" defaultValue="" required>
+                  <option value="">Select</option>
+                  {roles.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Experience and message" error={fieldErrors.notes}>
+                <Textarea name="notes" rows={4} />
+              </Field>
+            </div>
+            <div className="enroll-modal-actions">
+              <button type="button" className="enroll-modal-cancel" onClick={onClose} disabled={saving}>
+                Cancel
+              </button>
+              <button type="submit" className="enroll-modal-submit" disabled={saving}>
+                {saving ? 'Sending application…' : 'Apply now'}
               </button>
             </div>
           </form>

@@ -14,6 +14,7 @@ coverage
 !.apps/**/.env.example
 appsettings.Local.json
 **/aiven-ca.pem
+**/neon-ca.pem
 *.pem
 *.user
 bin/

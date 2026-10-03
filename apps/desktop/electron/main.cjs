@@ -18,7 +18,7 @@ function createWindow() {
     height: 900,
     minWidth: 900,
     minHeight: 680,
-    title: 'HIRAYA Desktop',
+    title: 'HIRAYA | Desktop',
     icon: resolveIcon(),
     backgroundColor: '#07140D',
     autoHideMenuBar: true,

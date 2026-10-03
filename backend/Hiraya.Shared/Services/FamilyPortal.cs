@@ -153,14 +153,19 @@ public static class FamilyPortal
         var percent = history.Count == 0 ? 0 : (int)Math.Round(100d * present / history.Count);
 
         var next = schedule.FirstOrDefault(i => i.Start >= DateTime.Now);
-        var paymentStatus = open.Count == 0
-            ? "Paid"
-            : (open.Any(p => PaymentService.EffectiveStatus(p) == PaymentStatuses.Overdue) ? "Overdue" : "Balance due");
+        var tuitionStatuses = focus.Select(student => StudentTuition.Status(db, student.StudentId)).ToList();
+        var paymentStatus = tuitionStatuses.Count == 0
+            ? "Unpaid"
+            : tuitionStatuses.All(status => status == "paid")
+                ? "Paid"
+                : tuitionStatuses.Any(status => status == "partial" || status == "paid")
+                    ? "Partial"
+                    : "Unpaid";
 
         return new FamilyHomeSnapshot
         {
             CenterName = string.IsNullOrWhiteSpace(db.Settings.CenterName)
-                ? "HIRAYA Learning Center"
+                ? "Hiraya Kids Learning Center"
                 : db.Settings.CenterName,
             Greeting = string.IsNullOrWhiteSpace(user.FirstName) ? user.Fullname : user.FirstName,
             Children = children,
@@ -172,7 +177,7 @@ public static class FamilyPortal
             AttendancePercent = percent,
             OpenPayments = open.Count,
             OverduePayments = open.Count(p => PaymentService.EffectiveStatus(p) == PaymentStatuses.Overdue),
-            OpenBalance = open.Sum(PaymentService.Remaining),
+            OpenBalance = focus.Sum(student => StudentTuition.Remaining(db, student.StudentId)),
             PaymentHeadline = paymentStatus,
             ProgressHeadline = recentProgress.Count == 0
                 ? "No notes yet"
