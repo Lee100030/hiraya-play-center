@@ -10,7 +10,7 @@ This repository is the **React / Next.js / Expo / Electron** frontend for Hiraya
 2. `npm run dev:api` → Hiraya.Api at `http://127.0.0.1:5188` 
 3. `npm start` → website at `http://127.0.0.1:3000`
 4. Optional: `npm run dev:desktop` and `npm run dev:mobile` against the same API.
-
+ 
 ## Apps
 
 | App | Folder | Where it runs |
