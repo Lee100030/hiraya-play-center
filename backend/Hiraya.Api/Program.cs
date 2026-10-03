@@ -359,6 +359,99 @@ app.MapPost("/api/public/enrollment", async (HttpRequest request, PublicEnrollme
     }
 });
 
+app.MapPost("/api/public/inquiries", async (
+    HttpRequest request,
+    PublicInquiryRequest body,
+    IHirayaRepository repo,
+    IEmailSender email,
+    PublicRequestThrottle throttle,
+    ILoggerFactory logs,
+    CancellationToken ct) =>
+{
+    if (!throttle.Allow($"inquiry:{ParentPortalApi.ClientHost(request)}", 8, TimeSpan.FromMinutes(15)))
+        return Results.Json(new { error = "Too many messages. Please wait and try again." }, statusCode: StatusCodes.Status429TooManyRequests);
+
+    var name = (body.Name ?? "").Trim();
+    var from = (body.Email ?? "").Trim();
+    var phone = (body.Phone ?? "").Trim();
+    var message = (body.Message ?? "").Trim();
+    var digits = phone.Count(char.IsDigit);
+    if (name.Length < 2 || !from.Contains('@') || digits < 7 || message.Length < 10)
+        return Results.Json(new { error = "Please complete your name, email, phone, and a short message." }, statusCode: StatusCodes.Status400BadRequest);
+
+    var inquiryId = "inq_" + Guid.NewGuid().ToString("N")[..10];
+    var centerName = "Hiraya Kids Learning Center";
+    var centerEmail = "";
+    HirayaEmailContact? contact = null;
+    var saved = false;
+    await repo.MutateAsync(async db =>
+    {
+        if (!string.IsNullOrWhiteSpace(db.Settings.CenterName))
+            centerName = db.Settings.CenterName.Trim();
+        centerEmail = (db.Settings.Email ?? "").Trim();
+        contact = HirayaEmailLayout.ContactFrom(db.Settings);
+        var admins = db.Users
+            .Where(user => user.Role is UserRoles.SuperAdmin or UserRoles.Admin or UserRoles.Staff)
+            .Where(user => !string.Equals(user.Status, "inactive", StringComparison.OrdinalIgnoreCase))
+            .Select(user => user.UserId)
+            .ToList();
+        if (admins.Count > 0)
+        {
+            NotificationService.PushToUsers(
+                db,
+                admins,
+                $"{name} ({from}, {phone}) wrote: {message}",
+                NotificationKinds.System,
+                "Website inquiry",
+                "/admin/messages");
+            saved = true;
+        }
+        await Task.CompletedTask;
+    }, ct);
+
+    var emailed = false;
+    var deliverable = centerEmail.Contains('@') &&
+                      !centerEmail.EndsWith(".local", StringComparison.OrdinalIgnoreCase) &&
+                      !centerEmail.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase);
+    if (deliverable)
+    {
+        try
+        {
+            var notice = new HirayaEmailMessage
+            {
+                CenterName = centerName,
+                Headline = "New website inquiry",
+                Intro = $"{name} sent a message from the public website.",
+                Reference = inquiryId,
+                Contact = contact,
+                Rows =
+                [
+                    new HirayaEmailRow("Name", name),
+                    new HirayaEmailRow("Email", from),
+                    new HirayaEmailRow("Phone", phone),
+                    new HirayaEmailRow("Message", message),
+                ],
+            };
+            await email.SendAsync(
+                centerEmail,
+                $"{centerName} · Website inquiry",
+                HirayaEmailLayout.Plain(notice),
+                HirayaEmailLayout.Html(notice),
+                ct: ct);
+            emailed = true;
+        }
+        catch (Exception ex)
+        {
+            logs.CreateLogger("Hiraya.Inquiries").LogWarning(ex, "Inquiry {InquiryId} was saved, but the notice email was not sent.", inquiryId);
+        }
+    }
+
+    if (!saved && !emailed)
+        return Results.Json(new { error = "The center could not receive this message. Please try again in a moment." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    return Results.Json(new PublicInquiryResult { Submitted = true, Emailed = emailed }, JsonDefaults.Options);
+});
+
 app.MapPost("/api/public/teacher-application", async (HttpRequest request, TeacherApplyRequest body, EnrollmentService enroll, PublicRequestThrottle throttle) =>
 {
     if (!throttle.Allow($"teacher:{ParentPortalApi.ClientHost(request)}", 8, TimeSpan.FromMinutes(15)))

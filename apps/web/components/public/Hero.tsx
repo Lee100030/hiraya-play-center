@@ -68,7 +68,7 @@ export function Hero({ site }: { site: PublicSite }) {
         <p className="lede-light">{site.welcomeMessage || site.description}</p>
         <div className="hero-cta-row">
           <EnrollTrigger className="btn-hero">Start enrollment</EnrollTrigger>
-          <TeacherApplyTrigger className="btn-ghost-light">Apply as a teacher</TeacherApplyTrigger>
+          <TeacherApplyTrigger className="btn-ghost-light">Teach with us</TeacherApplyTrigger>
           <button type="button" className="btn-ghost-light" onClick={() => setTour(true)}>
             Watch a campus tour
           </button>

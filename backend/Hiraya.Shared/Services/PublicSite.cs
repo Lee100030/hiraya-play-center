@@ -79,6 +79,20 @@ public sealed class PublicEnrollmentResult
     public string ApplicationId { get; set; } = "";
 }
 
+public sealed class PublicInquiryRequest
+{
+    public string Name { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public string Message { get; set; } = "";
+}
+
+public sealed class PublicInquiryResult
+{
+    public bool Submitted { get; set; }
+    public bool Emailed { get; set; }
+}
+
 public static class PublicSiteCatalog
 {
     public static PublicSiteDto From(HirayaDatabase db)

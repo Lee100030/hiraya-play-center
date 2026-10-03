@@ -2,12 +2,25 @@
 
 import { CAMPUS_PHOTOS } from '@/lib/campus';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export function CampusTour({ onClose }: { onClose: () => void }) {
   const [index, setIndex] = useState(0);
   const slides = CAMPUS_PHOTOS;
   const slide = slides[index] ?? slides[0];
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
 
   return (
     <div className="enroll-overlay" role="presentation" onClick={onClose}>
@@ -24,7 +37,7 @@ export function CampusTour({ onClose }: { onClose: () => void }) {
         <p className="eyebrow">Campus</p>
         <h2 id="tour-title">Walk through HIRAYA Play Center</h2>
         <div className="tour-frame">
-          <Image src={slide.src} alt={slide.title} width={1280} height={720} className="tour-photo" />
+          <Image src={slide.src} alt={slide.title} fill sizes="(max-width: 840px) 100vw, 820px" className="tour-photo" />
           <div className="tour-veil" aria-hidden="true" />
         </div>
         <h3>{slide.title}</h3>

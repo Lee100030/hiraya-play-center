@@ -27,6 +27,7 @@ export function SocialProof({ site }: { site: PublicSite }) {
             <span>Warm, personal center life</span>
           </article>
         </div>
+        {/* Illustrative placeholder copy for the landing page, not quotes submitted by families and not editable from Marketing. */}
         <div className="testimonials-grid">
           <blockquote className="testimonial-card">
             <p>“Drop-off feels unhurried. The teachers greet my child as if the day already belongs to them.”</p>

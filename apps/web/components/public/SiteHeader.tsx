@@ -4,15 +4,28 @@ import { publicNav } from '@/lib/nav';
 import { crestSrc } from '@/lib/publicSite';
 import type { PublicSite } from '@hiraya/types';
 import { EnrollTrigger, TeacherApplyTrigger } from '@/components/public/enrollment';
+import { CloseIcon, MenuIcon } from '@/components/public/icons';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export function SiteHeader({ site }: { site: PublicSite }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const src = crestSrc(site);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   return (
     <header className="site-header">
@@ -26,6 +39,7 @@ export function SiteHeader({ site }: { site: PublicSite }) {
         <span>HIRAYA</span>
       </Link>
       <button
+        ref={menuButtonRef}
         type="button"
         className="site-menu-btn"
         aria-expanded={open}
@@ -33,7 +47,7 @@ export function SiteHeader({ site }: { site: PublicSite }) {
         aria-label={open ? 'Close menu' : 'Open menu'}
         onClick={() => setOpen((value) => !value)}
       >
-        {open ? '✕' : '☰'}
+        {open ? <CloseIcon width={22} height={22} /> : <MenuIcon width={22} height={22} />}
       </button>
       <nav id="public-nav" className={open ? 'site-nav open' : 'site-nav'}>
         {publicNav.map((item, index) => (

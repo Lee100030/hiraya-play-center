@@ -5,9 +5,14 @@ namespace Hiraya.Shared.Services;
 public sealed class WebsiteMediaStorage
 {
     public const long MaxBytes = 8 * 1024 * 1024;
+    public const long MaxVideoBytes = 25 * 1024 * 1024;
     private static readonly HashSet<string> Allowed = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".webp", ".gif"
+    };
+    private static readonly HashSet<string> VideoAllowed = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4", ".webm"
     };
 
     private readonly IHirayaAppPaths _paths;
@@ -30,6 +35,35 @@ public sealed class WebsiteMediaStorage
         }
         await File.WriteAllBytesAsync(Path.Combine(_paths.DataDirectory, relative.Replace('/', Path.DirectorySeparatorChar)), bytes);
         return relative;
+    }
+
+    public async Task SaveIntroVideoAsync(string fileName, byte[] bytes)
+    {
+        if (bytes.Length == 0)
+            throw new InvalidOperationException("The selected file was empty.");
+        if (bytes.Length > MaxVideoBytes)
+            throw new InvalidOperationException("Video must be 25 MB or smaller.");
+        var safe = LearningModuleRules.SafeFileName(fileName);
+        if (LearningModuleRules.HasBlockedSegment(safe))
+            throw new InvalidOperationException("That file type is not allowed.");
+        var ext = Path.GetExtension(safe).ToLowerInvariant();
+        if (!VideoAllowed.Contains(ext))
+            throw new InvalidOperationException("Use an MP4 or WEBM video.");
+        Directory.CreateDirectory(Root);
+        foreach (var leftover in Directory.GetFiles(Root, "intro.*"))
+        {
+            try { File.Delete(leftover); } catch { /* ignore */ }
+        }
+        var relative = $"media/website/intro{ext}";
+        await File.WriteAllBytesAsync(Path.Combine(_paths.DataDirectory, relative.Replace('/', Path.DirectorySeparatorChar)), bytes);
+    }
+
+    public string? IntroVideoFile()
+    {
+        if (!Directory.Exists(Root))
+            return null;
+        return Directory.GetFiles(Root, "intro.*")
+            .FirstOrDefault(path => VideoAllowed.Contains(Path.GetExtension(path)));
     }
 
     public async Task<string> SaveGalleryAsync(string itemId, string fileName, byte[] bytes)

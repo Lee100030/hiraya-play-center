@@ -629,6 +629,21 @@ export class HirayaApi {
     return this.parse(res);
   }
 
+  async submitInquiry(input: {
+    name: string;
+    email: string;
+    phone: string;
+    message: string;
+  }): Promise<{ submitted?: boolean; emailed?: boolean }> {
+    const res = await fetch(this.url('/api/public/inquiries'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(20000) : undefined,
+    });
+    return this.parse(res);
+  }
+
   async applyTeacher(input: TeacherApplyInput): Promise<{ submitted?: boolean; applicationId?: string }> {
     const res = await fetch(this.url('/api/public/teacher-application'), {
       method: 'POST',
@@ -739,6 +754,18 @@ export class HirayaApi {
       link.click();
     }
     window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  }
+
+  async saveIntroVideo(file: Blob, fileName: string): Promise<void> {
+    const headers = (await this.headers(false)) as Record<string, string>;
+    const body = new FormData();
+    body.append('file', file, fileName);
+    const res = await fetch(this.url('/api/admin/website/intro-video'), {
+      method: 'POST',
+      headers,
+      body,
+    });
+    await this.parse(res);
   }
 
   async saveWebsiteLanding(welcomeTitle: string, welcomeMessage: string): Promise<void> {

@@ -25,6 +25,15 @@ public static class WebsiteApi
             return Results.File(bytes, media.ContentType(item.FilePath));
         });
 
+        app.MapGet("/api/public/intro-video", (HttpContext http, WebsiteMediaStorage media) =>
+        {
+            var path = media.IntroVideoFile();
+            if (path is null)
+                return Results.NotFound();
+            http.Response.Headers.CacheControl = "no-store";
+            return Results.File(path, media.ContentType(path), enableRangeProcessing: true);
+        });
+
         app.MapGet("/api/public/logo", async (HttpContext http, IHirayaRepository repo, WebsiteMediaStorage media) =>
         {
             http.Response.Headers.CacheControl = "no-store";
@@ -89,6 +98,33 @@ public static class WebsiteApi
                 return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
             }
         });
+
+        app.MapPost("/api/admin/website/intro-video", async (HttpRequest request, IHirayaRepository repo, WebsiteContentService cms) =>
+        {
+            var actor = await ParentPortalApi.ActorAsync(request, repo);
+            if (actor is null)
+                return Results.Unauthorized();
+            try
+            {
+                var form = await request.ReadFormAsync();
+                var upload = form.Files.GetFile("file");
+                if (upload is null || upload.Length <= 0)
+                    throw new InvalidOperationException("Choose an MP4 or WEBM video.");
+                await using var stream = upload.OpenReadStream();
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                await cms.SaveIntroVideoAsync(actor, ms.ToArray(), upload.FileName);
+                return Results.NoContent();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        }).DisableAntiforgery();
 
         app.MapPost("/api/admin/website/logo", async (HttpRequest request, IHirayaRepository repo, WebsiteContentService cms) =>
         {

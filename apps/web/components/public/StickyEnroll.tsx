@@ -44,7 +44,7 @@ export function StickyEnroll() {
       className={parked ? 'float-enroll float-enroll--parked' : 'float-enroll'}
       magnetic={false}
     >
-      Start enrollment
+      Enroll
     </EnrollTrigger>
   );
 }
