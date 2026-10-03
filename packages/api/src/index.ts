@@ -756,18 +756,6 @@ export class HirayaApi {
     window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
   }
 
-  async saveIntroVideo(file: Blob, fileName: string): Promise<void> {
-    const headers = (await this.headers(false)) as Record<string, string>;
-    const body = new FormData();
-    body.append('file', file, fileName);
-    const res = await fetch(this.url('/api/admin/website/intro-video'), {
-      method: 'POST',
-      headers,
-      body,
-    });
-    await this.parse(res);
-  }
-
   async saveWebsiteLanding(welcomeTitle: string, welcomeMessage: string): Promise<void> {
     const res = await fetch(this.url('/api/admin/website/landing'), {
       method: 'PUT',

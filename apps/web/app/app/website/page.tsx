@@ -101,27 +101,6 @@ export default function WebsiteCmsPage() {
         </Field>
         <Button type="submit">Save contact</Button>
       </form>
-      <form
-        className="hlc-card form-grid"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          const file = form.get('file');
-          if (!(file instanceof File) || file.size === 0) {
-            setMessage('Choose an MP4 or WEBM video.');
-            return;
-          }
-          await api.saveIntroVideo(file, file.name);
-          setMessage('Campus film uploaded. Reload the public About section to play it.');
-          event.currentTarget.reset();
-        }}
-      >
-        <h2>Campus film</h2>
-        <Field label="About video (MP4 or WEBM, up to 25 MB)">
-          <Input name="file" type="file" accept="video/mp4,video/webm" />
-        </Field>
-        <Button type="submit">Upload film</Button>
-      </form>
       <Card title="Gallery">
         {store.websiteGallery.length === 0 ? (
           <p>No gallery items in the API store yet.</p>

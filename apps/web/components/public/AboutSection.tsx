@@ -1,4 +1,3 @@
-import { AboutFilm } from '@/components/public/AboutFilm';
 import type { PublicSite } from '@hiraya/types';
 import Link from 'next/link';
 
@@ -33,9 +32,6 @@ export function AboutSection({ site }: { site: PublicSite }) {
             Learn more
           </Link>
         </p>
-      </div>
-      <div className="about-visual">
-        <AboutFilm />
       </div>
     </section>
   );

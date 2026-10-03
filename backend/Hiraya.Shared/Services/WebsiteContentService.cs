@@ -71,18 +71,6 @@ public class WebsiteContentService
         });
     }
 
-    public async Task SaveIntroVideoAsync(HirayaUser actor, byte[] bytes, string fileName)
-    {
-        EnsureAdmin(actor);
-        await _media.SaveIntroVideoAsync(fileName, bytes);
-        await _repository.MutateAsync(async db =>
-        {
-            AuditService.Append(db, actor, AuditModules.Website, "update", "intro-video", "intro-video",
-                $"{actor.Fullname} updated the public campus film.");
-            await Task.CompletedTask;
-        });
-    }
-
     public async Task SaveLogoAsync(HirayaUser actor, byte[] bytes, string fileName)
     {
         EnsureAdmin(actor);

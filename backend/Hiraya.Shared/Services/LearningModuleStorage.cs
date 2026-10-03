@@ -58,8 +58,6 @@ public static class LearningModuleRules
         ".webp" => "image/webp",
         ".gif" => "image/gif",
         ".jpg" or ".jpeg" => "image/jpeg",
-        ".mp4" => "video/mp4",
-        ".webm" => "video/webm",
         _ => "application/octet-stream"
     };
 
