@@ -86,7 +86,7 @@ export default function AdminStudentsPage() {
     return api.studentPhotoUrl(row.studentId, row.profileImagePath);
   }
 
-  async function saveStudentPhoto(row: Student, file: File) {
+  async function uploadPickedStudentPhoto(row: Student, file: File) {
     setPhotoBusy(true);
     try {
       const next = await api.uploadStudentPhoto(row.studentId, file, file.name || 'photo.jpg');
@@ -368,7 +368,7 @@ export default function AdminStudentsPage() {
           photo={studentPhoto(current)}
           photoEditable
           photoBusy={photoBusy}
-          onPickPhoto={(file) => void saveStudentPhoto(current, file)}
+          onPickPhoto={(file) => void uploadPickedStudentPhoto(current, file)}
           onRemovePhoto={() => void clearStudentPhoto(current)}
           active={current.status === 'active'}
           onToggleActive={(next) => {

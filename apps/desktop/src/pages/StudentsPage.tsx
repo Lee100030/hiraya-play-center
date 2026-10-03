@@ -69,7 +69,7 @@ export function StudentsPage({
     return api.studentPhotoUrl(row.studentId, row.profileImagePath);
   }
 
-  async function saveStudentPhoto(row: Student, file: File) {
+  async function uploadPickedStudentPhoto(row: Student, file: File) {
     setPhotoBusy(true);
     setError(null);
     try {
@@ -497,7 +497,7 @@ export function StudentsPage({
           toggleBusy={busy}
           photoEditable
           photoBusy={photoBusy}
-          onPickPhoto={(file) => void saveStudentPhoto(viewing, file)}
+          onPickPhoto={(file) => void uploadPickedStudentPhoto(viewing, file)}
           onRemovePhoto={() => void clearStudentPhoto(viewing)}
           onToggleActive={(next) => void setStudentStatus(viewing, next ? 'active' : 'inactive')}
           onClose={() => {
