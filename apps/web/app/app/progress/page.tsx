@@ -27,29 +27,10 @@ export default function ProgressPage() {
             {store.reports.map((row) => (
               <tr key={row.reportId}>
                 <td>
-                  {studentDisplay(
-                    store.students.find((s) => s.studentId === row.studentId) ?? {
-                      studentId: row.studentId,
-                      firstName: '',
-                      middleName: '',
-                      lastName: '',
-                      fullname: row.studentId,
-                      birthdate: '',
-                      age: 0,
-                      gender: '',
-                      address: '',
-                      contactNumber: '',
-                      parentId: '',
-                      emergencyContact: '',
-                      emergencyPhone: '',
-                      qrCode: '',
-                      gradeLevel: '',
-                      program: '',
-                      status: '',
-                      enrollmentDate: '',
-                      notes: '',
-                    },
-                  )}
+                  {(() => {
+                    const student = store.students.find((s) => s.studentId === row.studentId);
+                    return student ? studentDisplay(student) : row.studentId;
+                  })()}
                 </td>
                 <td>{row.area}</td>
                 <td>{row.rating}</td>

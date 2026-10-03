@@ -93,29 +93,10 @@ export default function AttendancePage() {
               <td>
                 {row.kind === 'employee'
                   ? store.users.find((u) => u.userId === row.employeeId)?.fullname
-                  : studentDisplay(
-                      store.students.find((s) => s.studentId === row.studentId) ?? {
-                        studentId: '',
-                        firstName: row.studentId,
-                        middleName: '',
-                        lastName: '',
-                        fullname: row.studentId,
-                        birthdate: '',
-                        age: 0,
-                        gender: '',
-                        address: '',
-                        contactNumber: '',
-                        parentId: '',
-                        emergencyContact: '',
-                        emergencyPhone: '',
-                        qrCode: '',
-                        gradeLevel: '',
-                        program: '',
-                        status: '',
-                        enrollmentDate: '',
-                        notes: '',
-                      },
-                    )}
+                  : (() => {
+                      const student = store.students.find((s) => s.studentId === row.studentId);
+                      return student ? studentDisplay(student) : row.studentId;
+                    })()}
               </td>
               <td>
                 <StatusBadge status={row.status} />

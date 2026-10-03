@@ -43,6 +43,7 @@ const HREF: Record<HklcNavId, string> = {
   settings: '/admin/settings',
   tasks: '/admin/tasks',
   announcements: '/admin/announcements',
+  feedback: '/admin/messages',
   sessions: '/admin/sessions',
   messages: '/admin/messages',
 };
