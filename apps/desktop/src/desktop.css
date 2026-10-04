@@ -630,13 +630,13 @@ select {
   flex: none;
   min-width: 0;
   width: 100%;
-  min-height: 72px;
-  padding: 16px 28px 16px 24px;
+  min-height: 84px;
+  padding: 14px 28px 14px 24px;
   background: var(--desk-surface);
   border-bottom: 1px solid var(--desk-line);
   position: relative;
   z-index: 8;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .page-crumb {

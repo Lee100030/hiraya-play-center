@@ -7,6 +7,11 @@ function isLoopback(value: string) {
   return /^(https?:\/\/)?(127\.0\.0\.1|localhost|\[::1\])\b/i.test(value);
 }
 
+/** Android emulator alias for the computer. A real phone cannot use it. */
+function isEmulatorAlias(host: string) {
+  return host === '10.0.2.2' || host === '10.0.3.2';
+}
+
 function isPrivateLanHost(host: string) {
   return /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(host);
 }
@@ -61,8 +66,8 @@ export function resolveMobileApiUrl(): string {
     const envIsLan = isPrivateLanHost(envHost);
     const envIsHttps = /^https:\/\//i.test(env);
 
-    if (onPhone && envIsLoopback) {
-      /* fall through — phone cannot use localhost of the PC */
+    if (onPhone && (envIsLoopback || isEmulatorAlias(envHost))) {
+      /* fall through — a phone cannot use this computer's loopback or the emulator alias */
     } else if (envIsHttps || !envIsLan) {
       return env;
     } else if (packagerApi && hostFromUrl(packagerApi) !== envHost) {
@@ -74,11 +79,8 @@ export function resolveMobileApiUrl(): string {
 
   if (packagerApi) return packagerApi;
 
-  if (!onPhone) {
-    if (Platform.OS === 'android') return `http://10.0.2.2:${API_PORT}`;
-    return `http://127.0.0.1:${API_PORT}`;
-  }
+  if (!onPhone && Platform.OS === 'android') return `http://10.0.2.2:${API_PORT}`;
+  if (!onPhone) return `http://127.0.0.1:${API_PORT}`;
 
-  if (Platform.OS === 'android') return `http://10.0.2.2:${API_PORT}`;
   return `http://127.0.0.1:${API_PORT}`;
 }

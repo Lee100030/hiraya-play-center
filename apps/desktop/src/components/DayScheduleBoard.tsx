@@ -48,7 +48,7 @@ function boardRows(store: HirayaDatabase, day: string, teacherIds: string[]) {
   const saved = (store.schedules || []).filter(
     (row) => row.kind === 'dayBoard' && row.status !== 'cancelled' && localDateKey(row.startAt) === day,
   );
-  let count = SLOT_WINDOWS.length;
+  let count: number = SLOT_WINDOWS.length;
   for (const row of saved) {
     if ((row.room || '').startsWith('slot:')) count = Math.max(count, Number(row.room.slice(5)) + 1);
   }

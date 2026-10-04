@@ -427,6 +427,17 @@ export function TeacherWorkspacePage({
     );
   }
 
+  async function deleteTasks(picked: StaffTask[]) {
+    if (!picked.length) return false;
+    const label = picked.length === 1 ? picked[0].title || 'this task' : `${picked.length} tasks`;
+    if (!window.confirm(`Delete ${label}? Teachers will no longer see them on mobile.`)) return false;
+    const ids = new Set(picked.map((row) => row.taskId));
+    await persist(
+      { ...store, staffTasks: (store.staffTasks || []).filter((row) => !ids.has(row.taskId)) },
+      picked.length === 1 ? 'Task deleted.' : `${picked.length} tasks deleted.`,
+    );
+  }
+
   async function saveAttendance(event: FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
     const date = String(form.get('attendanceDate') || '');
@@ -925,6 +936,7 @@ export function TeacherWorkspacePage({
               setEditTask(row);
               setModal('task');
             },
+            onDelete: deleteTasks,
           }}
           columns={[
             { key: 'title', header: 'Task', render: (row) => row.title },

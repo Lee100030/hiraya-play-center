@@ -77,6 +77,11 @@ export function LoginScreen({
         <button className="login-submit" type="submit" disabled={busy}>
           {busy ? 'Signing in…' : 'Open workspace'}
         </button>
+        {busy && !import.meta.env.DEV ? (
+          <p className="login-hint" role="status">
+            The first sign-in after a quiet period can take up to a minute while the center wakes up.
+          </p>
+        ) : null}
         {import.meta.env.DEV ? (
           <p className="login-hint">
             <Icons.shield width={16} height={16} />

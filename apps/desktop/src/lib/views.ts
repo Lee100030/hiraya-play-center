@@ -54,7 +54,7 @@ export const PAGE_COPY: Record<ViewId, { title: string; description: string }> =
   compliance: { title: 'Compliance', description: 'Operational checklist items.' },
   uniforms: { title: 'Uniforms', description: 'Uniform inventory.' },
   evaluations: { title: 'Evaluations', description: 'Evaluation forms.' },
-  marketing: { title: 'Marketing site', description: 'Landing and About copy for the public website. Same records as website admin.' },
+  marketing: { title: 'Marketing site', description: 'Edit the public website, then publish. The live site reads this from the center.' },
   notifications: { title: 'Notifications', description: 'Alerts generated when schedules, tasks, announcements, or sessions change.' },
   reports: { title: 'Reports', description: 'Operational counts from the current store, matching the website dashboard.' },
   settings: { title: 'Settings', description: 'Edit this Super Administrator profile, password, alerts, and center identity. Same records as website admin.' },

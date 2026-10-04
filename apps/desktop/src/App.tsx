@@ -40,6 +40,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
+    const timer = window.setInterval(() => {
+      void api.getStore().then(setStore).catch(() => undefined);
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [user]);
+
+  useEffect(() => {
     const token = localStorage.getItem(SESSION_STORAGE_KEY);
     const raw = localStorage.getItem(USER_STORAGE_KEY);
     if (!token || !raw) {
@@ -84,7 +92,9 @@ export default function App() {
         (err instanceof Error && err.name === 'AbortError');
       setError(
         offline
-          ? 'HIRAYA API is not running on port 5188. Start Hiraya.Api, then sign in again.'
+          ? import.meta.env.DEV
+            ? 'HIRAYA API is not running on port 5188. Start Hiraya.Api, then sign in again.'
+            : 'The center is waking up. Wait a moment and try again.'
           : raw,
       );
     } finally {

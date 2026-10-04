@@ -18,6 +18,31 @@ public sealed class WebsiteAboutSave
     public string Values { get; set; } = "";
 }
 
+public sealed class WebsiteProgramSave
+{
+    public string ProgramId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+}
+
+public sealed class WebsitePublishSave
+{
+    public string CenterName { get; set; } = "";
+    public string WelcomeTitle { get; set; } = "";
+    public string WelcomeMessage { get; set; } = "";
+    public string AboutTitle { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Mission { get; set; } = "";
+    public string Vision { get; set; } = "";
+    public string Values { get; set; } = "";
+    public string Address { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Website { get; set; } = "";
+    public string BusinessHours { get; set; } = "";
+    public List<WebsiteProgramSave> Programs { get; set; } = [];
+}
+
 public sealed class WebsiteGallerySave
 {
     public string ItemId { get; set; } = "";
@@ -69,6 +94,54 @@ public class WebsiteContentService
                 $"{actor.Fullname} updated About HIRAYA.");
             await Task.CompletedTask;
         });
+    }
+
+    public async Task SavePublishAsync(WebsitePublishSave input, HirayaUser actor)
+    {
+        EnsureAdmin(actor);
+        var email = (input.Email ?? "").Trim();
+        if (email.Length > 0 && !email.Contains('@'))
+            throw new InvalidOperationException("Enter a valid center email.");
+
+        await _repository.MutateAsync(async db =>
+        {
+            if (!string.IsNullOrWhiteSpace(input.CenterName))
+                db.Settings.CenterName = Clip(input.CenterName);
+            db.Settings.WelcomeTitle = string.IsNullOrWhiteSpace(input.WelcomeTitle)
+                ? "Welcome to Hiraya Kids Learning Center"
+                : Clip(input.WelcomeTitle);
+            db.Settings.WelcomeMessage = (input.WelcomeMessage ?? "").Trim();
+            db.Settings.AboutTitle = string.IsNullOrWhiteSpace(input.AboutTitle) ? "About HIRAYA" : Clip(input.AboutTitle);
+            db.Settings.Description = (input.Description ?? "").Trim();
+            db.Settings.Mission = (input.Mission ?? "").Trim();
+            db.Settings.Vision = (input.Vision ?? "").Trim();
+            db.Settings.Values = (input.Values ?? "").Trim();
+            db.Settings.Address = Clip(input.Address);
+            db.Settings.Phone = Clip(input.Phone);
+            db.Settings.Email = Clip(email);
+            db.Settings.Website = Clip(input.Website);
+            db.Settings.BusinessHours = Clip(input.BusinessHours);
+            db.Settings.UpdatedAt = DateTime.UtcNow.ToString("o");
+
+            foreach (var item in input.Programs ?? [])
+            {
+                var program = db.Programs.FirstOrDefault(row => row.ProgramId == (item.ProgramId ?? "").Trim());
+                if (program is null) continue;
+                if (!string.IsNullOrWhiteSpace(item.Name))
+                    program.Name = Clip(item.Name);
+                program.Description = (item.Description ?? "").Trim();
+            }
+
+            AuditService.Append(db, actor, AuditModules.Website, "update", "publish", "publish",
+                $"{actor.Fullname} published the public website.");
+            await Task.CompletedTask;
+        });
+    }
+
+    static string Clip(string? value, int max = 191)
+    {
+        var text = (value ?? "").Trim();
+        return text.Length <= max ? text : text[..max];
     }
 
     public async Task SaveLogoAsync(HirayaUser actor, byte[] bytes, string fileName)

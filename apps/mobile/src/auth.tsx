@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persist.current = remember;
         persistSession = remember;
         const ids = mobileLoginIds(login, password);
-        const session = await api.login(ids.login, ids.password);
+        const session = await api.login(ids.login, ids.password, 'mobile');
         if (!canUseMobileApp(session.user.role)) {
           await api.logout();
           throw new Error(MOBILE_LOGIN_BLOCKED);

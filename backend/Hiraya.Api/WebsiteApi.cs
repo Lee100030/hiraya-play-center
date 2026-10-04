@@ -70,6 +70,26 @@ public static class WebsiteApi
             }
         });
 
+        app.MapPut("/api/admin/website/publish", async (WebsitePublishSave body, HttpRequest request, IHirayaRepository repo, WebsiteContentService cms) =>
+        {
+            var actor = await ParentPortalApi.ActorAsync(request, repo);
+            if (actor is null)
+                return Results.Unauthorized();
+            try
+            {
+                await cms.SavePublishAsync(body, actor);
+                return Results.NoContent();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
         app.MapPut("/api/admin/website/about", async (WebsiteAboutSave body, HttpRequest request, IHirayaRepository repo, WebsiteContentService cms) =>
         {
             var actor = await ParentPortalApi.ActorAsync(request, repo);

@@ -2,7 +2,6 @@ import { Button, Field, Input, PersonAvatar } from '@hiraya/ui';
 import {
   addLearningProgram,
   displayName,
-  formatDate,
   isBuiltinManagementLane,
   isTeacherApplication,
   isManagementLaneView,
@@ -19,7 +18,7 @@ import {
   type ManagementLaneId,
   type PaymentLaneId,
 } from '@hiraya/utils';
-import type { HirayaDatabase, HirayaUser, SystemAlert } from '@hiraya/types';
+import type { HirayaDatabase, HirayaUser } from '@hiraya/types';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Icons } from '../icons';
 import { desktopNav, type ViewId } from '../lib/views';
@@ -61,9 +60,7 @@ export function Shell({
   peopleLane?: ManagementLaneId | null;
   children: ReactNode;
 }) {
-  const [inboxOpen, setInboxOpen] = useState(false);
   const [messagesOpen, setMessagesOpen] = useState(false);
-  const [activeAlert, setActiveAlert] = useState<SystemAlert | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -104,19 +101,6 @@ export function Shell({
     }
   }, [view, peopleLane]);
 
-  useEffect(() => {
-    const latest = unreadAlerts[0];
-    if (!latest) return;
-    const key = `hiraya.popupAlert.${latest.alertId}`;
-    try {
-      if (sessionStorage.getItem(key)) return;
-      sessionStorage.setItem(key, '1');
-    } catch {
-      return;
-    }
-    setActiveAlert(latest);
-  }, [unreadAlerts[0]?.alertId]);
-
   const searchHits = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 2) return [];
@@ -134,11 +118,6 @@ export function Shell({
       }));
     return [...people, ...apps];
   }, [query, store.students, store.enrollmentApplications]);
-
-  function openAlert(alert: SystemAlert) {
-    setActiveAlert(alert);
-    if (!alert.read) onMarkRead(alert.alertId);
-  }
 
   async function saveNewProgram() {
     setProgramBusy(true);
@@ -400,7 +379,6 @@ export function Shell({
               title="Messages"
               onClick={() => {
                 setMessagesOpen(true);
-                setInboxOpen(false);
                 setProfileOpen(false);
               }}
             >
@@ -413,8 +391,8 @@ export function Shell({
                 className="icon-btn"
                 aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
                 onClick={() => {
-                  setInboxOpen(true);
                   setProfileOpen(false);
+                  onView('notifications');
                 }}
               >
                 <Icons.notifications />
@@ -461,79 +439,6 @@ export function Shell({
       {messagesOpen ? (
         <DeskModal title="Messages" size="wide" hideFooter onClose={() => setMessagesOpen(false)}>
           <MessengerInbox store={store} user={user} onStore={onStore} saveStore={saveStore} />
-        </DeskModal>
-      ) : null}
-
-      {inboxOpen ? (
-        <DeskModal
-          title={unread ? `Notifications (${unread} unread)` : 'Notifications'}
-          onClose={() => setInboxOpen(false)}
-          actions={
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  onView('notifications');
-                  setInboxOpen(false);
-                }}
-              >
-                Open inbox
-              </Button>
-              <Button type="button" onClick={() => setInboxOpen(false)}>
-                Close
-              </Button>
-            </>
-          }
-        >
-          {alerts.length === 0 ? (
-            <p>No notifications yet.</p>
-          ) : (
-            <div className="notice-list">
-              {alerts.map((alert) => (
-                <button
-                  key={alert.alertId}
-                  type="button"
-                  className={alert.read ? '' : 'unread'}
-                  onClick={() => {
-                    setInboxOpen(false);
-                    openAlert(alert);
-                  }}
-                >
-                  <strong>{alert.title || alert.kind}</strong>
-                  <span>{alert.message || 'Open to read this notice.'}</span>
-                  <small>{formatDate(alert.createdAt)}</small>
-                </button>
-              ))}
-            </div>
-          )}
-        </DeskModal>
-      ) : null}
-
-      {activeAlert && !(loadError && errorOpen) ? (
-        <DeskModal
-          title={activeAlert.title || activeAlert.kind || 'Notification'}
-          onClose={() => setActiveAlert(null)}
-          actions={
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setActiveAlert(null);
-                  setInboxOpen(true);
-                }}
-              >
-                All notifications
-              </Button>
-              <Button type="button" onClick={() => setActiveAlert(null)}>
-                Close
-              </Button>
-            </>
-          }
-        >
-          <p>{activeAlert.message || 'No additional details were saved with this notice.'}</p>
-          <p className="desk-modal-meta">{formatDate(activeAlert.createdAt)}</p>
         </DeskModal>
       ) : null}
 
@@ -609,7 +514,6 @@ export function Shell({
         onView={onView}
         onOpenMessages={() => {
           setMessagesOpen(true);
-          setInboxOpen(false);
           setProfileOpen(false);
         }}
       />

@@ -21,6 +21,29 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
+  "build": {
+    "appId": "app.hirayalearningcenter.desktop",
+    "productName": "HIRAYA Desktop",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "public/images/hiraya-crest.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
+  },
   "devDependencies": {
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",

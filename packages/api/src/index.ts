@@ -90,13 +90,16 @@ export class HirayaApi {
     return this.parse(res);
   }
 
-  async login(login: string, password: string): Promise<AuthSession> {
+  async login(login: string, password: string, client?: string): Promise<AuthSession> {
     await this.tokenStore.setToken?.(null);
     const res = await fetch(this.url('/api/auth/login'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, password }),
-      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(client ? { 'X-Hiraya-Client': client } : {}),
+      },
+      body: JSON.stringify({ login, password, ...(client ? { client } : {}) }),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
     });
     const session = await this.parse<AuthSession>(res);
     await this.tokenStore.setToken?.(session.token);
@@ -754,6 +757,30 @@ export class HirayaApi {
       link.click();
     }
     window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  }
+
+  async publishWebsite(input: {
+    centerName: string;
+    welcomeTitle: string;
+    welcomeMessage: string;
+    aboutTitle: string;
+    description: string;
+    mission: string;
+    vision: string;
+    values: string;
+    address: string;
+    phone: string;
+    email: string;
+    website: string;
+    businessHours: string;
+    programs: { programId: string; name: string; description: string }[];
+  }): Promise<void> {
+    const res = await fetch(this.url('/api/admin/website/publish'), {
+      method: 'PUT',
+      headers: await this.headers(),
+      body: JSON.stringify(input),
+    });
+    await this.parse(res);
   }
 
   async saveWebsiteLanding(welcomeTitle: string, welcomeMessage: string): Promise<void> {

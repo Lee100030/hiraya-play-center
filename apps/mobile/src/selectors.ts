@@ -198,10 +198,12 @@ export function friendlyError(
     lower.includes('failed to fetch') ||
     lower.includes('timeout') ||
     lower.includes('aborted') ||
+    lower.includes('canceled') ||
+    lower.includes('cancelled') ||
     lower.includes('network request failed') ||
     lower.includes('could not connect')
   ) {
-    return 'Cannot reach Hiraya.Api. Keep the phone on the same Wi-Fi as this PC, keep the API on port 5188, then reload Expo.';
+    return 'The center is waking up. Wait a moment and try again.';
   }
   if (message && message.length < 120 && !lower.includes('exception') && !lower.includes('sql')) return message;
   return fallback;

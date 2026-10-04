@@ -237,7 +237,7 @@ app.MapGet("/api/store", async (HttpRequest request, IHirayaRepository repo, ILo
     }
 });
 
-app.MapPost("/api/auth/login", async (LoginRequest body, PortalAuthService auth, SessionTokenOptions tokens, IHirayaRepository repo) =>
+app.MapPost("/api/auth/login", async (LoginRequest body, HttpRequest request, PortalAuthService auth, SessionTokenOptions tokens, IHirayaRepository repo) =>
 {
     try
     {
@@ -246,6 +246,21 @@ app.MapPost("/api/auth/login", async (LoginRequest body, PortalAuthService auth,
             return Results.Json(new { error = "Username or password is incorrect." }, statusCode: StatusCodes.Status401Unauthorized);
         var live = await repo.FindUserAsync(session.User.UserId, null)
                    ?? session.User;
+        var fromPhone = string.Equals(body.Client, "mobile", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(request.Headers["X-Hiraya-Client"], "mobile", StringComparison.OrdinalIgnoreCase);
+        if (fromPhone)
+        {
+            await repo.MutateAsync(async db =>
+            {
+                var name = string.IsNullOrWhiteSpace(live.Fullname) ? live.Username : live.Fullname.Trim();
+                var who = string.IsNullOrWhiteSpace(live.Email) ? name : $"{name} ({live.Email})";
+                var message = $"{who} signed in on the phone.";
+                AuditService.Append(db, live, AuditModules.Auth, "login", "user", live.UserId, message);
+                var admins = NotificationService.Recipients(db, NotificationAudiences.Admins);
+                NotificationService.PushToUsers(db, admins.Select(admin => admin.UserId), message, "mobile-login", "Phone sign-in");
+                await Task.CompletedTask;
+            });
+        }
         var token = SessionTokens.Issue(
             session.User.UserId,
             tokens.Secret,

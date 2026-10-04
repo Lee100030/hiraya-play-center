@@ -1,0 +1,14 @@
+name: Keep Hiraya API awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Request live health
+        run: curl --fail --silent --show-error --max-time 90 "https://hiraya-play-center.onrender.com/api/health"

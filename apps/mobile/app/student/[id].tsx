@@ -33,14 +33,16 @@ export default function StudentProfileScreen() {
   const remaining = remainingForStudent(store, student.studentId);
 
   function markPresent() {
-    if (!user?.userId) return;
+    if (!student || !user?.userId) return;
+    const current = student;
+    const teacherId = user.userId;
     if (here) {
-      Alert.alert('Already marked', `${studentDisplay(student)} is already marked as here today.`);
+      Alert.alert('Already marked', `${studentDisplay(current)} is already marked as here today.`);
       return;
     }
     Alert.alert(
       'Confirm attendance',
-      `Mark ${studentDisplay(student)} as present today? Parents are notified and one session is used if they have a package.`,
+      `Mark ${studentDisplay(current)} as present today? Parents are notified and one session is used if they have a package.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -50,7 +52,7 @@ export default function StudentProfileScreen() {
               setBusy(true);
               try {
                 await api.putStore(
-                  confirmStudentPresentToday(store, student.studentId, user.userId, undefined, 'Confirmed present by teacher on mobile'),
+                  confirmStudentPresentToday(store, current.studentId, teacherId, undefined, 'Confirmed present by teacher on mobile'),
                   store,
                 );
                 await refresh();

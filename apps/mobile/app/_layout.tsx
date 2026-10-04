@@ -8,7 +8,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../src/auth';
-import { Body, Caption, Heading } from '../src/components/typography';
+import { Body, Heading } from '../src/components/typography';
 import { StoreProvider } from '../src/store';
 import { colors, fontAssets, fonts, space } from '../src/theme';
 
@@ -21,8 +21,7 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => voi
     <View style={styles.errorWrap}>
       <Heading style={styles.errorTitle}>HIRAYA could not start</Heading>
       <ScrollView style={{ maxHeight: 320 }}>
-        <Body style={styles.errorBody}>{error?.message || 'Unknown error'}</Body>
-        {error?.stack ? <Caption>{error.stack}</Caption> : null}
+        <Body style={styles.errorBody}>{error?.message || 'Something went wrong. Try again.'}</Body>
       </ScrollView>
       <Pressable onPress={retry} style={styles.retry}>
         <Body style={styles.retryText}>Try again</Body>
@@ -35,7 +34,6 @@ function stackScreen(title: string) {
   return {
     title,
     headerBackTitle: 'Back',
-    headerBackTitleVisible: false,
     headerBackButtonDisplayMode: 'minimal' as const,
   };
 }
@@ -68,7 +66,6 @@ export default function RootLayout() {
                 headerTintColor: colors.cream,
                 headerTitleStyle: { fontFamily: fonts.playfairBold, fontSize: 18, color: colors.cream },
                 headerBackTitle: 'Back',
-                headerBackTitleVisible: false,
                 headerBackButtonDisplayMode: 'minimal',
                 contentStyle: { backgroundColor: colors.cream },
               }}

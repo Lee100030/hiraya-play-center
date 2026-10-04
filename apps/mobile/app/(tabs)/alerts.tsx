@@ -157,7 +157,7 @@ export default function NotificationsTab() {
                       accessibilityLabel={item}
                     >
                       <Caption style={[styles.chipText, active ? styles.chipTextOn : styles.chipTextOff]}>
-                        {item === 'direct' ? 'Messages' : item}
+                        {item}
                       </Caption>
                     </Pressable>
                   );
