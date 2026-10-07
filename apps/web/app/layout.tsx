@@ -1,3 +1,4 @@
+/** Production website rebuild for GitHub commit 6315ba2 (testing-phase release). */
 import type { Metadata } from 'next';
 import { ErrorReporter } from '@/components/ErrorReporter';
 import './globals.css';
