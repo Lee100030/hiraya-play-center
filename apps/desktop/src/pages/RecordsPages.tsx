@@ -24,6 +24,7 @@ import {
   studentBalanceReceivedBy,
   studentDisplay,
   studentPaymentBalance,
+  recordStudentAmountReceived,
   setTeacherMonthAttendanceCounts,
   studentPayments,
   teacherAttendanceSummaries,
