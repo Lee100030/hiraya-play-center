@@ -157,7 +157,6 @@ export default function MessagesScreen() {
               key={row.kind === 'group' ? row.group.groupId : row.person.userId}
               onPress={() => setActive(row)}
               hitSlop={8}
-              delayPressIn={0}
               android_ripple={{ color: 'rgba(0,0,0,0.06)' }}
               style={{
                 backgroundColor: colors.white,

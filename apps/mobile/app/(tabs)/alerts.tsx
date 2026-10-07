@@ -218,7 +218,7 @@ function AlertRow({
         </Pressable>
       )}
     >
-      <Pressable onPress={onRead} hitSlop={6} delayPressIn={0} style={styles.row} accessibilityRole="button">
+      <Pressable onPress={onRead} hitSlop={6} style={styles.row} accessibilityRole="button">
         <View style={[styles.badge, { backgroundColor: `${meta.tint}22` }]}>
           <Ionicons name={meta.icon} size={18} color={meta.tint} />
         </View>
