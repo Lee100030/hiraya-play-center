@@ -234,6 +234,13 @@ public static class EnrollmentStatuses
 
     public static bool CountsTowardCapacity(string? status) =>
         status is Pending or Active or "approved";
+
+    public static bool IsAssignedLive(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return true;
+        var value = status.Trim().ToLowerInvariant();
+        return value is Pending or Active or "approved" or "pending_review" or "enrolled";
+    }
 }
 
 public class LearningProgram

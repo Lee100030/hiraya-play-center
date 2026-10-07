@@ -6,7 +6,16 @@ function personName(user?: { fullname?: string; firstName?: string; lastName?: s
   return assembled || (user.fullname || '').trim();
 }
 
-const LIVE_ENROLLMENT = new Set(['active', 'pending', 'approved']);
+const LIVE_ENROLLMENT = new Set(['active', 'pending', 'approved', 'pending_review', 'enrolled']);
+
+function sameId(left?: string | null, right?: string | null) {
+  return (left || '').trim().toLowerCase() === (right || '').trim().toLowerCase() && !!(left || '').trim();
+}
+
+function liveEnrollment(status?: string | null) {
+  const value = (status || '').trim().toLowerCase();
+  return !value || LIVE_ENROLLMENT.has(value);
+}
 
 export function packedTeacherIds(packed?: string | null) {
   return (packed || '')
@@ -15,9 +24,15 @@ export function packedTeacherIds(packed?: string | null) {
     .filter(Boolean);
 }
 
+function hasTeacher(packed: string | null | undefined, teacherId: string) {
+  const want = (teacherId || '').trim().toLowerCase();
+  if (!want) return false;
+  return packedTeacherIds(packed).some((id) => id.toLowerCase() === want);
+}
+
 export function scheduleAssignedTo(schedule: { teacherId?: string }, teacherId?: string) {
   if (!teacherId) return false;
-  return packedTeacherIds(schedule.teacherId).includes(teacherId);
+  return packedTeacherIds(schedule.teacherId).some((id) => sameId(id, teacherId));
 }
 
 export function openTaskCountForTeacher(store: HirayaDatabase, teacherId: string) {
@@ -32,13 +47,19 @@ export function openTaskCountForTeacher(store: HirayaDatabase, teacherId: string
 }
 
 export function assignedStudentsForTeacher(store: HirayaDatabase, teacherId: string) {
+  const want = (teacherId || '').trim();
+  if (!want) return [];
+  const classIds = new Set(
+    (store.classes || [])
+      .filter((item) => hasTeacher(item.teacherId, want))
+      .map((item) => item.classId),
+  );
   const ids = new Set(
-    store.enrollments
+    (store.enrollments || [])
       .filter(
         (row) =>
-          LIVE_ENROLLMENT.has((row.status || '').toLowerCase()) &&
-          (row.teacherId === teacherId ||
-            store.classes.some((item) => item.classId === row.classId && item.teacherId === teacherId)),
+          liveEnrollment(row.status) &&
+          (hasTeacher(row.teacherId, want) || classIds.has(row.classId)),
       )
       .map((row) => row.studentId),
   );
@@ -52,8 +73,8 @@ export function teachersForStudents(store: HirayaDatabase, studentIds: string[])
   const teacherIds = new Set<string>();
   for (const row of store.enrollments || []) {
     if (!allowed.has(row.studentId)) continue;
-    if (!LIVE_ENROLLMENT.has((row.status || '').toLowerCase())) continue;
-    if (row.teacherId) teacherIds.add(row.teacherId);
+    if (!liveEnrollment(row.status)) continue;
+    for (const id of packedTeacherIds(row.teacherId)) teacherIds.add(id);
     const cls = store.classes.find((item) => item.classId === row.classId);
     if (cls?.teacherId) teacherIds.add(cls.teacherId);
   }
@@ -83,22 +104,45 @@ export function programsForTeacher(store: HirayaDatabase, teacherId: string) {
   return store.programs.filter((row) => ids.has(row.programId));
 }
 
+export function liveEnrollmentForStudent(store: HirayaDatabase, studentId: string) {
+  const id = (studentId || '').trim();
+  if (!id) return undefined;
+  const rows = (store.enrollments || []).filter((row) => sameId(row.studentId, id));
+  return rows.find((row) => liveEnrollment(row.status)) || rows[0];
+}
+
+export function classForStudent(store: HirayaDatabase, studentId?: string) {
+  const enrollment = liveEnrollmentForStudent(store, studentId || '');
+  if (!enrollment?.classId) return undefined;
+  return store.classes.find((item) => item.classId === enrollment.classId);
+}
+
+export function teacherIdForStudent(store: HirayaDatabase, studentId?: string) {
+  const enrollment = liveEnrollmentForStudent(store, studentId || '');
+  const fromEnrollment = packedTeacherIds(enrollment?.teacherId)[0] || '';
+  if (fromEnrollment) return fromEnrollment;
+  return (classForStudent(store, studentId)?.teacherId || '').trim();
+}
+
+export function teacherForStudent(store: HirayaDatabase, studentId?: string) {
+  const teacherId = teacherIdForStudent(store, studentId);
+  if (!teacherId) return undefined;
+  return store.users.find((item) => sameId(item.userId, teacherId));
+}
+
 export function studentPlacement(store: HirayaDatabase, studentId: string) {
-  const enrollment =
-    store.enrollments.find(
-      (row) => row.studentId === studentId && LIVE_ENROLLMENT.has((row.status || '').toLowerCase()),
-    ) || store.enrollments.find((row) => row.studentId === studentId);
-  const cls = enrollment ? store.classes.find((item) => item.classId === enrollment.classId) : undefined;
+  const enrollment = liveEnrollmentForStudent(store, studentId);
+  const cls = classForStudent(store, studentId);
   const program =
     (enrollment && store.programs.find((item) => item.programId === enrollment.programId)?.name) ||
     (cls && store.programs.find((item) => item.programId === cls.programId)?.name) ||
     '';
-  const teacherId = enrollment?.teacherId || cls?.teacherId || '';
+  const teacher = teacherForStudent(store, studentId);
   return {
     classId: cls?.classId || enrollment?.classId || '',
     className: cls?.name || '',
     programName: program,
-    teacherName: teacherId ? personName(store.users.find((item) => item.userId === teacherId)) : '',
+    teacherName: teacher ? personName(teacher) : '',
     enrollmentStatus: enrollment?.status || '',
   };
 }

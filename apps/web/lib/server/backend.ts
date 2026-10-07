@@ -43,7 +43,10 @@ export async function proxyToHirayaApi(request: Request, path: string) {
     init.body = await request.arrayBuffer();
   }
   try {
-    const res = await fetch(target, init);
+    const res = await fetch(target, {
+      ...init,
+      signal: AbortSignal.timeout(50_000),
+    });
     const body = await res.arrayBuffer();
     const out = new Headers();
     const type = res.headers.get('content-type');
@@ -53,7 +56,14 @@ export async function proxyToHirayaApi(request: Request, path: string) {
     out.set('X-Hiraya-Hub', 'hiraya-central');
     return new NextResponse(body.byteLength ? body : null, { status: res.status, headers: out });
   } catch (err) {
+    const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
     console.error(`Hiraya.Api proxy failed (${target}):`, err instanceof Error ? err.message : err);
+    if (timedOut) {
+      return NextResponse.json(
+        { error: 'The center is still waking up. Wait a moment and try again.' },
+        { status: 503 },
+      );
+    }
     return null;
   }
 }

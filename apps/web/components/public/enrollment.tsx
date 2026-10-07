@@ -512,12 +512,12 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
         {ok ? (
           <div className="enroll-modal-success">
             <Alert kind="success">
-              Your teacher application was received. It is kept separate from student enrollment. The center will review
-              it and contact you.
+              Your application has been submitted successfully. Please wait for admin approval. We will contact you
+              through your email once your application has been reviewed.
               {applicationId ? ` Reference number: ${applicationId}` : ''}
             </Alert>
             <button type="button" className="enroll-modal-submit" onClick={onClose}>
-              Close
+              Done
             </button>
           </div>
         ) : (

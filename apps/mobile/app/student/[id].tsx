@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
-import { confirmStudentPresentToday, displayName, isStudentHereToday, studentDisplay } from '@hiraya/utils';
+import { confirmStudentPresentToday, displayName, formatDate, isStudentHereToday, studentDisplay, teacherForStudent } from '@hiraya/utils';
 import { AppButton, Body, Caption, Card, EmptyState, EmptyValue, Screen, StatusBadge, Title, Heading } from '../../src/components/ui';
 import { Avatar } from '../../src/components/Avatar';
 import { api, useAuth } from '../../src/auth';
 import { useCenter } from '../../src/store';
-import { classForStudent, friendlyError, remainingForStudent, teacherName } from '../../src/selectors';
+import { classForStudent, friendlyError, remainingForStudent } from '../../src/selectors';
 import { isMobileTeacher } from '../../src/rbac';
 
 export default function StudentProfileScreen() {
@@ -18,7 +18,8 @@ export default function StudentProfileScreen() {
   const student = store.students.find((item) => item.studentId === id) || children.find((item) => item.studentId === id);
   const cls = student ? classForStudent(store, student.studentId) : undefined;
   const parent = store.users.find((item) => item.userId === student?.parentId);
-  const teacher = store.users.find((item) => item.userId === cls?.teacherId);
+  const teacher = student ? teacherForStudent(store, student.studentId) : undefined;
+  const teacherLabel = teacher ? displayName(teacher) : '';
   const canMark = isMobileTeacher(user?.role) && student && children.some((item) => item.studentId === student.studentId);
   const here = student ? isStudentHereToday(store, student.studentId) : false;
 
@@ -85,18 +86,14 @@ export default function StudentProfileScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
             <Avatar
               user={teacher}
-              name={teacherName(store, cls?.teacherId) || 'Teacher'}
+              name={teacherLabel || 'Teacher'}
               size="sm"
-              accessibilityLabel={`${teacherName(store, cls?.teacherId) || 'Teacher'} profile photo`}
+              accessibilityLabel={`${teacherLabel || 'Teacher'} profile photo`}
             />
-            {teacherName(store, cls?.teacherId) ? (
-              <Body>{teacherName(store, cls?.teacherId)}</Body>
-            ) : (
-              <EmptyValue />
-            )}
+            {teacherLabel ? <Body>{teacherLabel}</Body> : <EmptyValue />}
           </View>
         </View>
-        <Line label="Enrolled" value={student.enrollmentDate || ''} />
+        <Line label="Enrolled" value={formatDate(student.enrollmentDate)} />
         <Line label="Sessions left" value={remaining.sessionsLabel} />
         <Line label="Days left" value={remaining.daysLabel} />
         <Line label="Today" value={here ? 'Present' : 'Not marked'} />

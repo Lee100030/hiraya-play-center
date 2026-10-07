@@ -105,3 +105,29 @@ test('income excludes void payments, teacher pay, and opening cash', () => {
   assert.equal(lines.filter((row) => row.source === 'book' && row.kind === 'expense').length, 1);
   assert.equal(lines.some((row) => row.detail === 'Donation' && row.kind === 'income'), true);
 });
+
+test('teacher pay with pending status still posts to cash flow when money was paid', () => {
+  const next = {
+    ...store(),
+    users: [{ userId: 'tch_1', role: 'teacher', status: 'active', fullname: 'Liza Cruz', firstName: 'Liza', lastName: 'Cruz' }],
+    payments: [
+      {
+        paymentId: 'pay_pending_paid',
+        enrollmentId: 'teacher',
+        studentId: 'tch_1',
+        amount: 8000,
+        amountPaid: 8000,
+        paymentStatus: 'pending',
+        paymentDate: '2026-09-20',
+        notes: '',
+      },
+    ],
+  };
+  const book = financeMonth(next, '2026-09');
+  assert.equal(book.salary, 8000);
+  const lines = cashFlowLines(next, '2026-09');
+  const salary = lines.find((row) => row.source === 'salary');
+  assert.equal(salary?.amount, 8000);
+  assert.equal(salary?.detail, 'Liza Cruz');
+  assert.equal(salary?.kind, 'expense');
+});

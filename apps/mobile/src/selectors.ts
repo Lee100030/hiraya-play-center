@@ -1,5 +1,5 @@
 import type { AttendanceRecord, HirayaDatabase, HirayaUser, ProgressReport, Schedule, Student } from '@hiraya/types';
-import { displayName, localDateKey, packedTeacherIds, scheduleAssignedTo, studentDisplay, studentSessionAccount } from '@hiraya/utils';
+import { assignedStudentsForTeacher, classForStudent, displayName, localDateKey, packedTeacherIds, scheduleAssignedTo, studentDisplay, studentSessionAccount } from '@hiraya/utils';
 import { isMobileParent, isMobileTeacher } from './rbac';
 
 export function greetingPeriod() {
@@ -218,26 +218,12 @@ export function familyStudents(store: HirayaDatabase, user?: HirayaUser | null):
     return store.students.filter((item) => ids.has(item.studentId) || item.parentId === user.userId);
   }
   if (isMobileTeacher(user.role)) {
-    const classIds = new Set(store.classes.filter((item) => item.teacherId === user.userId).map((item) => item.classId));
-    const studentIds = new Set(
-      store.enrollments
-        .filter(
-          (item) =>
-            ['active', 'pending', 'approved'].includes((item.status || '').toLowerCase()) &&
-            (classIds.has(item.classId) || item.teacherId === user.userId),
-        )
-        .map((item) => item.studentId),
-    );
-    return store.students.filter((item) => studentIds.has(item.studentId));
+    return assignedStudentsForTeacher(store, user.userId);
   }
   return [];
 }
 
-export function classForStudent(store: HirayaDatabase, studentId?: string) {
-  if (!studentId) return undefined;
-  const enrollment = store.enrollments.find((item) => item.studentId === studentId && item.status === 'active');
-  return store.classes.find((item) => item.classId === (enrollment?.classId || ''));
-}
+export { classForStudent } from '@hiraya/utils';
 
 export function teacherName(store: HirayaDatabase, teacherId?: string) {
   const user = store.users.find((item) => item.userId === teacherId);

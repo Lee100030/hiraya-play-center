@@ -138,6 +138,23 @@ public class AccountService
         });
     }
 
+    public async Task ReplacePasswordAsync(string userId, string newPassword, string confirmPassword)
+    {
+        var problem = PasswordRules.ValidateNew("", newPassword, confirmPassword);
+        if (problem != null)
+            throw new InvalidOperationException(problem);
+        await _repository.MutateAsync(async db =>
+        {
+            var user = db.Users.FirstOrDefault(u => u.UserId == userId)
+                       ?? throw new InvalidOperationException("Account was not found.");
+            user.Password = PasswordHasher.Hash(newPassword);
+            user.UpdatedAt = DateTime.UtcNow.ToString("o");
+            AuditService.Append(db, ClonePublic(user), AuditModules.Auth, "password_replace", "user", user.UserId,
+                $"{user.Fullname} password was replaced by an administrator.");
+            await Task.CompletedTask;
+        });
+    }
+
     public async Task SetProfileImageAsync(string userId, string relativePath)
     {
         await _repository.MutateAsync(async db =>

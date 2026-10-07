@@ -1,5 +1,5 @@
 import type { Enrollment, EnrollmentApplication, HirayaDatabase, HirayaUser } from '@hiraya/types';
-import { formatDate, isTeacherApplication, newId, studentDisplay } from '@hiraya/utils';
+import { formatDate, isTeacherApplication, newId, studentDisplay, teacherApplicationOpen } from '@hiraya/utils';
 import { Button, Field, Input, Select } from '@hiraya/ui';
 import { FormEvent, useState } from 'react';
 import { EditorModal, FormSection } from '../components/EditorModal';
@@ -91,11 +91,16 @@ export function EnrollmentPage({
   }
 
   async function approveTeacher(row: EnrollmentApplication) {
-    if (!window.confirm(`Approve ${row.studentFullname} as a teacher applicant? This does not create a student.`)) return;
+    if (!window.confirm(`Approve ${row.studentFullname} as a teacher? This adds them to Teacher management.`)) return;
     setBusy(true);
     setError(null);
     try {
       onStore(await api.approveEnrollment(row.applicationId));
+      try {
+        onStore(await api.importApprovedTeachers());
+      } catch {
+        /* approve already created the teacher when the API supports it */
+      }
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Could not approve the teacher application');
     } finally {
@@ -168,7 +173,7 @@ export function EnrollmentPage({
         title={kind === 'teacher' ? 'Teacher applications' : PAGE_COPY.enrollment.title}
         description={
           kind === 'teacher'
-            ? 'Teacher applications from the public website. Approving one does not create a student or a teacher account.'
+            ? 'Teacher applications from the public website. Approve adds the person to Teacher management. It does not create a student.'
             : 'Student applications from the website or this desk. Approve creates the student and parent; then assign the learner to a class.'
         }
         rows={store.enrollmentApplications.filter((row) =>
@@ -216,9 +221,9 @@ export function EnrollmentPage({
             header: '',
             render: (row) => (
               <div className="row-actions">
-                {row.status === 'pending_review' || row.status === 'pending' ? (
+                {(isTeacherApplication(row) ? teacherApplicationOpen(row.status) : row.status === 'pending_review' || row.status === 'pending') ? (
                   <>
-                    {isTeacherApplication(row) ? (
+                    {isTeacherApplication(row) && (row.status === 'pending_review' || row.status === 'pending') ? (
                       <Button type="button" variant="ghost" onClick={() => setInterviewing(row)}>
                         Interview
                       </Button>

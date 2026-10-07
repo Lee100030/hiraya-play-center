@@ -30,7 +30,7 @@ public static class StudentTuition
     public static decimal TuitionFee(HirayaDatabase db, string studentId)
     {
         var program = ProgramForStudent(db, studentId);
-        if (program != null)
+        if (program != null && program.TuitionFee > 0)
             return Pesos(program.TuitionFee);
         var ops = Ops(db, studentId);
         if (ops != null && ops.TuitionFee > 0)

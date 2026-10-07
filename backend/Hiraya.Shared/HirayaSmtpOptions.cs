@@ -48,9 +48,11 @@ public class HirayaSmtpOptions
     public bool IsConfigured()
     {
         var live = Resolved(this);
-        return live.Enabled &&
-               !string.IsNullOrWhiteSpace(live.Host) &&
-               !string.IsNullOrWhiteSpace(live.From);
+        if (!live.Enabled || string.IsNullOrWhiteSpace(live.Host) || string.IsNullOrWhiteSpace(live.From))
+            return false;
+        if (string.Equals(live.Host, "file", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return !string.IsNullOrWhiteSpace(live.Password) || !string.IsNullOrWhiteSpace(live.GmailPassword);
     }
 
     private static string FirstEnv(string name, string fallback)

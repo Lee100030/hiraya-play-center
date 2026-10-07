@@ -43,9 +43,14 @@ public static class StoreSanitizer
         copy.CenterExpenses = [];
         copy.OpeningBalances = [];
         copy.StudentOps = copy.StudentOps.Where(o => ids.Contains(o.StudentId)).ToList();
-        var classIds = copy.Enrollments.Select(e => e.ClassId).ToHashSet();
+        var classIds = copy.Enrollments.Select(e => e.ClassId).Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet();
         copy.Classes = copy.Classes.Where(c => classIds.Contains(c.ClassId)).ToList();
-        var teacherIds = copy.Classes.Select(c => c.TeacherId).Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet();
+        var teacherIds = copy.Classes
+            .Select(c => c.TeacherId)
+            .Concat(copy.Enrollments.Select(e => e.TeacherId))
+            .SelectMany(NotificationService.PackedIds)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var coParentIds = copy.ParentStudents
             .Where(l => l.IsActive && ids.Contains(l.StudentId) && l.ParentId != actor.UserId)
             .Select(l => l.ParentId)
@@ -407,4 +412,6 @@ public sealed class PasswordChangeRequest
     public string CurrentPassword { get; set; } = "";
     public string NewPassword { get; set; } = "";
     public string ConfirmPassword { get; set; } = "";
+    public string AdminPassword { get; set; } = "";
+    public string VerificationCode { get; set; } = "";
 }

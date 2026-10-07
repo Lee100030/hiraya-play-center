@@ -1,8 +1,9 @@
 import type { HirayaDatabase, HirayaUser, Payment } from '@hiraya/types';
 import { formatPeso } from './certificateOfEmployment';
-import { emailHtml, emailPlain, publicSiteUrl, shown } from './emailLayout';
-import { isTeacherPayment } from './paymentLanes';
+import { emailHtml, emailPlain, shown } from './emailLayout';
+import { isTeacherPayment, TEACHER_PAYMENT_MARK } from './paymentLanes';
 import { describeSalaryNotice } from './salaryNotice';
+import { pesos } from './tuitionLedger';
 
 function newAlertId() {
   return `al_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -37,6 +38,91 @@ export function teacherPaymentRows(store: HirayaDatabase, teacherId: string): Pa
 export function findTeacherPayment(store: HirayaDatabase, paymentId: string) {
   const id = (paymentId || '').trim().toLowerCase();
   return (store.payments || []).find((row) => isTeacherPayment(row) && (row.paymentId || '').trim().toLowerCase() === id) || null;
+}
+
+const SKIP_CASH = new Set(['cancelled', 'canceled', 'void', 'failed', 'refunded', 'rejected', 'waived']);
+
+function todayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+function newPaymentId() {
+  return `pay_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Money that Center cash flow should show for a teacher payment. */
+export function teacherPayCashAmount(row: Payment) {
+  const status = (row.paymentStatus || '').trim().toLowerCase();
+  if (SKIP_CASH.has(status)) return 0;
+  const paid = pesos(row.amountPaid || 0);
+  if (paid > 0) return paid;
+  if (status === 'paid' || status === 'partial') return pesos(row.amount || 0);
+  return 0;
+}
+
+function teacherPayStatus(amount: number, paid: number, requested?: string) {
+  const asked = (requested || '').trim().toLowerCase();
+  if (SKIP_CASH.has(asked)) return asked;
+  if (paid <= 0) return asked === 'paid' || asked === 'partial' ? asked : 'pending';
+  if (amount > 0 && paid + 0.001 < amount) return 'partial';
+  return 'paid';
+}
+
+export function applyTeacherPayment(
+  store: HirayaDatabase,
+  input: {
+    paymentId?: string;
+    teacherId: string;
+    amount?: number | string;
+    amountPaid?: number | string;
+    paymentStatus?: string;
+    paymentMethod?: string;
+    paymentDate?: string;
+    notes?: string;
+    referenceNumber?: string;
+    accountNumber?: string;
+    fromAccountNumber?: string;
+    receivedBy?: string;
+    recordedBy?: string;
+  },
+): HirayaDatabase {
+  const teacherId = (input.teacherId || '').trim();
+  if (!teacherId) throw new Error('Choose a teacher.');
+  let amount = pesos(input.amount || 0);
+  let paid = pesos(input.amountPaid || 0);
+  if (paid <= 0 && amount > 0) paid = amount;
+  if (amount <= 0 && paid > 0) amount = paid;
+  if (paid <= 0) throw new Error('Enter the amount paid so it can be recorded in Center cash flow.');
+  const existing = input.paymentId
+    ? (store.payments || []).find((row) => row.paymentId === input.paymentId)
+    : undefined;
+  const date = (input.paymentDate || existing?.paymentDate || existing?.paidAt || '').slice(0, 10) || todayKey();
+  const status = teacherPayStatus(amount, paid, input.paymentStatus || existing?.paymentStatus);
+  const next: Payment = {
+    paymentId: existing?.paymentId || newPaymentId(),
+    enrollmentId: TEACHER_PAYMENT_MARK,
+    studentId: teacherId,
+    amount: Math.max(amount, paid),
+    amountPaid: paid,
+    paymentMethod: (input.paymentMethod || existing?.paymentMethod || 'cash').trim() || 'cash',
+    paymentStatus: status,
+    referenceNumber: (input.referenceNumber ?? existing?.referenceNumber ?? '').trim(),
+    paymentDate: date,
+    dueAt: existing?.dueAt || '',
+    paidAt: paid > 0 ? existing?.paidAt || new Date().toISOString() : '',
+    recordedBy: (input.recordedBy || existing?.recordedBy || '').trim(),
+    receivedBy: (input.receivedBy || existing?.receivedBy || '').trim(),
+    notes: (input.notes ?? existing?.notes ?? '').trim(),
+    accountNumber: (input.accountNumber ?? existing?.accountNumber ?? '').trim(),
+    fromAccountNumber: (input.fromAccountNumber ?? existing?.fromAccountNumber ?? '').trim(),
+    history: existing?.history || [],
+  };
+  const rows = store.payments || [];
+  return {
+    ...store,
+    payments: existing ? rows.map((row) => (row.paymentId === next.paymentId ? { ...row, ...next } : row)) : [next, ...rows],
+  };
 }
 
 export function buildTeacherPayslip(store: HirayaDatabase, payment: Payment) {
@@ -83,8 +169,6 @@ export function buildTeacherPayslip(store: HirayaDatabase, payment: Payment) {
       { label: 'Notes', value: payment.notes },
     ],
     reference: payment.paymentId,
-    actionLabel: 'View payment details',
-    actionUrl: publicSiteUrl(settings?.website),
     contact,
   };
   const subject = `${center} · ${copy.subjectPhrase} · ${shown(date)}`;

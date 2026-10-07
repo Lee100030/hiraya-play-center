@@ -236,6 +236,38 @@
   color: var(--hlc-success);
 }
 
+.hlc-alert-info {
+  background: #e8f1fb;
+  color: #1d4f91;
+}
+
+.hlc-alert-warn {
+  background: #fff4e0;
+  color: #8a5a00;
+}
+
+.hlc-money-readout {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0 0 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--hlc-radius);
+  background: #f4f7f4;
+  border: 1px solid #d7e3d8;
+}
+
+.hlc-money-readout span {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hlc-muted);
+}
+
+.hlc-money-readout strong {
+  font-size: 1.05rem;
+  color: #1f5b34;
+}
+
 .hlc-field-error {
   display: block;
   margin-top: 0.25rem;

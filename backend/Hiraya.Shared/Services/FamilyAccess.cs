@@ -59,14 +59,24 @@ public static class FamilyAccess
         return [];
     }
 
-    public static HashSet<string> AssignedStudentIdsForTeacher(HirayaDatabase db, string teacherId) =>
-        db.Enrollments
+    public static HashSet<string> AssignedStudentIdsForTeacher(HirayaDatabase db, string teacherId)
+    {
+        var want = (teacherId ?? "").Trim();
+        if (want.Length == 0) return [];
+        bool matches(string? packed) =>
+            NotificationService.PackedIds(packed)
+                .Any(id => string.Equals(id, want, StringComparison.OrdinalIgnoreCase));
+        var classIds = db.Classes
+            .Where(c => matches(c.TeacherId))
+            .Select(c => c.ClassId)
+            .ToHashSet();
+        return db.Enrollments
             .Where(e =>
-                EnrollmentStatuses.CountsTowardCapacity(e.Status) &&
-                (e.TeacherId == teacherId ||
-                 db.Classes.Any(c => c.ClassId == e.ClassId && c.TeacherId == teacherId)))
+                EnrollmentStatuses.IsAssignedLive(e.Status) &&
+                (matches(e.TeacherId) || classIds.Contains(e.ClassId)))
             .Select(e => e.StudentId)
             .ToHashSet();
+    }
 
     public static bool CanViewStudent(HirayaDatabase db, HirayaUser user, string? studentId)
     {

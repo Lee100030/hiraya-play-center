@@ -1,4 +1,5 @@
-import { Image, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,8 @@ type Props = {
   selected?: Student;
   onOpenProfile: () => void;
   onSelectChild: (id: string) => void;
+  unreadCount?: number;
+  onOpenAlerts?: () => void;
 };
 
 function useStatusTopPad() {
@@ -25,7 +28,7 @@ function useStatusTopPad() {
   return Math.max(insets.top, expoBar, floor) + 18;
 }
 
-export function HomeHero({ user, family, childrenList, selected, onOpenProfile, onSelectChild }: Props) {
+export function HomeHero({ user, family, childrenList, selected, onOpenProfile, onSelectChild, unreadCount = 0, onOpenAlerts }: Props) {
   const topPad = useStatusTopPad();
   const name = givenName(user);
 
@@ -56,6 +59,22 @@ export function HomeHero({ user, family, childrenList, selected, onOpenProfile, 
             </Caption>
           </View>
           <View style={styles.avatarCol}>
+            {onOpenAlerts ? (
+              <Pressable
+                onPress={onOpenAlerts}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+                style={styles.bell}
+              >
+                <Ionicons name="notifications-outline" size={22} color={colors.gold} />
+                {unreadCount > 0 ? (
+                  <View style={styles.bellBadge}>
+                    <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            ) : null}
             <Avatar
               user={family ? undefined : user}
               name={family ? (selected ? studentLabel(selected) : name) : name}
@@ -126,6 +145,32 @@ const styles = StyleSheet.create({
   avatarCol: {
     alignItems: 'center',
     gap: 6,
+  },
+  bell: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    marginBottom: 4,
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 99,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: {
+    color: colors.white,
+    fontSize: 9,
+    fontWeight: '700',
   },
   addPhoto: {
     color: colors.gold,

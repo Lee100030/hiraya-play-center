@@ -91,8 +91,21 @@ export function StaffForm({
         </div>
       </FormSection>
       <FormSection title="Security">
-        <Field label={user ? 'New password' : 'Password'} required={!user} optional={Boolean(user)}>
-          <Input name="password" type="password" minLength={user ? undefined : 8} required={!user} />
+        {user ? (
+          <p className="muted form-span">
+            The stored password cannot be displayed. Leave blank to keep it. Setting a new password requires your
+            administrator password.
+          </p>
+        ) : null}
+        <Field label={user ? 'Set new password' : 'Password'} required={!user} optional={Boolean(user)}>
+          <Input
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            placeholder={user ? '••••••••' : undefined}
+            minLength={user ? undefined : 8}
+            required={!user}
+          />
         </Field>
         <Field
           label="Confirm password"
@@ -100,8 +113,13 @@ export function StaffForm({
           optional={Boolean(user)}
           hint={user ? 'Required only if you set a new password.' : undefined}
         >
-          <Input name="confirmPassword" type="password" required={!user} />
+          <Input name="confirmPassword" type="password" autoComplete="new-password" required={!user} />
         </Field>
+        {user ? (
+          <Field label="Admin password required" optional hint="Enter your admin password to confirm this password change.">
+            <Input name="adminPassword" type="password" autoComplete="current-password" />
+          </Field>
+        ) : null}
       </FormSection>
     </EditorModal>
   );

@@ -2,6 +2,7 @@ import type { CenterExpense, HirayaDatabase, OpeningBalance, Payment } from '@hi
 import { programLane } from './managementLanes';
 import { isTeacherPayment } from './paymentLanes';
 import { staffDisplayName, uniqueStaffTeachers } from './staffDedupe';
+import { teacherPayCashAmount } from './teacherPayments';
 import { paymentCountsTowardPaid, pesos } from './tuitionLedger';
 
 export const INCOME_BUCKETS = [
@@ -122,7 +123,7 @@ export function teacherSalaryForMonth(store: HirayaDatabase, month: string) {
   return pesos(
     (store.payments || [])
       .filter((row) => isTeacherPayment(row) && paymentWhen(row) === key)
-      .reduce((sum, row) => sum + countedAmount(row), 0),
+      .reduce((sum, row) => sum + teacherPayCashAmount(row), 0),
   );
 }
 
@@ -297,22 +298,27 @@ export function cashFlowLines(store: HirayaDatabase, month: string): CashFlowLin
   const lines: CashFlowLine[] = [];
   for (const row of store.payments || []) {
     const when = paymentWhen(row);
-    if (when !== key || countedAmount(row) <= 0) continue;
+    if (when !== key) continue;
     if (isTeacherPayment(row)) {
+      const amount = teacherPayCashAmount(row);
+      if (amount <= 0) continue;
+      const teacher = (store.users || []).find((item) => item.userId === row.studentId);
+      const name = teacher ? staffDisplayName(teacher) : 'Teacher';
       lines.push({
         id: row.paymentId,
         source: 'salary',
         kind: 'expense',
         date: lineDate(row.paymentDate || row.paidAt),
         category: 'teacher_salary',
-        detail: (row.notes || '').trim() || 'Teacher salary',
-        amount: countedAmount(row),
-        party: 'Teacher',
+        detail: name,
+        amount,
+        party: name,
         handledBy: (row.receivedBy || row.recordedBy || '').trim(),
-        note: [row.paymentMethod, row.referenceNumber].filter(Boolean).join(' · '),
+        note: [row.notes, row.paymentMethod, row.referenceNumber].filter(Boolean).join(' · '),
       });
       continue;
     }
+    if (countedAmount(row) <= 0) continue;
     if (incomeBucketFor(store, row) === 'opening') continue;
     const student = (store.students || []).find((item) => item.studentId === row.studentId);
     const name = (student?.fullname || '').trim() || 'Student payment';

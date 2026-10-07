@@ -1070,7 +1070,7 @@ export function TeacherWorkspacePage({
         <EditorModal title={`Assign student · ${displayName(teacher)}`} error={error} busy={false} submitLabel="Assign" onClose={() => setModal(null)} onSubmit={assignStudents}>
           <FormSection title="Students">
           <Field label="Class" optional>
-            <Select name="classId" defaultValue={classes[0]?.classId || ''}>
+            <Select name="classId" defaultValue="">
               <option value="">No class change</option>
               {store.classes.map((row) => (
                 <option key={row.classId} value={row.classId}>

@@ -41,6 +41,8 @@ public class PortalAuthService
         var key = (login ?? "").Trim();
         if (string.IsNullOrWhiteSpace(key) || string.IsNullOrEmpty(password))
             return null;
+        if (IsLocked(key))
+            throw new InvalidOperationException(LockoutMessage);
 
         if (_api.UseRemoteStore)
             return await AuthenticateRemoteAsync(key, password);

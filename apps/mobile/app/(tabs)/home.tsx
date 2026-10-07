@@ -153,6 +153,8 @@ export default function HomeTab() {
         selected={selected}
         onOpenProfile={() => router.push('/(tabs)/profile')}
         onSelectChild={setSelectedId}
+        unreadCount={unread}
+        onOpenAlerts={() => router.push('/(tabs)/alerts')}
       />
       <ScrollView
         contentInsetAdjustmentBehavior="never"

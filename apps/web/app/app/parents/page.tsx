@@ -27,6 +27,8 @@ export default function ParentsPage() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const password = String(form.get('password') || '');
+    const confirmPassword = String(form.get('confirmPassword') || '');
+    const adminPassword = String(form.get('adminPassword') || '');
     const payload = {
       firstName: String(form.get('firstName') || ''),
       lastName: String(form.get('lastName') || ''),
@@ -34,7 +36,8 @@ export default function ParentsPage() {
       phone: String(form.get('phone') || ''),
       address: String(form.get('address') || ''),
       password,
-      confirmPassword: password,
+      confirmPassword: confirmPassword || password,
+      adminPassword,
       studentId: String(form.get('studentId') || '') || undefined,
     };
     setError('');
@@ -241,9 +244,30 @@ export default function ParentsPage() {
             <Field label="Address" required>
               <Input name="address" defaultValue={current?.address || ''} required />
             </Field>
-            <Field label={current ? 'New password' : 'Password'} required={!current} optional={Boolean(current)}>
-              <Input name="password" type="password" minLength={current ? undefined : 8} required={!current} />
+            {current ? (
+              <p className="muted">
+                Current password is stored as a hash and cannot be shown. Leave blank to keep it. Setting a new password
+                requires your administrator password.
+              </p>
+            ) : null}
+            <Field label={current ? 'Set new password' : 'Password'} required={!current} optional={Boolean(current)}>
+              <Input
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                placeholder={current ? '••••••••' : undefined}
+                minLength={current ? undefined : 8}
+                required={!current}
+              />
             </Field>
+            <Field label="Confirm password" required={!current} optional={Boolean(current)}>
+              <Input name="confirmPassword" type="password" autoComplete="new-password" required={!current} />
+            </Field>
+            {current ? (
+              <Field label="Admin password required" optional hint="Enter your admin password to confirm this password change.">
+                <Input name="adminPassword" type="password" autoComplete="current-password" />
+              </Field>
+            ) : null}
             {current ? (
               <div className="form-span">
                 <h3>Linked children</h3>

@@ -12,7 +12,7 @@ import { Button, EmptyState, Field, FieldLegend, Input, Loading, PersonAvatar, P
 import { displayName, laneLabel, parsePeopleLane, specialtyLaneLabel, staffDisplayRole, teacherInLane, assignedStudentsForTeacher, openTaskCountForTeacher } from '@hiraya/utils';
 import type { HirayaUser } from '@hiraya/types';
 import Link from 'next/link';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 export default function AdminStaffPage() {
@@ -24,6 +24,21 @@ export default function AdminStaffPage() {
   const [certificate, setCertificate] = useState<HirayaUser | null>(null);
   const [viewing, setViewing] = useState<HirayaUser | null>(null);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .importApprovedTeachers()
+      .then(async () => {
+        if (!cancelled) await refresh();
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // Pull approved website applications into this list when Teacher management opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const people = store.users.filter((user) => user.role === 'teacher' && teacherInLane(store, user.userId, lane));
   const current = editing;
@@ -54,6 +69,7 @@ export default function AdminStaffPage() {
         status: String(form.get('status') || 'active'),
         password: password || undefined,
         confirmPassword: password || undefined,
+        adminPassword: String(form.get('adminPassword') || '') || undefined,
       });
       if (current?.userId) await saveAccountPhoto(current.userId, form, event.currentTarget);
       await refresh();
@@ -94,7 +110,7 @@ export default function AdminStaffPage() {
       <AdminPageHeader
         kicker="Management"
         title={lane ? `Teachers Management · ${laneLabel(lane)}` : 'Teachers Management'}
-        description={lane ? `Teachers assigned to ${laneLabel(lane)}.` : 'Create and monitor teachers, their program, and assigned classes.'}
+        description={lane ? `Teachers assigned to ${laneLabel(lane)}.` : 'Approved website applications appear here. You can also add a teacher directly.'}
         actions={
           <button
             type="button"
@@ -299,9 +315,14 @@ export default function AdminStaffPage() {
                 <option value="deactivated">deactivated</option>
               </Select>
             </Field>
-            <Field label={current ? 'New password (optional)' : 'Password'} required={!current}>
-              <Input name="password" type="password" minLength={current ? undefined : 8} required={!current} />
+            <Field label={current ? 'Set new password' : 'Password'} required={!current} optional={Boolean(current)}>
+              <Input name="password" type="password" autoComplete="new-password" placeholder={current ? '••••••••' : undefined} minLength={current ? undefined : 8} required={!current} />
             </Field>
+            {current ? (
+              <Field label="Admin password required" optional hint="Required only if you set a new password.">
+                <Input name="adminPassword" type="password" autoComplete="current-password" />
+              </Field>
+            ) : null}
           </form>
         </AdminModal>
       ) : null}

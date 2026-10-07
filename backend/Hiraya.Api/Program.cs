@@ -119,6 +119,7 @@ builder.Services.AddSingleton(new SessionTokenOptions
 builder.Services.AddSingleton<IRevokedSessionStore, RevokedSessionStore>();
 builder.Services.AddSingleton<SessionGate>();
 builder.Services.AddSingleton<PublicRequestThrottle>();
+builder.Services.AddSingleton<SensitiveActionCodes>();
 builder.Services.AddSingleton<IHirayaRepository, EfHirayaRepository>();
 builder.Services.AddSingleton<PortalAuthService>();
 builder.Services.AddSingleton<AccountService>();
@@ -237,10 +238,15 @@ app.MapGet("/api/store", async (HttpRequest request, IHirayaRepository repo, ILo
     }
 });
 
-app.MapPost("/api/auth/login", async (LoginRequest body, HttpRequest request, PortalAuthService auth, SessionTokenOptions tokens, IHirayaRepository repo) =>
+app.MapPost("/api/auth/login", async (LoginRequest body, HttpRequest request, PortalAuthService auth, SessionTokenOptions tokens, IHirayaRepository repo, PublicRequestThrottle throttle) =>
 {
     try
     {
+        var host = ParentPortalApi.ClientHost(request);
+        var loginKey = (body.Login ?? "").Trim();
+        if (!throttle.Allow($"login-ip:{host}", 30, TimeSpan.FromMinutes(10)) ||
+            (!string.IsNullOrWhiteSpace(loginKey) && !throttle.Allow($"login-id:{loginKey}", 20, TimeSpan.FromMinutes(10))))
+            return Results.Json(new { error = "Too many attempts. Please wait before trying again." }, statusCode: StatusCodes.Status429TooManyRequests);
         var session = await auth.AuthenticateAsync(body.Login, body.Password);
         if (session?.User is null)
             return Results.Json(new { error = "Username or password is incorrect." }, statusCode: StatusCodes.Status401Unauthorized);
@@ -295,25 +301,85 @@ app.MapPost("/api/auth/logout", async (HttpRequest request, SessionTokenOptions 
     return Results.NoContent();
 });
 
-app.MapPost("/api/auth/password", async (PasswordChangeRequest body, HttpRequest request, IHirayaRepository repo, AccountService accounts) =>
+app.MapPost("/api/auth/password/request-code", async (
+    PasswordChangeRequest body,
+    HttpRequest request,
+    IHirayaRepository repo,
+    IEmailSender email,
+    SensitiveActionCodes codes,
+    PublicRequestThrottle throttle) =>
 {
     var actor = await ParentPortalApi.ActorAsync(request, repo);
     if (actor is null)
         return Results.Unauthorized();
-    if (!string.Equals(actor.UserId, body.UserId, StringComparison.OrdinalIgnoreCase) &&
-        !Navigation.CanManageUsers(actor.Role))
-    {
+    if (!UserRoles.IsAdmin(actor.Role))
         return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
-    }
+    if (!throttle.Allow($"pw-code:{actor.UserId}", 6, TimeSpan.FromMinutes(15)))
+        return Results.Json(new { error = SensitiveActionCodes.TooMany }, statusCode: StatusCodes.Status429TooManyRequests);
+    if (!PasswordHasher.Verify(body.CurrentPassword, actor.Password))
+        return Results.Json(new { error = "Current password is incorrect." }, statusCode: StatusCodes.Status400BadRequest);
+    if (!email.IsConfigured)
+        return Results.Json(new { error = "Email is not configured, so a verification code cannot be sent." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+    if (!codes.AllowIssue(actor.UserId, out var issueError))
+        return Results.Json(new { error = issueError }, statusCode: StatusCodes.Status429TooManyRequests);
+    var mailbox = !string.IsNullOrWhiteSpace(actor.PersonalEmail) && actor.PersonalEmail.Contains('@')
+        ? actor.PersonalEmail.Trim()
+        : actor.Email.Trim();
+    if (string.IsNullOrWhiteSpace(mailbox) || !mailbox.Contains('@'))
+        return Results.Json(new { error = "This administrator account has no email address for verification." }, statusCode: StatusCodes.Status400BadRequest);
+    var code = codes.Issue(actor.UserId);
+    await email.SendAsync(
+        mailbox,
+        "HIRAYA · Confirm password change",
+        $"Your verification code is {code}. It expires in 10 minutes. If you did not request a password change, ignore this message.",
+        null);
+    return Results.Json(new { sent = true, to = mailbox });
+});
+
+app.MapPost("/api/auth/password", async (
+    PasswordChangeRequest body,
+    HttpRequest request,
+    IHirayaRepository repo,
+    AccountService accounts,
+    SensitiveActionCodes codes,
+    PublicRequestThrottle throttle) =>
+{
+    var actor = await ParentPortalApi.ActorAsync(request, repo);
+    if (actor is null)
+        return Results.Unauthorized();
+    if (!throttle.Allow($"pw-change:{actor.UserId}", 8, TimeSpan.FromMinutes(15)))
+        return Results.Json(new { error = SensitiveActionCodes.TooMany }, statusCode: StatusCodes.Status429TooManyRequests);
+    var targetId = string.IsNullOrWhiteSpace(body.UserId) ? actor.UserId : body.UserId;
+    var changingOther = !string.Equals(actor.UserId, targetId, StringComparison.OrdinalIgnoreCase);
+    if (changingOther && !Navigation.CanManageUsers(actor.Role))
+        return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
 
     try
     {
-        await accounts.ChangePasswordAsync(body.UserId, body.CurrentPassword, body.NewPassword, body.ConfirmPassword);
+        if (changingOther)
+        {
+            PasswordHasher.RequireAdminConfirmation(actor.Password, body.AdminPassword);
+            await accounts.ReplacePasswordAsync(targetId, body.NewPassword, body.ConfirmPassword);
+            return Results.NoContent();
+        }
+
+        if (UserRoles.IsAdmin(actor.Role))
+        {
+            var problem = codes.Consume(actor.UserId, body.VerificationCode);
+            if (problem != null)
+                return Results.Json(new { error = problem }, statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        await accounts.ChangePasswordAsync(actor.UserId, body.CurrentPassword, body.NewPassword, body.ConfirmPassword);
         return Results.NoContent();
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status403Forbidden);
     }
     catch (InvalidOperationException ex)
     {
-        return Results.Text(ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
     }
 });
 
@@ -507,11 +573,13 @@ app.MapPost("/api/chat-groups", async (ChatGroupCreateRequest payload, HttpReque
     }
 });
 
-async Task<IResult> SendDirect(DirectMessageRequest payload, HttpRequest request, IHirayaRepository repo, NotificationService notes)
+async Task<IResult> SendDirect(DirectMessageRequest payload, HttpRequest request, IHirayaRepository repo, NotificationService notes, PublicRequestThrottle throttle)
 {
     var actor = await ParentPortalApi.ActorAsync(request, repo);
     if (actor is null)
         return Results.Unauthorized();
+    if (!throttle.Allow($"msg:{actor.UserId}", 40, TimeSpan.FromMinutes(10)))
+        return Results.Json(new { error = "Too many messages. Please wait before sending again." }, statusCode: StatusCodes.Status429TooManyRequests);
     try
     {
         await notes.SendDirectAsync(actor, payload ?? new DirectMessageRequest());

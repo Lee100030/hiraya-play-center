@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ErrorReporter } from '@/components/ErrorReporter';
 import './globals.css';
 import './public-site.css';
 
@@ -12,7 +13,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <ErrorReporter platform="web" />
+        {children}
+      </body>
     </html>
   );
 }

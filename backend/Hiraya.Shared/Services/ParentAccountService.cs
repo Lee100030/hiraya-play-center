@@ -19,6 +19,7 @@ public class ParentCreateRequest
     public string Notes { get; set; } = "";
     public string Password { get; set; } = "";
     public string ConfirmPassword { get; set; } = "";
+    public string AdminPassword { get; set; } = "";
     public string Relationship { get; set; } = FamilyRelationships.Guardian;
     public string? StudentId { get; set; }
 }
@@ -230,9 +231,10 @@ public class ParentAccountService
         return count;
     }
 
-    public async Task SetPasswordAsync(string parentUserId, string password, string confirm, HirayaUser actor)
+    public async Task SetPasswordAsync(string parentUserId, string password, string confirm, HirayaUser actor, string? adminPassword = null)
     {
         EnsureAdmin(actor);
+        PasswordHasher.RequireAdminConfirmation(actor.Password, adminPassword);
         RequirePassword(password, confirm);
         await _repository.MutateAsync(async db =>
         {

@@ -104,7 +104,7 @@ test('a bright buds class uses the bright buds fee, not playgroup', () => {
   assert.equal(studentRemainingBalance(store, 'stu_1'), 10000);
 });
 
-test('an unset program fee is the tuition, not an old student amount', () => {
+test('an unset program fee uses the tuition saved on the student', () => {
   const store = {
     students: [{ studentId: 'stu_1', program: 'Grade 1' }],
     payments: [],
@@ -116,8 +116,8 @@ test('an unset program fee is the tuition, not an old student amount', () => {
       { programId: 'prg_grade1', name: 'Grade 1', status: 'active', tuitionFee: 0 },
     ],
   };
-  assert.equal(studentTuitionFee(store, 'stu_1'), 0);
-  assert.equal(studentRemainingBalance(store, 'stu_1'), 0);
+  assert.equal(studentTuitionFee(store, 'stu_1'), 20000);
+  assert.equal(studentRemainingBalance(store, 'stu_1'), 20000);
 });
 
 test('a program tuition fee is the tuition for students in that program', () => {

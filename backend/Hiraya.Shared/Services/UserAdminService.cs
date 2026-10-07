@@ -19,6 +19,7 @@ public class UserAdminSaveRequest
     public string Status { get; set; } = "active";
     public string Notes { get; set; } = "";
     public string Password { get; set; } = "";
+    public string AdminPassword { get; set; } = "";
 }
 
 public class UserAdminService
@@ -57,6 +58,8 @@ public class UserAdminService
             string stored;
             if (!string.IsNullOrWhiteSpace(password))
             {
+                if (existing != null)
+                    PasswordHasher.RequireAdminConfirmation(actor.Password, input.AdminPassword);
                 if (password.Length < PasswordRules.MinimumLength)
                     throw new InvalidOperationException($"Password must be at least {PasswordRules.MinimumLength} characters.");
                 stored = PasswordHasher.Hash(password);

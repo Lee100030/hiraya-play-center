@@ -55,6 +55,27 @@ export function TeachersPage({
   }
 
   useEffect(() => {
+    let cancelled = false;
+    const before = store.users.filter((item) => item.role === 'teacher').length;
+    void api
+      .importApprovedTeachers()
+      .then((next) => {
+        if (cancelled) return;
+        onStore(next);
+        const added = next.users.filter((item) => item.role === 'teacher').length - before;
+        if (added > 0) {
+          setNotice(added === 1 ? 'Approved teacher added to this list.' : `${added} approved teachers added to this list.`);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // Load approved website applications into this list once when the page opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     function apply(event: Event) {
       const teacherId = (event as CustomEvent<{ teacherId?: string }>).detail?.teacherId;
       if (teacherId) setWorkspaceId(teacherId);
@@ -109,6 +130,7 @@ export function TeachersPage({
         hireDate: String(form.get('hireDate') || ''),
         password: password || undefined,
         confirmPassword: confirmPassword || undefined,
+        adminPassword: String(form.get('adminPassword') || '') || undefined,
       });
       const userId =
         saved.userId ||

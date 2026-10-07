@@ -82,6 +82,29 @@ public static class EnrollmentApi
             }
         });
 
+        app.MapPost("/api/enrollment/teachers/import", async (
+            HttpRequest request,
+            IHirayaRepository repo,
+            EnrollmentService enroll) =>
+        {
+            var actor = await ParentPortalApi.ActorAsync(request, repo);
+            if (actor is null) return Results.Unauthorized();
+            try
+            {
+                await enroll.ImportApprovedTeachersAsync(actor);
+                var data = await repo.LoadAsync();
+                return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Results.Json(new { error = "You are not allowed to import approved teachers." }, statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
         app.MapPost("/api/enrollment/applications/{id}/cancel", async (
             string id,
             HttpRequest request,

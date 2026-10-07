@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Install JavaScript packages
+        run: pnpm install --frozen-lockfile
+      - name: Build API
+        run: dotnet build backend/Hiraya.Api/Hiraya.Api.csproj --configuration Release
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit tests
+        run: |
+          node packages/utils/session-remaining.test.mjs
+          node packages/utils/store-patch.test.mjs
+      - name: Website production build
+        run: pnpm --filter @hiraya/web run build
+        env:
+          NEXT_PUBLIC_API_URL: https://hiraya-play-center.onrender.com

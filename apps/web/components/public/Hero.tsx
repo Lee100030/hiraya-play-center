@@ -13,14 +13,8 @@ const GradientWaves = dynamic(() => import('@/components/public/GradientWaves'),
   ssr: false,
 });
 
-function heroLines(title?: string | null): string[] {
-  const trimmed = (title || '').trim();
-  if (!trimmed || /^welcome to\b/i.test(trimmed)) return ['Growing minds.', 'Building\u00A0futures.'];
-  const lines = trimmed
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  return lines.length ? lines.slice(0, 3) : ['Growing minds.', 'Building\u00A0futures.'];
+function heroLines(): string[] {
+  return ['Growing minds.', 'Building\u00A0futures.'];
 }
 
 export function Hero({ site }: { site: PublicSite }) {
@@ -71,7 +65,7 @@ export function Hero({ site }: { site: PublicSite }) {
         )}
         <p className="home-kicker">{site.centerName}</p>
         <h1>
-          {heroLines(site.welcomeTitle).map((line, index) => (
+          {heroLines().map((line, index) => (
             <span key={`${index}-${line}`}>
               {index > 0 ? <br /> : null}
               {line}

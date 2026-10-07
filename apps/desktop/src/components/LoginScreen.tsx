@@ -71,6 +71,7 @@ export function LoginScreen({
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <Icons.eyeOff /> : <Icons.eye />}
+              <span className="login-eye-label">{showPassword ? 'Hide' : 'Show'}</span>
             </button>
           </span>
         </label>

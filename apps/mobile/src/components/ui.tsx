@@ -32,7 +32,9 @@ export function Screen({
   const body = scroll ? (
     <ScrollView
       contentContainerStyle={[styles.scroll, padded && styles.pad, { paddingBottom: bottomPad }]}
-      keyboardShouldPersistTaps="handled"
+      keyboardShouldPersistTaps="always"
+      keyboardDismissMode="on-drag"
+      nestedScrollEnabled
     >
       {children}
     </ScrollView>
@@ -140,9 +142,7 @@ export function Field({
         {label}
         {required ? ' *' : ''}
       </Label>
-      <Pressable
-        onPress={() => inputRef.current?.focus()}
-        accessible={false}
+      <View
         style={[styles.inputShell, multiline ? styles.inputShellMultiline : null, focused && styles.inputShellFocus]}
       >
         <TextInput
@@ -169,7 +169,7 @@ export function Field({
           ]}
         />
         {accessory ? <View style={styles.inputAccessory} pointerEvents="box-none">{accessory}</View> : null}
-      </Pressable>
+      </View>
     </View>
   );
 }

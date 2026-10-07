@@ -17,6 +17,7 @@ public class StaffSaveRequest
     public string PersonalEmail { get; set; } = "";
     public string Password { get; set; } = "";
     public string ConfirmPassword { get; set; } = "";
+    public string AdminPassword { get; set; } = "";
     public string Phone { get; set; } = "";
     public string Address { get; set; } = "";
     public string Notes { get; set; } = "";
@@ -250,7 +251,15 @@ public class StaffService
         var password = EnsurePassword(input, requireForNew: existing is null);
         string storedPassword;
         if (!string.IsNullOrWhiteSpace(password))
+        {
+            if (existing is not null)
+            {
+                if (actor is null)
+                    throw new UnauthorizedAccessException("Enter your admin password to confirm this password change.");
+                PasswordHasher.RequireAdminConfirmation(actor.Password, input.AdminPassword);
+            }
             storedPassword = PasswordHasher.Hash(password);
+        }
         else if (!string.IsNullOrWhiteSpace(existing?.Password))
             storedPassword = existing.Password!;
         else if (!string.IsNullOrWhiteSpace(input.UserId) && existing is not null)
@@ -322,6 +331,85 @@ public class StaffService
             string.IsNullOrWhiteSpace(input.UserId) ? "create" : "update",
             "user", userId, $"Saved {fullname} ({role}).");
         return userId;
+    }
+
+    public static HirayaUser EnsureTeacherFromApplication(HirayaDatabase db, EnrollmentApplication app, HirayaUser? actor)
+    {
+        var mail = (app.ParentEmail ?? "").Trim();
+        var name = (app.StudentFullname ?? "").Trim();
+        if (name.Length < 2)
+            name = "Teacher Applicant";
+        var linked = (app.StudentNumber ?? "").Trim();
+        var staff = db.Users.Where(u => Navigation.IsEmployeeRole(u.Role)).ToList();
+        var existing =
+            staff.FirstOrDefault(u => !string.IsNullOrWhiteSpace(linked) && string.Equals(u.UserId, linked, StringComparison.OrdinalIgnoreCase))
+            ?? staff.FirstOrDefault(u =>
+                !string.IsNullOrWhiteSpace(mail) &&
+                (string.Equals(u.Email, mail, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(u.PersonalEmail, mail, StringComparison.OrdinalIgnoreCase)))
+            ?? staff.FirstOrDefault(u =>
+                string.Equals(
+                    Regex.Replace((u.Fullname ?? "").Trim().ToLowerInvariant(), @"\s+", " "),
+                    Regex.Replace(name.ToLowerInvariant(), @"\s+", " "),
+                    StringComparison.Ordinal));
+        if (existing != null)
+        {
+            if (string.IsNullOrWhiteSpace(existing.Phone))
+                existing.Phone = (app.ParentPhone ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(existing.PersonalEmail) && mail.Contains('@') && !mail.EndsWith("@hiraya.local", StringComparison.OrdinalIgnoreCase))
+                existing.PersonalEmail = mail;
+            var profile = db.TeacherProfiles.FirstOrDefault(p => p.UserId == existing.UserId);
+            var roleWanted = (app.PreferredProgram ?? "").Trim();
+            if (profile != null && string.IsNullOrWhiteSpace(profile.Specialty) && roleWanted.Length > 0)
+                profile.Specialty = NormalizeProgramSpecialty(roleWanted);
+            if (string.IsNullOrWhiteSpace(existing.Position) && roleWanted.Length > 0)
+                existing.Position = roleWanted;
+            return existing;
+        }
+
+        var password = InvitationTokens.NewToken();
+        if (password.Length < PasswordRules.MinimumLength)
+            password = password.PadRight(PasswordRules.MinimumLength, 'x');
+        var login = UnusedStaffEmail(db, mail, name);
+        var personal = mail.Contains('@') && !mail.EndsWith("@hiraya.local", StringComparison.OrdinalIgnoreCase)
+            ? mail
+            : "";
+        var userId = ApplySave(db, new StaffSaveRequest
+        {
+            Fullname = name,
+            Email = login,
+            PersonalEmail = personal,
+            Phone = (app.ParentPhone ?? "").Trim(),
+            Role = UserRoles.Teacher,
+            Position = (app.PreferredProgram ?? "").Trim(),
+            Specialty = (app.PreferredProgram ?? "").Trim(),
+            Status = AccountStatuses.Active,
+            Notes = $"Approved from teacher application {app.ApplicationId}. {(app.Notes ?? "").Trim()}".Trim(),
+            Password = password,
+            ConfirmPassword = password,
+            HireDate = DateTime.UtcNow.ToString("yyyy-MM-dd")
+        }, actor);
+        return db.Users.First(u => u.UserId == userId);
+    }
+
+    static string UnusedStaffEmail(HirayaDatabase db, string preferred, string fullname)
+    {
+        var mail = (preferred ?? "").Trim();
+        if (mail.Contains('@') &&
+            !db.Users.Any(u => string.Equals(u.Email, mail, StringComparison.OrdinalIgnoreCase)))
+            return mail;
+        var slug = Regex.Replace((fullname ?? "teacher").Trim().ToLowerInvariant(), @"[^a-z0-9]+", ".");
+        slug = slug.Trim('.');
+        if (string.IsNullOrWhiteSpace(slug))
+            slug = "teacher";
+        var n = 0;
+        while (true)
+        {
+            var candidate = n == 0 ? $"{slug}@hiraya.local" : $"{slug}{n}@hiraya.local";
+            if (!db.Users.Any(u => string.Equals(u.Email, candidate, StringComparison.OrdinalIgnoreCase)))
+                return candidate;
+            n++;
+        }
     }
 
     internal static void ApplyStaffDisplayName(HirayaUser saved, string fullname)

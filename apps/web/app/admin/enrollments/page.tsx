@@ -7,7 +7,7 @@ import { useStore } from '@/components/StoreProvider';
 import { enrollmentStatusLabel } from '@/lib/enrollment';
 import { api } from '@/lib/api';
 import { Alert, Button, EmptyState, Loading, StatusBadge, emptyCell } from '@hiraya/ui';
-import { formatDate, isTeacherApplication } from '@hiraya/utils';
+import { formatDate, isTeacherApplication, teacherApplicationOpen } from '@hiraya/utils';
 import type { EnrollmentApplication } from '@hiraya/types';
 import { usePathname } from 'next/navigation';
 import { useMemo, useState } from 'react';
@@ -47,9 +47,22 @@ export default function AdminEnrollmentsPage() {
   }, [store.enrollmentApplications, tab, kind]);
   const teacher = kind === 'teacher';
 
+  function awaitingDecision(row: EnrollmentApplication) {
+    return isTeacherApplication(row)
+      ? teacherApplicationOpen(row.status)
+      : row.status === 'pending_review' || row.status === 'pending';
+  }
+
   async function setStatusFor(id: string, next: string) {
     try {
-      if (next === 'approved') await api.approveEnrollment(id);
+      if (next === 'approved') {
+        await api.approveEnrollment(id);
+        try {
+          await api.importApprovedTeachers();
+        } catch {
+          /* older API still marks the application approved */
+        }
+      }
       else if (next === 'rejected') await api.rejectEnrollment(id);
       else if (next === 'cancelled') await api.cancelEnrollment(id);
       else if (next === 'interview') {
@@ -73,7 +86,7 @@ export default function AdminEnrollmentsPage() {
       <AdminPageHeader
         kicker="Admissions"
         title="Enrollments"
-        description="Student enrollment and teacher applications are listed separately. Approving a teacher does not create a student."
+        description="Student enrollment and teacher applications are listed separately. Approving a teacher adds them to Teacher management."
       />
       {message ? <Alert kind={ok ? 'success' : 'danger'}>{message}</Alert> : null}
       <div className="admin-tabs" role="tablist" aria-label="Application type">
@@ -90,7 +103,7 @@ export default function AdminEnrollmentsPage() {
           >
             {item.label}
             {item.id === 'teacher'
-              ? ` (${store.enrollmentApplications.filter((row) => isTeacherApplication(row) && (row.status === 'pending_review' || row.status === 'pending')).length})`
+              ? ` (${store.enrollmentApplications.filter((row) => isTeacherApplication(row) && teacherApplicationOpen(row.status)).length})`
               : ''}
           </button>
         ))}
@@ -149,7 +162,7 @@ export default function AdminEnrollmentsPage() {
                 <button type="button" className="icon-btn" aria-label={`View ${row.studentFullname}`} onClick={() => setSelected(row)}>
                   👁
                 </button>
-                {row.status === 'pending_review' || row.status === 'pending' ? (
+                {awaitingDecision(row) ? (
                   <>
                     <button type="button" className="icon-btn" aria-label="Approve" onClick={() => { setSelected(row); setConfirm('approved'); }}>
                       ✓
@@ -185,9 +198,9 @@ export default function AdminEnrollmentsPage() {
             setConfirm(null);
           }}
           footer={
-            selected.status === 'pending_review' || selected.status === 'pending' ? (
+            awaitingDecision(selected) ? (
               <>
-                {isTeacherApplication(selected) ? (
+                {isTeacherApplication(selected) && (selected.status === 'pending_review' || selected.status === 'pending') ? (
                   <Button type="button" variant="ghost" onClick={() => setConfirm('interview')}>
                     Interview
                   </Button>
@@ -204,7 +217,7 @@ export default function AdminEnrollmentsPage() {
         >
           {isTeacherApplication(selected) ? (
             <p>
-              <strong>Teacher application.</strong> Approving this does not create a student or a teacher account.
+              <strong>Teacher application.</strong> Approving this adds the person to Teacher management. It does not create a student.
             </p>
           ) : (
             <>
@@ -266,7 +279,7 @@ export default function AdminEnrollmentsPage() {
           ) : (
             <p>
               {isTeacherApplication(selected)
-                ? 'The teacher application stays in Teacher applications. Approving it does not enroll a child.'
+                ? 'The teacher is added to Teacher management. This does not enroll a child.'
                 : 'The family record stays in Student enrollment with the updated status badge.'}
             </p>
           )}

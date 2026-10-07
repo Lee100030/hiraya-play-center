@@ -183,9 +183,9 @@ export function statusLabel(value?: string) {
 
 export function statusTone(status?: string): 'success' | 'warn' | 'danger' | 'muted' {
   const s = (status || '').toLowerCase().replace(/[\s-]+/g, '_');
-  if (['active', 'paid', 'present', 'published', 'confirmed', 'approved', 'read', 'completed'].includes(s)) return 'success';
-  if (['pending', 'pending_review', 'late', 'partial', 'draft', 'unread', 'assigned', 'in_progress', 'submitted', 'almost_finished', 'high'].includes(s)) return 'warn';
-  if (['overdue', 'absent', 'failed', 'rejected'].includes(s)) return 'danger';
+  if (['active', 'paid', 'present', 'published', 'confirmed', 'approved', 'read', 'completed', 'success', 'ok', 'settled'].includes(s)) return 'success';
+  if (['pending', 'pending_review', 'late', 'partial', 'draft', 'unread', 'assigned', 'in_progress', 'submitted', 'almost_finished', 'high', 'info'].includes(s)) return 'warn';
+  if (['overdue', 'absent', 'failed', 'rejected', 'error', 'danger'].includes(s)) return 'danger';
   return 'muted';
 }
 
@@ -291,6 +291,8 @@ export {
   buildTeacherPayslip,
   notifyTeacherPayment,
   openTeacherPayslipMailto,
+  applyTeacherPayment,
+  teacherPayCashAmount,
 } from './teacherPayments';
 export { addLearningProgram, assignLaneSessionPackage, moduleTuitionLanes, programForLane, programForStudent, removeLearningProgram, saveProgramTuition } from './programs';
 export {
@@ -303,6 +305,13 @@ export {
 } from './certificateOfEmployment';
 export { isTeacherApplication, operationsStats } from './operationsStats';
 export {
+  approvedTeacherApplicationsWithoutAccount,
+  matchingTeacherForApplication,
+  teacherApplicationOpen,
+  teacherHireDraft,
+  unusedTeacherLogin,
+} from './teacherApplications';
+export {
   assignedStudentsForTeacher,
   teachersForStudents,
   openTaskCountForTeacher,
@@ -310,6 +319,9 @@ export {
   programsForTeacher,
   scheduleAssignedTo,
   studentPlacement,
+  classForStudent,
+  teacherForStudent,
+  teacherIdForStudent,
 } from './assignments';
 export {
   areCoParents,
@@ -357,4 +369,5 @@ export {
   type HklcNavId,
   type HklcNavItem,
 } from './hklcOperations';
+export { createErrorReport, reportClientError, sanitizeErrorMessage, type HirayaErrorReport } from './errorReport';
 

@@ -140,10 +140,25 @@ export function Alert({
   kind = 'danger',
   children,
 }: {
-  kind?: 'danger' | 'success';
+  kind?: 'danger' | 'success' | 'info' | 'warn';
   children: ReactNode;
 }) {
   return <div className={`hlc-alert hlc-alert-${kind}`}>{children}</div>;
+}
+
+export function MoneyReadout({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <p className="hlc-money-readout">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </p>
+  );
 }
 
 export function Loading({ label = 'Loading…' }: { label?: string }) {

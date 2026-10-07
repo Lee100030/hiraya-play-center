@@ -11,9 +11,6 @@ import {
   mergeDuplicateStaffUsers,
   nextAttendanceMonth,
   newId,
-  notifyStudentBalance,
-  recordStudentAmountReceived,
-  notifyTeacherPayment,
   ownedPersonalEmail,
   personalEmailError,
   personalEmailOwnerError,
@@ -32,9 +29,9 @@ import {
   teacherAttendanceSummaries,
   teacherDayAttendance,
   teacherPaymentRows,
-  TEACHER_PAYMENT_MARK,
   todayIsoDate,
   upsertStudentBalance,
+  applyTeacherPayment,
   programForStudent,
   studentTuitionFee,
   studentTotalPaid,
@@ -64,14 +61,9 @@ function teacherName(store: HirayaDatabase, userId?: string) {
   return teacher ? displayName(teacher) : userId || '—';
 }
 
-function deliveryNotice(who: string, result: { emailed?: boolean; to?: string; emailError?: string | null }) {
-  if (result.emailed) {
-    return `Email sent to ${who}.`;
-  }
-  if ((result.emailError || '').trim()) {
-    return `Notified ${who} on their account. ${result.emailError}`;
-  }
-  return `Notified ${who} on their account. Add a valid personal email so Hiraya can send the message.`;
+function assertMailed(who: string, result: { emailed?: boolean; to?: string; emailError?: string | null }) {
+  if (result.emailed) return `Email sent to ${result.to || who}.`;
+  throw new Error((result.emailError || '').trim() || 'The email was not sent. Check SMTP on the API and the parent personal email.');
 }
 
 function parentLabel(parents: HirayaUser[]) {
@@ -90,6 +82,10 @@ function parentMailRecipients(parents: HirayaUser[], emails: Record<string, stri
   return parents
     .map((parent) => ({ userId: parent.userId, personalEmail: (emails[parent.userId] || '').trim() }))
     .filter((item) => item.personalEmail);
+}
+
+function noticeClass(text: string) {
+  return /could not|failed|error|incorrect|required|forbidden|do not match|invalid/i.test(text) ? 'form-error' : 'form-ok';
 }
 
 function formatDueLabel(value?: string) {
@@ -324,6 +320,7 @@ function StudentBalanceModal({
   saveStore,
   onRefresh,
   onReceive,
+  onEditPayment,
   onClose,
 }: {
   store: HirayaDatabase;
@@ -332,19 +329,21 @@ function StudentBalanceModal({
   saveStore: (next: HirayaDatabase) => Promise<void>;
   onRefresh?: () => Promise<void> | void;
   onReceive?: () => void;
+  onEditPayment?: (paymentId: string) => void;
   onClose: () => void;
 }) {
   const student = store.students.find((item) => item.studentId === studentId);
   const bill = studentPaymentBalance(store, studentId);
   const programFee = programForStudent(store, studentId);
-  const fromProgram = !!programFee;
+  const programHasFee = Number(programFee?.tuitionFee || 0) > 0;
   const payments = studentPayments(store, studentId);
   const parents = parentsForStudent(store, studentId);
   const [balance, setBalance] = useState(String(studentTuitionFee(store, studentId)));
   const typedTuition = Number(balance);
-  const previewRemaining = fromProgram
-    ? bill.due
-    : Math.max(0, Math.round(((Number.isFinite(typedTuition) ? typedTuition : 0) - studentTotalPaid(store, studentId)) * 100) / 100);
+  const previewRemaining = Math.max(
+    0,
+    Math.round(((programHasFee ? bill.tuitionFee : Number.isFinite(typedTuition) ? typedTuition : 0) - studentTotalPaid(store, studentId)) * 100) / 100,
+  );
   const [dueAt, setDueAt] = useState(studentBalanceDueAt(store, studentId));
   const [parentEmails, setParentEmails] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -383,25 +382,15 @@ function StudentBalanceModal({
     setNotice(null);
     try {
       const recipients = parentMailRecipients(parents, parentEmails);
-      try {
-        const rows = [...studentPayments(store, studentId)].reverse();
-        const result = await api.notifyStudentBalance(
-          studentId,
-          recipients,
-          rows.find((row) => (row.accountNumber || '').trim())?.accountNumber || '',
-          rows.find((row) => (row.fromAccountNumber || '').trim())?.fromAccountNumber || '',
-        );
-        await onRefresh?.();
-        setNotice(deliveryNotice(parentLabel(parents), result));
-      } catch {
-        const result = notifyStudentBalance(store, studentId, actor.userId);
-        await saveStore(result.store);
-        setNotice(
-          result.parentCount === 1
-            ? 'Notified the parent on their account. Email will send once SMTP is set on the API.'
-            : `Notified ${result.parentCount} parents on their accounts. Email will send once SMTP is set on the API.`,
-        );
-      }
+      const rows = [...studentPayments(store, studentId)].reverse();
+      const result = await api.notifyStudentBalance(
+        studentId,
+        recipients,
+        rows.find((row) => (row.accountNumber || '').trim())?.accountNumber || '',
+        rows.find((row) => (row.fromAccountNumber || '').trim())?.fromAccountNumber || '',
+      );
+      await onRefresh?.();
+      setNotice(assertMailed(parentLabel(parents), result));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not notify parent.');
     } finally {
@@ -435,27 +424,32 @@ function StudentBalanceModal({
           <Field
             label="Tuition fee"
             hint={
-              fromProgram
-                ? `Set this in Program tuition management for ${programFee?.name || 'this program'}. Remaining balance is that fee minus total paid.`
-                : 'Total amount this student is required to pay. Or set one fee for the whole program in Program tuition management.'
+              programHasFee
+                ? `Default for ${programFee?.name || 'this program'} is ₱${formatPeso(Number(programFee?.tuitionFee || 0))}. Type a different amount here for this student only. Remaining balance is that fee minus total paid.`
+                : programFee
+                  ? `No fee is set yet for ${programFee.name}. Type this student's tuition here, or set one fee for the whole program in Program tuition management.`
+                  : 'Total amount this student is required to pay. Or set one fee for the whole program in Program tuition management.'
             }
           >
             <Input
               type="number"
               min={0}
               step="0.01"
-              value={fromProgram ? String(studentTuitionFee(store, studentId)) : balance}
+              value={balance}
               onChange={(event) => setBalance(event.target.value)}
-              readOnly={fromProgram}
               disabled={busy}
             />
           </Field>
-          <Field label="Total paid">
-            <Input value={`₱${formatPeso(studentTotalPaid(store, studentId))}`} readOnly />
-          </Field>
-          <Field label="Remaining balance">
-            <Input value={`₱${formatPeso(previewRemaining)}`} readOnly />
-          </Field>
+          <div className="balance-readouts">
+            <p className="hlc-money-readout">
+              <span>Total paid</span>
+              <strong>₱{formatPeso(studentTotalPaid(store, studentId))}</strong>
+            </p>
+            <p className="hlc-money-readout">
+              <span>Remaining balance</span>
+              <strong>₱{formatPeso(previewRemaining)}</strong>
+            </p>
+          </div>
           <Field label="Due date" optional hint="When this balance should be paid.">
             <Input type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} disabled={busy} />
           </Field>
@@ -510,6 +504,7 @@ function StudentBalanceModal({
                     <th>Amount</th>
                     <th>Status</th>
                     <th>Notes</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -522,6 +517,13 @@ function StudentBalanceModal({
                         <StatusCell value={row.paymentStatus} />
                       </td>
                       <td>{row.notes || '—'}</td>
+                      <td>
+                        {(row.paymentStatus || '').toLowerCase() === 'cancelled' ? null : (
+                          <Button type="button" variant="ghost" disabled={busy} onClick={() => onEditPayment?.(row.paymentId)}>
+                            Edit details
+                          </Button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -541,6 +543,7 @@ function StudentReceivedModal({
   saveStore,
   onRefresh,
   stacked,
+  paymentId,
   onClose,
 }: {
   store: HirayaDatabase;
@@ -549,28 +552,40 @@ function StudentReceivedModal({
   saveStore: (next: HirayaDatabase) => Promise<void>;
   onRefresh?: () => Promise<void> | void;
   stacked?: boolean;
+  paymentId?: string | null;
   onClose: () => void;
 }) {
   const student = store.students.find((item) => item.studentId === studentId);
   const bill = studentPaymentBalance(store, studentId);
   const payments = studentPayments(store, studentId);
-  const slip = receiptPayment(payments);
-  const [amountReceived, setAmountReceived] = useState('');
-  const [method, setMethod] = useState('cash');
-  const [receivedBy, setReceivedBy] = useState(studentBalanceReceivedBy(store, studentId) || displayName(actor));
-  const [accountNumber, setAccountNumber] = useState('');
-  const [fromAccountNumber, setFromAccountNumber] = useState('');
+  const editing = paymentId ? payments.find((row) => row.paymentId === paymentId) : undefined;
+  const slip = editing || receiptPayment(payments);
+  const [amountReceived, setAmountReceived] = useState(editing ? String(editing.amountPaid || editing.amount || 0) : '');
+  const [method, setMethod] = useState(editing?.paymentMethod || 'cash');
+  const [receivedBy, setReceivedBy] = useState(editing?.receivedBy || studentBalanceReceivedBy(store, studentId) || displayName(actor));
+  const [accountNumber, setAccountNumber] = useState(editing?.accountNumber || '');
+  const [fromAccountNumber, setFromAccountNumber] = useState(editing?.fromAccountNumber || '');
+  const [notes, setNotes] = useState(editing?.notes || '');
+  const [paymentDate, setPaymentDate] = useState((editing?.paidAt || editing?.paymentDate || '').slice(0, 10));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(paymentId || null);
 
   useEffect(() => {
+    const current = paymentId ? studentPayments(store, studentId).find((row) => row.paymentId === paymentId) : undefined;
     const rows = [...studentPayments(store, studentId)].reverse();
-    setAccountNumber(rows.find((row) => (row.accountNumber || '').trim())?.accountNumber || '');
-    setFromAccountNumber(rows.find((row) => (row.fromAccountNumber || '').trim())?.fromAccountNumber || '');
-    setReceivedBy(studentBalanceReceivedBy(store, studentId) || displayName(actor));
-  }, [actor, studentId]);
+    setEditingPaymentId(paymentId || null);
+    setAmountReceived(current ? String(current.amountPaid || current.amount || 0) : '');
+    setMethod(current?.paymentMethod || 'cash');
+    setReceivedBy(current?.receivedBy || studentBalanceReceivedBy(store, studentId) || displayName(actor));
+    setAccountNumber(current?.accountNumber || rows.find((row) => (row.accountNumber || '').trim())?.accountNumber || '');
+    setFromAccountNumber(current?.fromAccountNumber || rows.find((row) => (row.fromAccountNumber || '').trim())?.fromAccountNumber || '');
+    setNotes(current?.notes || '');
+    setPaymentDate((current?.paidAt || current?.paymentDate || '').slice(0, 10));
+    setError(null);
+    setNotice(current ? 'Edit these payment details, then save.' : null);
+  }, [actor, paymentId, studentId]);
 
   if (!student) return null;
 
@@ -580,7 +595,14 @@ function StudentReceivedModal({
     setNotice(null);
     try {
       const next = editingPaymentId
-        ? updateStudentPayment(store, editingPaymentId, amountReceived, actor.userId)
+        ? updateStudentPayment(store, editingPaymentId, amountReceived, actor.userId, {
+            method,
+            receivedBy,
+            accountNumber: accountNumber.trim(),
+            fromAccountNumber: fromAccountNumber.trim(),
+            notes: notes.trim(),
+            paymentDate,
+          })
         : recordStudentAmountReceived(
             store,
             studentId,
@@ -590,6 +612,8 @@ function StudentReceivedModal({
             accountNumber.trim(),
             fromAccountNumber.trim(),
             method,
+            notes.trim(),
+            paymentDate,
           );
       await saveStore(next);
       const due = studentPaymentBalance(next, studentId).due;
@@ -605,7 +629,7 @@ function StudentReceivedModal({
 
   return (
     <DeskModal
-      title={`${studentDisplay(student)} · Amount received`}
+      title={`${studentDisplay(student)} · ${editingPaymentId ? 'Edit payment details' : 'Amount received'}`}
       size="wide"
       stacked={stacked}
       onClose={onClose}
@@ -650,6 +674,12 @@ function StudentReceivedModal({
             />
           </Field>
           <BalanceReceivedByField store={store} actor={actor} value={receivedBy} onChange={setReceivedBy} disabled={busy} />
+          <Field label="Payment date" optional>
+            <Input type="date" value={paymentDate} disabled={busy} onChange={(event) => setPaymentDate(event.target.value)} />
+          </Field>
+          <Field label="Notes" optional>
+            <Input value={notes} disabled={busy} onChange={(event) => setNotes(event.target.value)} />
+          </Field>
           <PaymentReceiptField
             paymentId={slip?.paymentId || ''}
             receiptName={slip?.receiptName}
@@ -704,7 +734,13 @@ function StudentReceivedModal({
                             onClick={() => {
                               setEditingPaymentId(row.paymentId);
                               setAmountReceived(String(row.amountPaid || row.amount || 0));
-                              setNotice('Edit the payment amount, then save. Totals are recalculated.');
+                              setMethod(row.paymentMethod || 'cash');
+                              setReceivedBy(row.receivedBy || displayName(actor));
+                              setAccountNumber(row.accountNumber || '');
+                              setFromAccountNumber(row.fromAccountNumber || '');
+                              setNotes(row.notes || '');
+                              setPaymentDate((row.paidAt || row.paymentDate || '').slice(0, 10));
+                              setNotice('Edit these payment details, then save.');
                             }}
                           >
                             Edit
@@ -815,23 +851,6 @@ function TeacherPaymentModal({
   const current = payment;
   const person = teacher;
 
-  function draftPayment(): Payment {
-    const nextAmount = Math.max(0, Number(amount) || 0);
-    const nextPaid = Math.max(0, Number(amountPaid) || 0);
-    return {
-      ...current,
-      amount: nextAmount,
-      amountPaid: nextPaid,
-      paymentStatus: status,
-      paymentMethod: method,
-      notes,
-      receivedBy: '',
-      accountNumber: accountNumber.trim(),
-      fromAccountNumber: fromAccountNumber.trim(),
-      paidAt: nextPaid > 0 ? current.paidAt || new Date().toISOString() : '',
-    };
-  }
-
   function rejectForeignEmail(typed: string) {
     const foreign = personalEmailOwnerError(store.users || [], person.userId, typed);
     if (!foreign) return false;
@@ -856,13 +875,28 @@ function TeacherPaymentModal({
       }
     }
     try {
-      const next = draftPayment();
-      await saveStore({
-        ...store,
-        users: (store.users || []).map((user) => (user.userId === person.userId ? { ...user, personalEmail: typed } : user)),
-        payments: store.payments.map((item) => (item.paymentId === current.paymentId ? next : item)),
-      });
-      setNotice('Payment saved.');
+      await saveStore(
+        applyTeacherPayment(
+          {
+            ...store,
+            users: (store.users || []).map((user) => (user.userId === person.userId ? { ...user, personalEmail: typed } : user)),
+          },
+          {
+            paymentId: current.paymentId,
+            teacherId: person.userId,
+            amount,
+            amountPaid,
+            paymentStatus: status,
+            paymentMethod: method,
+            notes,
+            accountNumber: accountNumber.trim(),
+            fromAccountNumber: fromAccountNumber.trim(),
+            recordedBy: actor.userId,
+            receivedBy: displayName(actor),
+          },
+        ),
+      );
+      setNotice('Payment saved. Center cash flow lists this as Teachers salary.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save payment.');
     } finally {
@@ -885,22 +919,16 @@ function TeacherPaymentModal({
       }
     }
     try {
-      try {
-        const result = await api.notifyTeacherPayment(
-          current.paymentId,
-          typed,
-          accountNumber.trim(),
-          fromAccountNumber.trim(),
-          Math.max(0, Number(amount) || 0),
-          Math.max(0, Number(amountPaid) || 0),
-        );
-        await onRefresh?.();
-        setNotice(deliveryNotice(displayName(person), result));
-      } catch {
-        const result = notifyTeacherPayment(store, current.paymentId, actor.userId);
-        await saveStore(result.store);
-        setNotice(`Notified ${displayName(result.teacher)} on their account. Add a valid personal email so Hiraya can send the message.`);
-      }
+      const result = await api.notifyTeacherPayment(
+        current.paymentId,
+        typed,
+        accountNumber.trim(),
+        fromAccountNumber.trim(),
+        Math.max(0, Number(amount) || 0),
+        Math.max(0, Number(amountPaid) || 0),
+      );
+      await onRefresh?.();
+      setNotice(assertMailed(displayName(person), result));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not notify teacher.');
     } finally {
@@ -921,11 +949,21 @@ function TeacherPaymentModal({
       return;
     }
     try {
-      const next = draftPayment();
-      await saveStore({
-        ...store,
-        payments: store.payments.map((item) => (item.paymentId === current.paymentId ? next : item)),
-      });
+      await saveStore(
+        applyTeacherPayment(store, {
+          paymentId: current.paymentId,
+          teacherId: person.userId,
+          amount,
+          amountPaid,
+          paymentStatus: status,
+          paymentMethod: method,
+          notes,
+          accountNumber: accountNumber.trim(),
+          fromAccountNumber: fromAccountNumber.trim(),
+          recordedBy: actor.userId,
+          receivedBy: displayName(actor),
+        }),
+      );
       await api.sendTeacherPayslip(
         current.paymentId,
         typed,
@@ -1530,6 +1568,7 @@ export function PaymentsManagePage({
   }, [store, saveStore]);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [receivedId, setReceivedId] = useState<string | null>(null);
+  const [editPaymentId, setEditPaymentId] = useState<string | null>(null);
   const [teacherPaymentId, setTeacherPaymentId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const teachers = useMemo(
@@ -1558,19 +1597,9 @@ export function PaymentsManagePage({
   async function notifyParentsFor(studentId: string) {
     setNotice(null);
     try {
-      try {
-        const result = await api.notifyStudentBalance(studentId);
-        await onRefresh?.();
-        setNotice(deliveryNotice(parentLabel(parentsForStudent(store, studentId)), result));
-      } catch {
-        const result = notifyStudentBalance(store, studentId, user.userId);
-        await saveStore(result.store);
-        setNotice(
-          result.parentCount === 1
-            ? 'Notified the parent on their account. Email will send once SMTP is set on the API.'
-            : `Notified ${result.parentCount} parents on their accounts. Email will send once SMTP is set on the API.`,
-        );
-      }
+      const result = await api.notifyStudentBalance(studentId);
+      await onRefresh?.();
+      setNotice(assertMailed(parentLabel(parentsForStudent(store, studentId)), result));
     } catch (err) {
       setNotice(err instanceof Error ? err.message : 'Could not notify parent.');
     }
@@ -1597,40 +1626,35 @@ export function PaymentsManagePage({
       }
       return;
     }
-    const amount = Number(form.get('amount') || 0);
-    const amountPaid = Number(form.get('amountPaid') || 0);
-    const next: Payment = {
-      paymentId: newId('pay'),
-      enrollmentId: paymentLane === 'teachers' ? TEACHER_PAYMENT_MARK : '',
-      studentId: String(form.get('payeeId') || ''),
-      amount,
-      amountPaid,
-      paymentMethod: String(form.get('paymentMethod') || 'cash'),
-      paymentStatus: String(form.get('paymentStatus') || (amountPaid >= amount && amount > 0 ? 'paid' : 'pending')),
-      referenceNumber: String(form.get('referenceNumber') || ''),
-      paymentDate: new Date().toISOString().slice(0, 10),
-      dueAt: String(form.get('dueAt') || ''),
-      paidAt: amountPaid > 0 ? new Date().toISOString() : '',
-      recordedBy: user.userId,
-      receivedBy: paymentLane === 'teachers' ? '' : resolveReceivedBy(form),
-      notes: String(form.get('notes') || ''),
-      history: [],
-    };
-    await saveStore({ ...store, payments: [...store.payments, next] });
-    setOpen(false);
+    try {
+      await saveStore(
+        applyTeacherPayment(store, {
+          teacherId: String(form.get('payeeId') || ''),
+          amount: String(form.get('amount') || ''),
+          amountPaid: String(form.get('amountPaid') || ''),
+          paymentMethod: String(form.get('paymentMethod') || 'cash'),
+          paymentStatus: String(form.get('paymentStatus') || 'paid'),
+          notes: String(form.get('notes') || ''),
+          recordedBy: user.userId,
+          receivedBy: displayName(user),
+        }),
+      );
+      setOpen(false);
+      setNotice('Teacher payment saved. It now appears in Center cash flow for this month.');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'Could not save the teacher payment.');
+    }
   }
 
   if (paymentLane === 'teachers') {
     return (
       <>
         {notice ? (
-          <p className={notice.toLowerCase().includes('notif') || notice.toLowerCase().includes('payslip') || notice.toLowerCase().includes('email') ? 'form-ok' : 'form-error'}>
-            {notice}
-          </p>
+          <p className={noticeClass(notice)}>{notice}</p>
         ) : null}
         <RecordTable
           title="Teachers payment"
-          description="Pay records for teachers and staff. Double-click a row to review, notify the teacher, or send a payslip."
+          description="Pay records for teachers and staff. Saved payments are listed in Center cash flow as Teachers salary."
           rows={teacherRows}
           rowKey={(row) => row.paymentId}
           search={(row, q) =>
@@ -1668,15 +1692,9 @@ export function PaymentsManagePage({
                     try {
                       const result = await api.notifyTeacherPayment(row.paymentId);
                       await onRefresh?.();
-                      setNotice(deliveryNotice(teacherName(store, row.studentId), result));
-                    } catch {
-                      try {
-                        const result = notifyTeacherPayment(store, row.paymentId, user.userId);
-                        await saveStore(result.store);
-                        setNotice(`Notified ${displayName(result.teacher)} on their account. Email will send once SMTP is set on the API.`);
-                      } catch (err) {
-                        setNotice(err instanceof Error ? err.message : 'Could not notify teacher.');
-                      }
+                      setNotice(assertMailed(teacherName(store, row.studentId), result));
+                    } catch (err) {
+                      setNotice(err instanceof Error ? err.message : 'Could not notify teacher.');
                     }
                   })();
                 },
@@ -1704,15 +1722,9 @@ export function PaymentsManagePage({
                       try {
                         const result = await api.notifyTeacherPayment(row.paymentId);
                         await onRefresh?.();
-                        setNotice(deliveryNotice(teacherName(store, row.studentId), result));
-                      } catch {
-                        try {
-                          const result = notifyTeacherPayment(store, row.paymentId, user.userId);
-                          await saveStore(result.store);
-                          setNotice(`Notified ${displayName(result.teacher)} on their account. Email will send once SMTP is set on the API.`);
-                        } catch (err) {
-                          setNotice(err instanceof Error ? err.message : 'Could not notify teacher.');
-                        }
+                        setNotice(assertMailed(teacherName(store, row.studentId), result));
+                      } catch (err) {
+                        setNotice(err instanceof Error ? err.message : 'Could not notify teacher.');
                       }
                     })();
                   }}
@@ -1739,17 +1751,17 @@ export function PaymentsManagePage({
               <Field label="Amount">
                 <Input name="amount" type="number" min={0} />
               </Field>
-              <Field label="Amount paid">
+              <Field label="Amount paid" hint="This amount is recorded as Teachers salary in Center cash flow.">
                 <Input name="amountPaid" type="number" min={0} />
               </Field>
               <Field label="Method">
                 <Input name="paymentMethod" defaultValue="cash" />
               </Field>
               <Field label="Status">
-                <Select name="paymentStatus" defaultValue="pending">
-                  <option value="pending">Pending</option>
+                <Select name="paymentStatus" defaultValue="paid">
                   <option value="paid">Paid</option>
                   <option value="partial">Partial</option>
+                  <option value="pending">Pending</option>
                 </Select>
               </Field>
               <Field label="Notes" optional>
@@ -1774,7 +1786,7 @@ export function PaymentsManagePage({
 
   return (
     <>
-      {notice ? <p className={notice.startsWith('Parent') || notice.includes('parents notified') || notice.includes('Tuition fee saved') ? 'form-ok' : 'form-error'}>{notice}</p> : null}
+      {notice ? <p className={noticeClass(notice)}>{notice}</p> : null}
       <RecordTable
         title="Student balance"
         description="Remaining balance is the tuition fee minus every valid payment. A down payment is the first payment and is included once."
@@ -1795,7 +1807,10 @@ export function PaymentsManagePage({
             {
               label: 'Amount received',
               needOneMessage: 'Select one student to record the amount received.',
-              onClick: (row) => setReceivedId(row.student.studentId),
+              onClick: (row) => {
+                setEditPaymentId(null);
+                setReceivedId(row.student.studentId);
+              },
             },
             {
               label: 'Notify parent',
@@ -1901,7 +1916,14 @@ export function PaymentsManagePage({
           actor={user}
           saveStore={saveStore}
           onRefresh={onRefresh}
-          onReceive={() => setReceivedId(detailId)}
+          onReceive={() => {
+            setEditPaymentId(null);
+            setReceivedId(detailId);
+          }}
+          onEditPayment={(id) => {
+            setEditPaymentId(id);
+            setReceivedId(detailId);
+          }}
           onClose={() => setDetailId(null)}
         />
       ) : null}
@@ -1913,7 +1935,11 @@ export function PaymentsManagePage({
           saveStore={saveStore}
           onRefresh={onRefresh}
           stacked={Boolean(detailId)}
-          onClose={() => setReceivedId(null)}
+          paymentId={editPaymentId}
+          onClose={() => {
+            setReceivedId(null);
+            setEditPaymentId(null);
+          }}
         />
       ) : null}
     </>
@@ -1945,6 +1971,7 @@ export function SettingsPage({
   const [message, setMessage] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [codeBusy, setCodeBusy] = useState(false);
   const [notify, setNotify] = useState({
     attendance: store.settings.notifyAttendance,
     payments: store.settings.notifyPayments,
@@ -2000,9 +2027,27 @@ export function SettingsPage({
       return;
     }
     await run(async () => {
-      await api.changePassword(live.userId, String(form.get('currentPassword') || ''), next);
+      await api.changePassword(live.userId, String(form.get('currentPassword') || ''), next, {
+        verificationCode: String(form.get('verificationCode') || ''),
+        confirmPassword: String(form.get('confirmPassword') || ''),
+      });
       event.currentTarget.reset();
     }, 'Password updated. Other signed-in sessions must sign in again.');
+  }
+
+  async function sendPasswordCode(formEl: HTMLFormElement) {
+    setCodeBusy(true);
+    setMessage(null);
+    try {
+      const result = await api.requestPasswordCode(String(new FormData(formEl).get('currentPassword') || ''));
+      setOk(true);
+      setMessage(`Verification code sent${result.to ? ` to ${result.to}` : ''}.`);
+    } catch (err) {
+      setOk(false);
+      setMessage(err instanceof Error ? err.message : 'Could not send a verification code.');
+    } finally {
+      setCodeBusy(false);
+    }
   }
 
   async function saveAlerts() {
@@ -2053,7 +2098,7 @@ export function SettingsPage({
   return (
     <>
       <PageHeader title={PAGE_COPY.settings.title} description={PAGE_COPY.settings.description} />
-      {message ? <p className={ok ? 'muted' : 'hlc-field-error'}>{message}</p> : null}
+      {message ? <p className={ok ? 'form-ok' : 'form-error'}>{message}</p> : null}
       <div className="settings-tabs" role="tablist" aria-label="Settings sections">
         {SETTINGS_TABS.map((item) => (
           <button
@@ -2105,6 +2150,10 @@ export function SettingsPage({
       {tab === 'security' ? (
         <form className="panel settings-form" onSubmit={savePassword}>
           <h2>Password</h2>
+          <p className="muted">
+            Administrator password changes require the current password and an emailed verification code. Passwords are
+            stored as hashes, never in plaintext.
+          </p>
           <Field label="Current password">
             <Input name="currentPassword" type="password" required autoComplete="current-password" />
           </Field>
@@ -2114,9 +2163,25 @@ export function SettingsPage({
           <Field label="Confirm new password">
             <Input name="confirmPassword" type="password" minLength={8} required autoComplete="new-password" />
           </Field>
-          <Button type="submit" disabled={busy}>
-            {busy ? 'Saving…' : 'Update password'}
-          </Button>
+          <Field label="Email verification code" required>
+            <Input name="verificationCode" inputMode="numeric" autoComplete="one-time-code" />
+          </Field>
+          <div className="icon-actions">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={codeBusy || busy}
+              onClick={(event) => {
+                const form = event.currentTarget.closest('form');
+                if (form) void sendPasswordCode(form);
+              }}
+            >
+              {codeBusy ? 'Sending…' : 'Email verification code'}
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? 'Saving…' : 'Update password'}
+            </Button>
+          </div>
         </form>
       ) : null}
 

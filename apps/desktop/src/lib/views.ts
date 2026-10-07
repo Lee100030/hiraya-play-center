@@ -18,7 +18,7 @@ export function desktopNav(role?: string | null) {
 export const PAGE_COPY: Record<ViewId, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Center overview. Desktop is the control system; teachers and parents use the mobile app for assigned work.' },
   students: { title: 'Student management', description: 'Create learners, link each child to a parent, and mark who is at the center today. Present records attendance and uses one session from the child’s package.' },
-  teachers: { title: 'Teacher management', description: 'Manage teachers, assigned students, schedules, attendance, tasks, notes, and monthly activities.' },
+  teachers: { title: 'Teacher management', description: 'Teachers hired from approved applications and teachers added here. Assigned students, schedules, attendance, tasks, and monthly activities.' },
   modules: { title: 'Module management', description: 'Upload learning files, store them on each module, and open them again from this list.' },
   programTuition: {
     title: 'Program tuition management',
@@ -32,7 +32,7 @@ export const PAGE_COPY: Record<ViewId, { title: string; description: string }> =
   enrollment: { title: 'Enrollment recording', description: 'Applications and class seats recorded by the Super Administrator.' },
   teacherApplications: {
     title: 'Teacher applications',
-    description: 'Job applications from the public website. Approving one does not create a student.',
+    description: 'Job applications from the public website. Approve adds the teacher to Teacher management.',
   },
   attendance: {
     title: 'Teachers Attendance record',

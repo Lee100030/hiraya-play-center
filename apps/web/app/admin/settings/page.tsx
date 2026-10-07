@@ -32,6 +32,8 @@ export default function AdminSettingsPage() {
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>('profile');
   const [message, setMessage] = useState('');
   const [ok, setOk] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [codeBusy, setCodeBusy] = useState(false);
   const [notify, setNotify] = useState({
     attendance: false,
     payments: false,
@@ -87,13 +89,34 @@ export default function AdminSettingsPage() {
       return;
     }
     try {
-      await api.changePassword(user.userId, currentPassword, next);
+      await api.changePassword(user.userId, currentPassword, next, {
+        verificationCode: String(form.get('verificationCode') || ''),
+        confirmPassword: confirm,
+      });
       setOk(true);
       setMessage('Password updated.');
+      setCodeSent(false);
       event.currentTarget.reset();
     } catch (err) {
       setOk(false);
       setMessage(err instanceof Error ? err.message : 'Could not update password.');
+    }
+  }
+
+  async function sendPasswordCode(formEl: HTMLFormElement) {
+    if (!user) return;
+    const form = new FormData(formEl);
+    setCodeBusy(true);
+    try {
+      const result = await api.requestPasswordCode(String(form.get('currentPassword') || ''));
+      setOk(true);
+      setCodeSent(true);
+      setMessage(`Verification code sent${result.to ? ` to ${result.to}` : ''}.`);
+    } catch (err) {
+      setOk(false);
+      setMessage(err instanceof Error ? err.message : 'Could not send a verification code.');
+    } finally {
+      setCodeBusy(false);
     }
   }
 
@@ -174,17 +197,35 @@ export default function AdminSettingsPage() {
 
       {tab === 'security' ? (
         <form className="hlc-card form-grid" onSubmit={saveSecurity}>
+          <p className="muted">
+            Changing an administrator password requires your current password and a verification code emailed to this
+            account. The password is stored as a hash, never in plaintext.
+          </p>
           <Field label="Current password">
-            <Input name="currentPassword" type="password" required />
+            <Input name="currentPassword" type="password" required autoComplete="current-password" />
           </Field>
           <Field label="New password">
-            <Input name="newPassword" type="password" minLength={8} required />
+            <Input name="newPassword" type="password" minLength={8} required autoComplete="new-password" />
           </Field>
           <Field label="Confirm new password">
-            <Input name="confirmPassword" type="password" minLength={8} required />
+            <Input name="confirmPassword" type="password" minLength={8} required autoComplete="new-password" />
           </Field>
-          <div>
-            <Button type="submit">Save Changes</Button>
+          <Field label="Email verification code" required>
+            <Input name="verificationCode" inputMode="numeric" autoComplete="one-time-code" required={codeSent} />
+          </Field>
+          <div className="icon-actions">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={codeBusy}
+              onClick={(event) => {
+                const form = event.currentTarget.closest('form');
+                if (form) void sendPasswordCode(form);
+              }}
+            >
+              {codeBusy ? 'Sending…' : 'Email verification code'}
+            </Button>
+            <Button type="submit">Update password</Button>
           </div>
         </form>
       ) : null}

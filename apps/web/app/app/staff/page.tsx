@@ -30,6 +30,7 @@ export default function StaffPage() {
         status: String(form.get('status') || 'active'),
         password: password || undefined,
         confirmPassword: password || undefined,
+        adminPassword: String(form.get('adminPassword') || '') || undefined,
       });
       await refresh();
       setEditing(null);
@@ -79,9 +80,14 @@ export default function StaffPage() {
               <option value="deactivated">deactivated</option>
             </Select>
           </Field>
-          <Field label={current ? 'New password (optional)' : 'Password'} required={!current}>
-            <Input name="password" type="password" minLength={current ? undefined : 8} required={!current} />
+          <Field label={current ? 'Set new password' : 'Password'} required={!current} optional={Boolean(current)}>
+            <Input name="password" type="password" autoComplete="new-password" placeholder={current ? '••••••••' : undefined} minLength={current ? undefined : 8} required={!current} />
           </Field>
+          {current ? (
+            <Field label="Admin password required" optional>
+              <Input name="adminPassword" type="password" autoComplete="current-password" />
+            </Field>
+          ) : null}
           <div>
             <Button type="submit">{current ? 'Save' : 'Create'}</Button>{' '}
             <Button type="button" variant="ghost" onClick={() => { setCreating(false); setEditing(null); }}>

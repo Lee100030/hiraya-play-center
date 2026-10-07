@@ -224,15 +224,29 @@ select {
   right: 6px;
   top: 50%;
   transform: translateY(-50%);
-  width: 36px;
+  min-width: 36px;
   height: 36px;
+  padding: 0 8px;
   border: 0;
   background: transparent;
   color: var(--desk-muted);
   border-radius: 10px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   cursor: pointer;
+}
+
+.login-eye-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.balance-readouts {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .login-eye:hover,

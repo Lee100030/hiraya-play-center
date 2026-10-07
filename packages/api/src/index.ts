@@ -1,6 +1,6 @@
 import { resolveApiBaseUrl, SESSION_HEADER } from '@hiraya/config';
 import { emptyStore, type AuthSession, type EnrollmentApplyInput, type HirayaDatabase, type HirayaUser, type PublicSite, type TeacherApplyInput } from '@hiraya/types';
-import { diffStore } from '@hiraya/utils';
+import { approvedTeacherApplicationsWithoutAccount, diffStore, teacherHireDraft } from '@hiraya/utils';
 
 export class ApiError extends Error {
   constructor(
@@ -126,11 +126,32 @@ export class HirayaApi {
     }
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+  async requestPasswordCode(currentPassword: string): Promise<{ sent: boolean; to?: string }> {
+    const res = await fetch(this.url('/api/auth/password/request-code'), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify({ currentPassword }),
+    });
+    return this.parse(res);
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    extra?: { verificationCode?: string; adminPassword?: string; confirmPassword?: string },
+  ): Promise<void> {
     const res = await fetch(this.url('/api/auth/password'), {
       method: 'POST',
       headers: await this.headers(),
-      body: JSON.stringify({ userId, currentPassword, newPassword, confirmPassword: newPassword }),
+      body: JSON.stringify({
+        userId,
+        currentPassword,
+        newPassword,
+        confirmPassword: extra?.confirmPassword || newPassword,
+        verificationCode: extra?.verificationCode || '',
+        adminPassword: extra?.adminPassword || '',
+      }),
     });
     await this.parse(res);
   }
@@ -246,6 +267,26 @@ export class HirayaApi {
     return this.parse<HirayaDatabase>(res);
   }
 
+  async importApprovedTeachers(): Promise<HirayaDatabase> {
+    const res = await fetch(this.url('/api/enrollment/teachers/import'), {
+      method: 'POST',
+      headers: await this.headers(),
+    });
+    if (res.status === 404) return this.importApprovedTeachersViaStaff();
+    return this.parse<HirayaDatabase>(res);
+  }
+
+  private async importApprovedTeachersViaStaff(): Promise<HirayaDatabase> {
+    let store = await this.getStore();
+    const missing = approvedTeacherApplicationsWithoutAccount(store);
+    for (const app of missing) {
+      const password = `Hk${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      const saved = await this.saveStaff(teacherHireDraft(store, app, password));
+      store = saved.store;
+    }
+    return store;
+  }
+
   async rejectEnrollment(applicationId: string): Promise<HirayaDatabase> {
     const res = await fetch(this.url(`/api/enrollment/applications/${applicationId}/reject`), {
       method: 'POST',
@@ -283,6 +324,7 @@ export class HirayaApi {
     personalEmail?: string;
     password?: string;
     confirmPassword?: string;
+    adminPassword?: string;
     phone?: string;
     address?: string;
     notes?: string;
@@ -432,6 +474,7 @@ export class HirayaApi {
       notes?: string;
       password?: string;
       confirmPassword?: string;
+      adminPassword?: string;
     },
   ): Promise<HirayaDatabase> {
     if (!parentId) throw new ApiError('Parent account was not found.', 404);
@@ -627,7 +670,7 @@ export class HirayaApi {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
-      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(20000) : undefined,
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
     });
     return this.parse(res);
   }
@@ -829,6 +872,7 @@ export class HirayaApi {
         accountNumber: (accountNumber || '').trim(),
         fromAccountNumber: (fromAccountNumber || '').trim(),
       }),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
     });
     return this.parse(res);
   }

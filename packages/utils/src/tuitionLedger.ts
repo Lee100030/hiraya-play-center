@@ -30,7 +30,8 @@ function opsFor(store: HirayaDatabase, studentId: string) {
 
 export function studentTuitionFee(store: HirayaDatabase, studentId: string) {
   const program = programForStudent(store, studentId);
-  if (program) return pesos(program.tuitionFee || 0);
+  const programFee = pesos(program?.tuitionFee || 0);
+  if (programFee > 0) return programFee;
   const ops = opsFor(store, studentId);
   const explicit = pesos(ops?.tuitionFee || 0);
   if (explicit > 0) return explicit;
@@ -233,6 +234,14 @@ export function updateStudentPayment(
   paymentId: string,
   amountInput: number | string,
   actorId = '',
+  details?: {
+    method?: string;
+    receivedBy?: string;
+    accountNumber?: string;
+    fromAccountNumber?: string;
+    notes?: string;
+    paymentDate?: string;
+  },
 ) {
   const id = (paymentId || '').trim();
   const current = (store.payments || []).find((row) => row.paymentId === id);
@@ -249,6 +258,8 @@ export function updateStudentPayment(
   const room = pesos(tuition - paidWithout);
   if (amount > room + 0.001) throw new Error(overpayMessage(room));
   const now = new Date().toISOString();
+  const receivedBy = (details?.receivedBy ?? current.receivedBy ?? '').trim();
+  if (!receivedBy) throw new Error('Choose who received this payment.');
   const payments = (locked.payments || []).map((row) =>
     row.paymentId === id
       ? {
@@ -256,6 +267,13 @@ export function updateStudentPayment(
           amount,
           amountPaid: amount,
           paymentStatus: 'paid',
+          paymentMethod: (details?.method ?? row.paymentMethod ?? '').trim() || row.paymentMethod,
+          receivedBy,
+          accountNumber: details?.accountNumber !== undefined ? details.accountNumber.trim() : row.accountNumber,
+          fromAccountNumber: details?.fromAccountNumber !== undefined ? details.fromAccountNumber.trim() : row.fromAccountNumber,
+          notes: details?.notes !== undefined ? details.notes.trim() : row.notes,
+          paymentDate: (details?.paymentDate || row.paymentDate || now).slice(0, 10),
+          paidAt: row.paidAt || now.slice(0, 10),
           history: [
             ...(row.history || []),
             {

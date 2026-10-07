@@ -114,7 +114,7 @@ public class EnrollmentService
             await Task.CompletedTask;
         });
 
-        await TrySendReceivedAsync(
+        QueueReceipt(
             guardianEmail,
             guardianName,
             "we received your enrollment application",
@@ -171,7 +171,7 @@ public class EnrollmentService
                 "application", applicationId, $"Teacher application submitted by {name}.");
             await Task.CompletedTask;
         });
-        await TrySendReceivedAsync(
+        QueueReceipt(
             mail,
             name,
             "we received your teacher application",
@@ -190,21 +190,35 @@ public class EnrollmentService
             var app = db.EnrollmentApplications.FirstOrDefault(a => a.ApplicationId == applicationId)
                       ?? throw new InvalidOperationException("Application not found.");
 
-            if (app.Status != "pending_review" && app.Status != "pending")
+            var isTeacher = string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase);
+            var teacherWaiting = isTeacher &&
+                (app.Status == "pending_review" || app.Status == "pending" || app.Status == "interview" || app.Status == "approved");
+            if (!isTeacher && app.Status != "pending_review" && app.Status != "pending")
+                throw new InvalidOperationException("Application already processed.");
+            if (isTeacher && !teacherWaiting)
                 throw new InvalidOperationException("Application already processed.");
 
-            if (string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase))
+            if (isTeacher)
             {
+                var teacher = StaffService.EnsureTeacherFromApplication(db, app, actor);
                 app.Status = "approved";
+                app.StudentNumber = teacher.UserId;
                 AuditService.Append(db, adminUserId, "", AuditModules.Enrollment, "approve-teacher",
-                    "application", applicationId, $"Approved teacher application for {app.StudentFullname}. No student was created.");
+                    "application", applicationId, $"Approved teacher application for {app.StudentFullname}. Teacher is now in Teacher management.");
                 NotificationService.PushToUsers(
                     db,
                     NotificationService.Recipients(db, NotificationAudiences.Admins).Select(u => u.UserId),
-                    $"Teacher application for {app.StudentFullname} was approved. Add the teacher account from Teachers. No student was created.",
+                    $"Teacher application for {app.StudentFullname} was approved. The teacher now appears in Teacher management.",
                     NotificationKinds.Enrollment,
                     "Teacher application approved",
-                    "enrollment");
+                    "teachers");
+                NotificationService.Push(
+                    db,
+                    teacher.UserId,
+                    "Your teacher application was approved. Open Teacher management to finish the profile and set a sign-in password.",
+                    NotificationKinds.Enrollment,
+                    "Teacher application approved",
+                    "teachers");
                 await Task.CompletedTask;
                 return;
             }
@@ -258,7 +272,7 @@ public class EnrollmentService
             notice = new EnrollmentApprovalNotice
             {
                 ParentUserId = parent.UserId,
-                ParentEmail = parent.Email,
+                ParentEmail = OriginalEmail(app.ParentEmail, parent.Email),
                 ParentName = parent.Fullname,
                 StudentName = app.StudentFullname,
                 Program = programName,
@@ -269,28 +283,53 @@ public class EnrollmentService
 
         if (notice is null || _parents is null)
             return;
-        try
+        _ = Task.Run(async () =>
         {
-            await _parents.NotifyEnrollmentAcceptedAsync(notice);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Enrollment was accepted, but the parent notice could not be prepared.");
-        }
+            try
+            {
+                await _parents.NotifyEnrollmentAcceptedAsync(notice);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Enrollment was accepted, but the parent notice could not be prepared.");
+            }
+        });
     }
 
-    private async Task TrySendReceivedAsync(string email, string name, string subjectLine, string body)
+    public async Task ImportApprovedTeachersAsync(HirayaUser actor)
+    {
+        if (!Navigation.CanManageEnrollment(actor.Role) && !Navigation.CanManageStaff(actor.Role))
+            throw new UnauthorizedAccessException("Only administrators can import approved teachers.");
+        await _repository.MutateAsync(async db =>
+        {
+            foreach (var app in db.EnrollmentApplications
+                .Where(a =>
+                    string.Equals(a.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(a.Status, "approved", StringComparison.OrdinalIgnoreCase))
+                .ToList())
+            {
+                var teacher = StaffService.EnsureTeacherFromApplication(db, app, actor);
+                app.StudentNumber = teacher.UserId;
+            }
+            await Task.CompletedTask;
+        });
+    }
+
+    private void QueueReceipt(string email, string name, string subjectLine, string body)
     {
         if (_parents is null)
             return;
-        try
+        _ = Task.Run(async () =>
         {
-            await _parents.NotifyApplicationReceivedAsync(email, name, subjectLine, body);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Application was saved, but the receipt email could not be sent.");
-        }
+            try
+            {
+                await _parents.NotifyApplicationReceivedAsync(email, name, subjectLine, body);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Application was saved, but the receipt email could not be sent.");
+            }
+        });
     }
 
     public async Task ScheduleTeacherInterviewAsync(
@@ -359,7 +398,8 @@ public class EnrollmentService
         {
             var app = db.EnrollmentApplications.FirstOrDefault(a => a.ApplicationId == applicationId)
                       ?? throw new InvalidOperationException("Application not found.");
-            if (app.Status != "pending_review" && app.Status != "pending")
+            var isTeacher = string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase);
+            if (app.Status != "pending_review" && app.Status != "pending" && !(isTeacher && app.Status == "interview"))
                 throw new InvalidOperationException("Application already processed.");
             app.Status = "rejected";
             AuditService.Append(db, actor.UserId, "", AuditModules.Enrollment, "reject",
@@ -521,6 +561,14 @@ public class EnrollmentService
         var age = today.Year - dob.Year;
         if (dob.Date > today.AddYears(-age)) age--;
         return Math.Max(age, 0);
+    }
+
+    private static string OriginalEmail(string? applicationEmail, string? accountEmail)
+    {
+        var original = (applicationEmail ?? "").Trim();
+        if (original.Contains('@'))
+            return original;
+        return (accountEmail ?? "").Trim();
     }
 
     private static HirayaUser EnsureParentFromApplication(HirayaDatabase db, EnrollmentApplication app)

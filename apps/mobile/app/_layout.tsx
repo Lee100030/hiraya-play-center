@@ -11,12 +11,21 @@ import { AuthProvider } from '../src/auth';
 import { Body, Heading } from '../src/components/typography';
 import { StoreProvider } from '../src/store';
 import { colors, fontAssets, fonts, space } from '../src/theme';
+import { createErrorReport, reportClientError } from '@hiraya/utils';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Native splash may already be hidden in Expo Go.
 });
 
 export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
+  reportClientError(
+    createErrorReport({
+      platform: 'mobile',
+      feature: 'ErrorBoundary',
+      type: 'frontend',
+      message: error?.message,
+    }),
+  );
   return (
     <View style={styles.errorWrap}>
       <Heading style={styles.errorTitle}>HIRAYA could not start</Heading>

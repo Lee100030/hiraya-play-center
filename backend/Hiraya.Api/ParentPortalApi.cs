@@ -104,7 +104,7 @@ public static class ParentPortalApi
             {
                 await parents.UpdateProfileAsync(parentId, body, actor);
                 if (!string.IsNullOrWhiteSpace(body.Password))
-                    await parents.SetPasswordAsync(parentId, body.Password, body.ConfirmPassword, actor);
+                    await parents.SetPasswordAsync(parentId, body.Password, body.ConfirmPassword, actor, body.AdminPassword);
                 var data = await repo.LoadAsync();
                 return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
             }
@@ -127,7 +127,7 @@ public static class ParentPortalApi
             {
                 await parents.UpdateProfileAsync(parentId, body, actor);
                 if (!string.IsNullOrWhiteSpace(body.Password))
-                    await parents.SetPasswordAsync(parentId, body.Password, body.ConfirmPassword, actor);
+                    await parents.SetPasswordAsync(parentId, body.Password, body.ConfirmPassword, actor, body.AdminPassword);
                 var data = await repo.LoadAsync();
                 return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
             }

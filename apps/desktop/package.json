@@ -37,7 +37,8 @@
     "win": {
       "target": ["nsis"],
       "icon": "public/images/hiraya-crest.png",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "publisherName": "Hiraya Kids Learning Center"
     },
     "nsis": {
       "oneClick": true,

@@ -272,8 +272,6 @@ public static class PaymentApi
                 new("Paid to", account),
                 new("Received by", received)
             ],
-            ActionLabel = "View payment details",
-            ActionUrl = HirayaEmailLayout.PublicUrl(db.Settings.Website),
             Contact = HirayaEmailLayout.ContactFrom(db.Settings)
         };
         var subject = $"{center} · {title} · {child}";
@@ -610,8 +608,6 @@ public static class PaymentApi
                 new("Notes", payment.Notes)
             ],
             Reference = payment.PaymentId,
-            ActionLabel = "View payment details",
-            ActionUrl = HirayaEmailLayout.PublicUrl(db.Settings.Website),
             Contact = HirayaEmailLayout.ContactFrom(db.Settings)
         };
         return new SalaryMail(

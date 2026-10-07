@@ -62,10 +62,11 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
     const classId = String(new FormData(event.currentTarget).get('classId') || '');
     if (!studentId) return;
     const now = new Date().toISOString().slice(0, 10);
+    const cls = store.classes.find((item) => item.classId === classId);
     const existing = store.enrollments.find((row) => row.studentId === studentId && (!classId || row.classId === classId));
     const enrollments = existing
       ? store.enrollments.map((row) =>
-          row.enrollmentId === existing.enrollmentId ? { ...row, teacherId, classId: classId || row.classId, status: 'active' } : row,
+          row.enrollmentId === existing.enrollmentId ? { ...row, teacherId, classId: classId || row.classId, status: row.status || 'active' } : row,
         )
       : [
           ...store.enrollments,
@@ -73,7 +74,7 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
             enrollmentId: newId('enr'),
             studentId,
             classId,
-            programId: store.classes.find((item) => item.classId === classId)?.programId || '',
+            programId: cls?.programId || '',
             teacherId,
             period: '',
             status: 'active',
@@ -81,7 +82,10 @@ export function TeacherWorkspace({ teacherId }: { teacherId: string }) {
             approvedBy: user?.userId || '',
           },
         ];
-    await save({ ...store, enrollments });
+    const classes = classId
+      ? store.classes.map((row) => (row.classId === classId ? { ...row, teacherId } : row))
+      : store.classes;
+    await save({ ...store, enrollments, classes });
   }
 
   async function addNote(event: FormEvent<HTMLFormElement>) {

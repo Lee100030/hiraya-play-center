@@ -41,6 +41,7 @@ export function ParentsPage({
     const form = new FormData(event.currentTarget);
     const password = String(form.get('password') || '');
     const confirmPassword = String(form.get('confirmPassword') || '');
+    const adminPassword = String(form.get('adminPassword') || '');
     const payload = {
       firstName: String(form.get('firstName') || ''),
       middleName: String(form.get('middleName') || ''),
@@ -52,7 +53,7 @@ export function ParentsPage({
       notes: String(form.get('notes') || ''),
       studentId: String(form.get('studentId') || '') || undefined,
       relationship: String(form.get('relationship') || 'Guardian'),
-      ...(password ? { password, confirmPassword } : current ? {} : { password, confirmPassword }),
+      ...(password ? { password, confirmPassword, adminPassword } : current ? {} : { password, confirmPassword }),
     };
     setBusy(true);
     setError(null);
@@ -408,8 +409,21 @@ export function ParentsPage({
             </Field>
           </FormSection>
           <FormSection title="Security">
-            <Field label={current ? 'New password' : 'Password'} required={!current} optional={Boolean(current)}>
-              <Input name="password" type="password" minLength={current ? undefined : 8} required={!current} />
+            {current ? (
+              <p className="muted form-span">
+                Current password is stored as a hash and cannot be shown. Leave the fields blank to keep it, or set a new
+                password. Setting a new password requires your administrator password.
+              </p>
+            ) : null}
+            <Field label={current ? 'Set new password' : 'Password'} required={!current} optional={Boolean(current)}>
+              <Input
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                placeholder={current ? '••••••••' : undefined}
+                minLength={current ? undefined : 8}
+                required={!current}
+              />
             </Field>
             <Field
               label="Confirm password"
@@ -417,8 +431,13 @@ export function ParentsPage({
               optional={Boolean(current)}
               hint={current ? 'Required only if you set a new password.' : undefined}
             >
-              <Input name="confirmPassword" type="password" required={!current} />
+              <Input name="confirmPassword" type="password" autoComplete="new-password" required={!current} />
             </Field>
+            {current ? (
+              <Field label="Admin password required" optional hint="Enter your admin password to confirm this password change.">
+                <Input name="adminPassword" type="password" autoComplete="current-password" />
+              </Field>
+            ) : null}
           </FormSection>
           <FormSection title="Linked children">
             {current ? (

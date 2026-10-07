@@ -50,4 +50,10 @@ public static class PasswordHasher
             expected.Length);
         return CryptographicOperations.FixedTimeEquals(expected, actual);
     }
+
+    public static void RequireAdminConfirmation(string? storedHash, string? adminPassword)
+    {
+        if (string.IsNullOrWhiteSpace(adminPassword) || !Verify(adminPassword, storedHash))
+            throw new UnauthorizedAccessException("Enter your admin password to confirm this password change.");
+    }
 }
