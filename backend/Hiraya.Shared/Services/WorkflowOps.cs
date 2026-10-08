@@ -176,6 +176,7 @@ public static class WorkflowOps
     {
         EnsureLists(before);
         EnsureLists(after);
+        EnrollmentService.MaterializeNewlyApproved(before, after, actor);
         foreach (var package in after.SessionPackages)
             RecalculatePackage(package);
 

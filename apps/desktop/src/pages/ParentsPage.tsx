@@ -128,9 +128,26 @@ export function ParentsPage({
   }
 
   async function restore(row: HirayaUser) {
+    const pending = (row.status || '').toLowerCase().includes('pending');
+    if (pending) {
+      setOpenId(null);
+      setEditing(row);
+      setError(
+        'This parent is waiting for activation. Set a new password (at least 8 characters) and your admin password, then Save. After that they can sign in on the phone app.',
+      );
+      return;
+    }
     if (!window.confirm(`Activate ${displayName(row)}?`)) return;
-    onStore(await api.setParentActive(row.userId, true));
-    setNotice(`${displayName(row)} is active.`);
+    setBusy(true);
+    setError(null);
+    try {
+      onStore(await api.setParentActive(row.userId, true));
+      setNotice(`${displayName(row)} is active.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not activate this parent.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function deactivateOne(row: HirayaUser) {

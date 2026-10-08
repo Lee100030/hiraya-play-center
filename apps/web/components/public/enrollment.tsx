@@ -264,7 +264,8 @@ function EnrollmentModal({
         {ok ? (
           <div className="enroll-modal-success">
             <Alert kind="success">
-              Your application was received. The admissions office will contact the parent or guardian on file.
+              Your application was received. The parent is now in Parent management and the child is in Students, already
+              linked as a family. The admissions office will still review class placement.
               {applicationId ? ` Reference number: ${applicationId}` : ''}
             </Alert>
             {error ? <Alert>{error}</Alert> : null}

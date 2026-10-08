@@ -165,8 +165,6 @@ public class ParentAccountService
             var user = RequireParent(db, parentUserId);
             if (active)
             {
-                if (string.Equals(user.Status, AccountStatuses.PendingActivation, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Set a password for this parent before activating the account.");
                 user.Status = AccountStatuses.Active;
             }
             else
@@ -273,7 +271,8 @@ public class ParentAccountService
 
     public async Task ActivateAsync(string token, string password, string confirm)
     {
-        var problem = PasswordRules.ValidateNew("", password, confirm);
+        var confirmToUse = string.IsNullOrWhiteSpace(confirm) ? password : confirm;
+        var problem = PasswordRules.ValidateNew("", password, confirmToUse);
         if (problem != null)
             throw new InvalidOperationException(problem);
 

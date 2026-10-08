@@ -116,7 +116,7 @@ public class PortalAuthService
     {
         var user = await repository.FindUserAsync(null, key);
         if (user is not null && !AccountStatuses.AllowsPortalLogin(user.Status))
-            user = null;
+            throw new InvalidOperationException("This account is not active yet. Ask the center to activate it on HIRAYA Desktop.");
 
         var passwordOk = user != null && PasswordHasher.Verify(password, user.Password);
 

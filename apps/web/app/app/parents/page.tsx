@@ -63,8 +63,21 @@ export default function ParentsPage() {
   }
 
   async function setActive(parent: HirayaUser, active: boolean) {
-    await api.setParentActive(parent.userId, active);
-    await refresh();
+    const pending = (parent.status || '').toLowerCase().includes('pending');
+    if (active && pending) {
+      setViewing(null);
+      setEditing(parent);
+      setError(
+        'This parent is waiting for activation. Set a password (at least 8 characters) and your admin password, then Save. That turns the account on for the phone app.',
+      );
+      return;
+    }
+    try {
+      await api.setParentActive(parent.userId, active);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update parent status.');
+    }
   }
 
   async function remove(parent: HirayaUser) {

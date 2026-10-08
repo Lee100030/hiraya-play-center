@@ -77,7 +77,7 @@ public class EnrollmentService
                 string.Equals(a.StudentFullname, childName, StringComparison.OrdinalIgnoreCase));
             if (duplicate)
                 throw new InvalidOperationException("An application for this child is already waiting for review.");
-            db.EnrollmentApplications.Add(new EnrollmentApplication
+            var application = new EnrollmentApplication
             {
                 ApplicationId = applicationId,
                 StudentFullname = childName,
@@ -99,18 +99,20 @@ public class EnrollmentService
                     preferredSchedule,
                     enrollmentType,
                     notes)
-            });
+            };
+            db.EnrollmentApplications.Add(application);
+            RegisterFamilyFromApplication(db, application);
 
             NotificationService.PushToUsers(
                 db,
                 NotificationService.Recipients(db, NotificationAudiences.Admins).Select(u => u.UserId),
-                $"A new enrollment application has been submitted. Student: {childName}. Program: {program}.",
+                $"A new enrollment application has been submitted. Parent: {guardianName}. Student: {childName}. Program: {program}. Both records are in Parent and Student management, already linked.",
                 NotificationKinds.Enrollment,
                 "New enrollment request",
                 "enrollment");
 
             AuditService.Append(db, "", "Public", AuditModules.Enrollment, "apply",
-                "application", applicationId, $"Application submitted for {childName}.");
+                "application", applicationId, $"Application submitted for {childName}. Parent and student records were saved and linked.");
             await Task.CompletedTask;
         });
 
@@ -118,7 +120,7 @@ public class EnrollmentService
             guardianEmail,
             guardianName,
             "we received your enrollment application",
-            $"We received the enrollment application for {childName} ({program}). It is waiting for review. Acceptance, the parent portal, and tuition are separate steps and have not happened yet.");
+            $"We received the enrollment application for {childName} ({program}). The parent and the child are now on file at the center and linked together. Class placement still waits for review.");
         return applicationId;
     }
 
@@ -223,59 +225,14 @@ public class EnrollmentService
                 return;
             }
 
-            var learningClass = ResolveClass(db, classId, app.PreferredProgram);
-            if (learningClass != null && ClassService.OccupiedSeats(db, learningClass.ClassId) >= learningClass.Capacity)
-                throw new InvalidOperationException($"Class \"{learningClass.Name}\" is at capacity.");
-
-            var studentNumber = $"STU-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..4].ToUpperInvariant()}";
-            var studentId = $"stu_{Guid.NewGuid():N}"[..16];
-            var parent = EnsureParentFromApplication(db, app);
-            var programName = learningClass == null
-                ? app.PreferredProgram
-                : ClassService.ProgramName(db, learningClass.ProgramId);
-
-            db.Students.Add(new Student
-            {
-                StudentId = studentId,
-                Fullname = app.StudentFullname,
-                Birthdate = app.StudentBirthdate,
-                Age = app.StudentAge,
-                Gender = app.StudentGender,
-                ParentId = parent.UserId,
-                QrCode = $"HIRAYA-{studentNumber}",
-                GradeLevel = programName,
-                Program = programName,
-                Status = "active",
-                EnrollmentDate = DateTime.UtcNow.ToString("o"),
-                Notes = $"Enrolled via application {applicationId}"
-            });
-
-            FamilyAccess.UpsertLink(db, parent.UserId, studentId, FamilyRelationships.Guardian);
-
-            db.Enrollments.Add(new Enrollment
-            {
-                EnrollmentId = $"enr_{Guid.NewGuid():N}"[..16],
-                StudentId = studentId,
-                ClassId = learningClass?.ClassId ?? "",
-                ProgramId = learningClass?.ProgramId ?? "",
-                TeacherId = learningClass?.TeacherId ?? "",
-                Period = DefaultPeriod(),
-                Status = EnrollmentStatuses.Active,
-                EnrollmentDate = DateTime.UtcNow.ToString("o"),
-                ApprovedBy = adminUserId
-            });
-
-            app.Status = "approved";
-            app.StudentNumber = studentNumber;
-            AuditService.Append(db, adminUserId, "", AuditModules.Enrollment, "approve",
-                "application", applicationId, $"Approved application for {app.StudentFullname}.");
+            var parent = CreateLearnerFromApplication(db, app, actor, classId);
             notice = new EnrollmentApprovalNotice
             {
                 ParentUserId = parent.UserId,
                 ParentEmail = OriginalEmail(app.ParentEmail, parent.Email),
                 ParentName = parent.Fullname,
                 StudentName = app.StudentFullname,
-                Program = programName,
+                Program = app.PreferredProgram,
                 ParentNeedsActivation = string.Equals(parent.Status, AccountStatuses.PendingActivation, StringComparison.OrdinalIgnoreCase)
             };
             await Task.CompletedTask;
@@ -531,6 +488,121 @@ public class EnrollmentService
         });
     }
 
+    public static void MaterializeNewlyApproved(HirayaDatabase before, HirayaDatabase after, HirayaUser actor)
+    {
+        WorkflowOps.EnsureLists(before);
+        WorkflowOps.EnsureLists(after);
+        foreach (var app in after.EnrollmentApplications)
+        {
+            if (string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!IsApprovedStatus(app.Status))
+                continue;
+            var prior = before.EnrollmentApplications.FirstOrDefault(a => a.ApplicationId == app.ApplicationId);
+            if (prior != null && IsApprovedStatus(prior.Status))
+                continue;
+            CreateLearnerFromApplication(after, app, actor, null);
+        }
+    }
+
+    static bool IsApprovedStatus(string? status) =>
+        string.Equals(status, "approved", StringComparison.OrdinalIgnoreCase);
+
+    static (HirayaUser Parent, Student Child) RegisterFamilyFromApplication(HirayaDatabase db, EnrollmentApplication app)
+    {
+        FamilyAccess.EnsureLegacyLinks(db);
+        var parent = EnsureParentFromApplication(db, app);
+        var relationship = FamilyRelationships.Normalize(NoteValue(app.Notes, "Relationship"));
+        var existing = db.Students.FirstOrDefault(s =>
+            s.ParentId == parent.UserId &&
+            string.Equals(s.Fullname, app.StudentFullname, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            FamilyAccess.UpsertLink(db, parent.UserId, existing.StudentId, relationship);
+            var qr = existing.QrCode ?? "";
+            if (string.IsNullOrWhiteSpace(app.StudentNumber) &&
+                qr.StartsWith("HIRAYA-", StringComparison.OrdinalIgnoreCase))
+                app.StudentNumber = qr["HIRAYA-".Length..];
+            return (parent, existing);
+        }
+
+        var studentNumber = $"STU-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..4].ToUpperInvariant()}";
+        var (first, last) = SplitPersonName(app.StudentFullname);
+        var address = NoteValue(app.Notes, "Address");
+        var studentPhone = NoteValue(app.Notes, "Student contact");
+        var now = DateTime.UtcNow.ToString("o");
+        var student = new Student
+        {
+            StudentId = IdFactory.New("stu"),
+            FirstName = first,
+            LastName = last,
+            Fullname = string.IsNullOrWhiteSpace(app.StudentFullname) ? $"{first} {last}".Trim() : app.StudentFullname.Trim(),
+            Birthdate = app.StudentBirthdate,
+            Age = app.StudentAge > 0 ? app.StudentAge : ComputeAge(app.StudentBirthdate),
+            Gender = app.StudentGender,
+            Address = address,
+            ContactNumber = studentPhone,
+            ParentId = parent.UserId,
+            EmergencyContact = parent.Fullname,
+            EmergencyPhone = parent.Phone ?? "",
+            QrCode = $"HIRAYA-{studentNumber}",
+            GradeLevel = app.PreferredProgram,
+            Program = app.PreferredProgram,
+            Status = "pending",
+            EnrollmentDate = now,
+            Notes = $"Applied via website application {app.ApplicationId}"
+        };
+        db.Students.Add(student);
+        FamilyAccess.UpsertLink(db, parent.UserId, student.StudentId, relationship);
+        app.StudentNumber = studentNumber;
+        return (parent, student);
+    }
+
+    static HirayaUser CreateLearnerFromApplication(
+        HirayaDatabase db,
+        EnrollmentApplication app,
+        HirayaUser actor,
+        string? classId)
+    {
+        var learningClass = ResolveClass(db, classId, app.PreferredProgram);
+        if (learningClass != null && ClassService.OccupiedSeats(db, learningClass.ClassId) >= learningClass.Capacity)
+            throw new InvalidOperationException($"Class \"{learningClass.Name}\" is at capacity.");
+
+        var (parent, student) = RegisterFamilyFromApplication(db, app);
+        var programName = learningClass == null
+            ? app.PreferredProgram
+            : ClassService.ProgramName(db, learningClass.ProgramId);
+        student.Status = "active";
+        student.Program = programName;
+        student.GradeLevel = programName;
+        student.ParentId = parent.UserId;
+
+        var classKey = learningClass?.ClassId ?? "";
+        if (!db.Enrollments.Any(e =>
+                e.StudentId == student.StudentId &&
+                string.Equals(e.ClassId, classKey, StringComparison.OrdinalIgnoreCase) &&
+                EnrollmentStatuses.IsAssignedLive(e.Status)))
+        {
+            db.Enrollments.Add(new Enrollment
+            {
+                EnrollmentId = IdFactory.New("enr"),
+                StudentId = student.StudentId,
+                ClassId = classKey,
+                ProgramId = learningClass?.ProgramId ?? "",
+                TeacherId = learningClass?.TeacherId ?? "",
+                Period = DefaultPeriod(),
+                Status = EnrollmentStatuses.Active,
+                EnrollmentDate = DateTime.UtcNow.ToString("o"),
+                ApprovedBy = actor.UserId
+            });
+        }
+
+        app.Status = "approved";
+        AuditService.Append(db, actor.UserId, "", AuditModules.Enrollment, "approve",
+            "application", app.ApplicationId, $"Approved application for {app.StudentFullname}. Parent {parent.Fullname} stays linked to the child.");
+        return parent;
+    }
+
     private static LearningClass? ResolveClass(HirayaDatabase db, string? classId, string preferredProgram)
     {
         if (!string.IsNullOrWhiteSpace(classId))
@@ -571,14 +643,36 @@ public class EnrollmentService
         return (accountEmail ?? "").Trim();
     }
 
+    static HirayaUser? FindExistingParent(HirayaDatabase db, EnrollmentApplication app)
+    {
+        var email = (app.ParentEmail ?? "").Trim();
+        return db.Users.FirstOrDefault(u =>
+            UserRoles.IsParent(u.Role) &&
+            (LoginIdentity.Matches(u, email) ||
+             string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)));
+    }
+
     private static HirayaUser EnsureParentFromApplication(HirayaDatabase db, EnrollmentApplication app)
     {
         var email = (app.ParentEmail ?? "").Trim();
-        var existing = db.Users.FirstOrDefault(u =>
-            u.Role == UserRoles.Parent &&
-            string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase));
+        var existing = FindExistingParent(db, app);
+        var address = NoteValue(app.Notes, "Address");
         if (existing != null)
+        {
+            if (string.IsNullOrWhiteSpace(existing.Phone))
+                existing.Phone = (app.ParentPhone ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(existing.Address) && address.Length > 0)
+                existing.Address = address;
+            if (string.IsNullOrWhiteSpace(existing.Fullname))
+            {
+                var names = SplitPersonName(app.ParentFullname);
+                existing.FirstName = names.First;
+                existing.LastName = names.Last;
+            }
+            existing.SyncDisplayName();
+            existing.UpdatedAt = DateTime.UtcNow.ToString("o");
             return existing;
+        }
 
         var (first, last) = SplitPersonName(app.ParentFullname);
         var now = DateTime.UtcNow.ToString("o");
@@ -588,7 +682,9 @@ public class EnrollmentService
             FirstName = first,
             LastName = last,
             Email = email,
+            PersonalEmail = LooksLikePersonalInbox(email) ? email : "",
             Phone = (app.ParentPhone ?? "").Trim(),
+            Address = address,
             Role = UserRoles.Parent,
             Status = AccountStatuses.PendingActivation,
             Password = PasswordHasher.Hash(InvitationTokens.NewToken()),
@@ -598,6 +694,25 @@ public class EnrollmentService
         parent.SyncDisplayName();
         db.Users.Add(parent);
         return parent;
+    }
+
+    static bool LooksLikePersonalInbox(string email)
+    {
+        var at = email.IndexOf('@');
+        if (at <= 0 || at == email.Length - 1) return false;
+        var domain = email[(at + 1)..];
+        return domain.Contains('.', StringComparison.Ordinal);
+    }
+
+    static string NoteValue(string? notes, string label)
+    {
+        foreach (var line in (notes ?? "").Split('\n', '\r'))
+        {
+            var text = line.Trim();
+            if (text.StartsWith(label, StringComparison.OrdinalIgnoreCase))
+                return text[label.Length..].Trim().TrimStart(':').Trim();
+        }
+        return "";
     }
 
     private static (string First, string Last) SplitPersonName(string? fullname)

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Hiraya.Shared.Models;
+using Hiraya.Shared.Security;
 using Hiraya.Shared.Services;
 using Microsoft.Extensions.Logging;
 
@@ -31,10 +32,7 @@ public interface IHirayaRepository
             return db.Users.FirstOrDefault(u => string.Equals(u.UserId, userId, StringComparison.OrdinalIgnoreCase));
         var key = (login ?? "").Trim();
         if (key.Length == 0) return null;
-        return db.Users.FirstOrDefault(u =>
-            string.Equals(u.Email, key, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(u.Username, key, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(u.Fullname, key, StringComparison.OrdinalIgnoreCase));
+        return db.Users.FirstOrDefault(u => LoginIdentity.Matches(u, key));
     }
 }
 

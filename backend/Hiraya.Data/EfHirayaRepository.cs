@@ -129,10 +129,17 @@ public class EfHirayaRepository : IHirayaRepository
         if (key.Length == 0)
             return null;
         var lower = key.ToLower();
+        var at = lower.IndexOf('@');
+        var local = at > 0 ? lower[..at] : lower;
+        var emailDot = at > 0 ? lower + "." : "";
         return await db.Users.AsNoTracking().FirstOrDefaultAsync(u =>
             (u.Email != null && u.Email.ToLower() == lower) ||
             (u.Username != null && u.Username.ToLower() == lower) ||
-            (u.Fullname != null && u.Fullname.ToLower() == lower), ct);
+            (u.Fullname != null && u.Fullname.ToLower() == lower) ||
+            (u.PersonalEmail != null && u.PersonalEmail.ToLower() == lower) ||
+            (at > 0 && u.Username != null && u.Username.ToLower() == local) ||
+            (at > 0 && u.Email != null && u.Email.ToLower().StartsWith(emailDot)) ||
+            (at > 0 && u.PersonalEmail != null && u.PersonalEmail.ToLower().StartsWith(emailDot)), ct);
     }
 
     private async Task<HirayaDatabase> LoadUnlockedAsync(CancellationToken ct)

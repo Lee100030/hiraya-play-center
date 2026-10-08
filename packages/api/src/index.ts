@@ -178,11 +178,12 @@ export class HirayaApi {
     return this.parse<HirayaUser>(res);
   }
 
-  async activate(token: string, password: string): Promise<unknown> {
+  async activate(token: string, password: string, confirmPassword?: string): Promise<unknown> {
+    const confirm = (confirmPassword || password || '').trim();
     const res = await fetch(this.url('/api/auth/activate'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, password }),
+      body: JSON.stringify({ token, password, confirmPassword: confirm }),
     });
     return this.parse(res);
   }

@@ -71,7 +71,11 @@ export default function AdminEnrollmentsPage() {
       await refresh();
       setSelected((current) => (current?.applicationId === id ? { ...current, status: next } : current));
       setOk(true);
-      setMessage(`Application ${enrollmentStatusLabel(next).toLowerCase()}.`);
+      setMessage(
+        next === 'approved' && !teacher
+          ? 'Approved for class. The parent and child were already saved and linked when they applied. Set a parent password on Desktop if they still cannot sign in on the phone.'
+          : `Application ${enrollmentStatusLabel(next).toLowerCase()}.`,
+      );
       setConfirm(null);
     } catch (err) {
       setOk(false);
