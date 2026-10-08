@@ -1,10 +1,14 @@
 # HIRAYA desktop and mobile workflow
 
+Current operations: **`docs/HIRAYA_SYSTEM_GUIDE.md`**.
+
 **Roles (locked):** Super Administrator, Teacher, Parent. Children do not have accounts.
 
 ## Desktop (Electron)
 
-Control center for the Super Administrator. Creates and edits teachers, parents, students, programs, classes, **schedules**, **tasks**, **announcements**, **session packages**, modules, enrollment, and reviews notifications.
+Control center for the Super Administrator. Creates and edits teachers, parents, students, programs, classes, **schedules**, **ABA weekly therapy board**, **tasks**, **announcements**, **session packages**, modules, enrollment, and reviews notifications.
+
+Setting a parent or teacher password asks for the Super Administrator password in a confirm modal after Save.
 
 Teachers may sign in on desktop with a scoped store (assigned classes/students/tasks only). They complete tasks on **mobile**.
 
@@ -12,14 +16,19 @@ Teachers may sign in on desktop with a scoped store (assigned classes/students/t
 
 Teachers and parents only.
 
-- **Teacher:** own schedule, assigned students, assigned tasks (in progress / completed + remarks), announcements, notifications.
-- **Parent:** linked children only, child schedule, remaining sessions, announcements, notifications, attendance/progress/payments **view**.
+- **Teacher:** own schedule, assigned students, assigned tasks (in progress / completed + remarks), announcements, notifications. Tap an announcement to read the full message in a modal.
+- **Parent:** linked children only, child schedule, remaining sessions, announcements, notifications, attendance/progress/payments **view**. Tap an announcement to read the full message in a modal.
+- **Client APK 1.0.1** talks to the live hub at `https://www.hirayalearningcenter.app` (Render).
+
+## Website enrollment
+
+A public apply writes the parent into Parent management, the child into Students, and links them. The application stays pending until class approval. Approval does not duplicate the family.
 
 ## Shared path
 
 ```text
-Desktop / Website  →  PUT/GET /api/store + REST  →  MySQL
-Mobile             →  GET /api/store (+ PUT for own task/alert)  →  same MySQL
+Desktop / Website  →  /api/store/patch + REST  →  Hiraya.Api  →  Neon
+Mobile             →  GET /api/store (+ limited writes)      →  same API
 ```
 
 New tables: `staff_tasks`, `session_packages`, `session_history`.  

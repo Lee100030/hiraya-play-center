@@ -59,6 +59,7 @@ export function RecordTable<T>({
   rowKey,
   crud,
   onRowOpen,
+  onRowDoubleClick,
   card,
 }: {
   title: string;
@@ -75,6 +76,7 @@ export function RecordTable<T>({
   rowKey?: (row: T, index: number) => string;
   crud?: RecordCrud<T>;
   onRowOpen?: (row: T) => void;
+  onRowDoubleClick?: (row: T) => void;
   card?: RecordCard<T>;
 }) {
   const [query, setQuery] = useState('');
@@ -489,15 +491,17 @@ export function RecordTable<T>({
                   return (
                     <tr
                       key={key}
-                      className={[isOn ? 'row-selected' : '', onRowOpen || crud?.onEdit ? 'row-open' : ''].filter(Boolean).join(' ') || undefined}
+                      className={[isOn ? 'row-selected' : '', onRowOpen || onRowDoubleClick || crud?.onEdit ? 'row-open' : ''].filter(Boolean).join(' ') || undefined}
                       title={
-                        onRowOpen && crud?.onEdit
-                          ? 'Click to open profile. Double-click to edit.'
-                          : onRowOpen
-                            ? 'Click to open profile'
-                            : crud?.onEdit
-                              ? 'Double-click to edit'
-                              : undefined
+                        onRowDoubleClick
+                          ? 'Double-click to open the full message'
+                          : onRowOpen && crud?.onEdit
+                            ? 'Click to open profile. Double-click to edit.'
+                            : onRowOpen
+                              ? 'Click to open profile'
+                              : crud?.onEdit
+                                ? 'Double-click to edit'
+                                : undefined
                       }
                       onClick={(event) => {
                         if (!onRowOpen) return;
@@ -506,9 +510,13 @@ export function RecordTable<T>({
                         onRowOpen(row);
                       }}
                       onDoubleClick={(event) => {
-                        if (!crud?.onEdit) return;
                         const target = event.target as HTMLElement;
                         if (target.closest('input, button, a, label, select, textarea')) return;
+                        if (onRowDoubleClick) {
+                          onRowDoubleClick(row);
+                          return;
+                        }
+                        if (!crud?.onEdit) return;
                         setSelected(new Set([key]));
                         setNotice(null);
                         crud.onEdit(row);

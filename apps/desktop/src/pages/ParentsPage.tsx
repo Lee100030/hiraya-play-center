@@ -2,6 +2,7 @@ import type { HirayaDatabase, HirayaUser } from '@hiraya/types';
 import { displayName, laneLabel, parentInLane, roleLabel, studentDisplay, type ManagementLaneId } from '@hiraya/utils';
 import { Field, Input, Select, Button } from '@hiraya/ui';
 import { FormEvent, useState } from 'react';
+import { AdminPasswordModal } from '../components/AdminPasswordModal';
 import { DirectMessageModal } from '../components/DirectMessageModal';
 import { EditorModal, FormSection } from '../components/EditorModal';
 import { ProfilePhotoField, saveAccountPhoto } from '../components/ProfilePhotoField';
@@ -34,14 +35,25 @@ export function ParentsPage({
   const [linkRel, setLinkRel] = useState('Guardian');
   const [messaging, setMessaging] = useState<HirayaUser | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [adminPrompt, setAdminPrompt] = useState<{ form: FormData; formEl: HTMLFormElement } | null>(null);
   const current = editing && editing !== 'new' ? editing : null;
   const viewing = openId ? store.users.find((item) => item.userId === openId) : undefined;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    const form = new FormData(event.currentTarget);
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
+    const password = String(form.get('password') || '');
+    if (current && password) {
+      setError(null);
+      setAdminPrompt({ form, formEl });
+      return;
+    }
+    await saveParent(form, formEl, '');
+  }
+
+  async function saveParent(form: FormData, formEl: HTMLFormElement, adminPassword: string) {
     const password = String(form.get('password') || '');
     const confirmPassword = String(form.get('confirmPassword') || '');
-    const adminPassword = String(form.get('adminPassword') || '');
     const payload = {
       firstName: String(form.get('firstName') || ''),
       middleName: String(form.get('middleName') || ''),
@@ -57,7 +69,6 @@ export function ParentsPage({
     };
     setBusy(true);
     setError(null);
-    const formEl = event.currentTarget;
     try {
       let next;
       let photoUserId: string | undefined;
@@ -73,6 +84,7 @@ export function ParentsPage({
         )?.userId;
       }
       onStore(next);
+      setAdminPrompt(null);
       try {
         const withPhoto = await saveAccountPhoto(photoUserId, form, formEl);
         if (withPhoto) onStore(withPhoto);
@@ -133,7 +145,7 @@ export function ParentsPage({
       setOpenId(null);
       setEditing(row);
       setError(
-        'This parent is waiting for activation. Set a new password (at least 8 characters) and your admin password, then Save. After that they can sign in on the phone app.',
+        'This parent is waiting for activation. Set a new password (at least 8 characters), then Save and confirm with your admin password. After that they can sign in on the phone app.',
       );
       return;
     }
@@ -393,7 +405,7 @@ export function ParentsPage({
       {editing ? (
         <EditorModal
           title={current ? `Edit ${displayName(current)}` : 'Add parent'}
-          error={error}
+          error={adminPrompt ? null : error}
           busy={busy}
           submitLabel={current ? 'Save parent' : 'Create parent'}
           onClose={() => setEditing(null)}
@@ -429,7 +441,7 @@ export function ParentsPage({
             {current ? (
               <p className="muted form-span">
                 Current password is stored as a hash and cannot be shown. Leave the fields blank to keep it, or set a new
-                password. Setting a new password requires your administrator password.
+                password. Save will ask for your administrator password.
               </p>
             ) : null}
             <Field label={current ? 'Set new password' : 'Password'} required={!current} optional={Boolean(current)}>
@@ -450,11 +462,6 @@ export function ParentsPage({
             >
               <Input name="confirmPassword" type="password" autoComplete="new-password" required={!current} />
             </Field>
-            {current ? (
-              <Field label="Admin password required" optional hint="Enter your admin password to confirm this password change.">
-                <Input name="adminPassword" type="password" autoComplete="current-password" />
-              </Field>
-            ) : null}
           </FormSection>
           <FormSection title="Linked children">
             {current ? (
@@ -525,6 +532,18 @@ export function ParentsPage({
             )}
           </FormSection>
         </EditorModal>
+      ) : null}
+      {adminPrompt ? (
+        <AdminPasswordModal
+          busy={busy}
+          error={error}
+          onClose={() => {
+            if (busy) return;
+            setAdminPrompt(null);
+            setError(null);
+          }}
+          onConfirm={(adminPassword) => void saveParent(adminPrompt.form, adminPrompt.formEl, adminPassword)}
+        />
       ) : null}
       {linking ? (
         <EditorModal

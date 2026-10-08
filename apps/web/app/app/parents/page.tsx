@@ -2,6 +2,7 @@
 
 import { AdminProfileFact, AdminProfileModal } from '@/components/admin/AdminProfileModal';
 import { AdminModal } from '@/components/admin/AdminModal';
+import { AdminPasswordPrompt } from '@/components/admin/AdminPasswordPrompt';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { AdminTable } from '@/components/admin/AdminTable';
 import { useStore } from '@/components/StoreProvider';
@@ -20,15 +21,27 @@ export default function ParentsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [viewing, setViewing] = useState<HirayaUser | null>(null);
+  const [adminPrompt, setAdminPrompt] = useState<{ form: FormData; formEl: HTMLFormElement } | null>(null);
+  const [busy, setBusy] = useState(false);
   const parents = store.users.filter((u) => u.role === 'parent' && parentInLane(store, u.userId, lane));
   const current = editing && editing !== 'new' ? editing : null;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
+    const password = String(form.get('password') || '');
+    if (current && password) {
+      setError('');
+      setAdminPrompt({ form, formEl });
+      return;
+    }
+    await saveParent(form, formEl, '');
+  }
+
+  async function saveParent(form: FormData, formEl: HTMLFormElement, adminPassword: string) {
     const password = String(form.get('password') || '');
     const confirmPassword = String(form.get('confirmPassword') || '');
-    const adminPassword = String(form.get('adminPassword') || '');
     const payload = {
       firstName: String(form.get('firstName') || ''),
       lastName: String(form.get('lastName') || ''),
@@ -41,6 +54,7 @@ export default function ParentsPage() {
       studentId: String(form.get('studentId') || '') || undefined,
     };
     setError('');
+    setBusy(true);
     try {
       if (current) await api.updateParent(current.userId, payload);
       else await api.createParent(payload);
@@ -48,11 +62,14 @@ export default function ParentsPage() {
         await api.assignParentChild(current.userId, payload.studentId, 'Guardian');
       }
       await refresh();
-      if (current?.userId) await saveAccountPhoto(current.userId, form, event.currentTarget);
+      if (current?.userId) await saveAccountPhoto(current.userId, form, formEl);
+      setAdminPrompt(null);
       setEditing(null);
       setNotice(current ? 'Parent saved.' : 'Parent created.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save parent');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -68,7 +85,7 @@ export default function ParentsPage() {
       setViewing(null);
       setEditing(parent);
       setError(
-        'This parent is waiting for activation. Set a password (at least 8 characters) and your admin password, then Save. That turns the account on for the phone app.',
+        'This parent is waiting for activation. Set a password (at least 8 characters), then Save and confirm with your admin password. That turns the account on for the phone app.',
       );
       return;
     }
@@ -259,8 +276,8 @@ export default function ParentsPage() {
             </Field>
             {current ? (
               <p className="muted">
-                Current password is stored as a hash and cannot be shown. Leave blank to keep it. Setting a new password
-                requires your administrator password.
+                Current password is stored as a hash and cannot be shown. Leave blank to keep it. Save will ask for your
+                administrator password if you set a new one.
               </p>
             ) : null}
             <Field label={current ? 'Set new password' : 'Password'} required={!current} optional={Boolean(current)}>
@@ -276,11 +293,6 @@ export default function ParentsPage() {
             <Field label="Confirm password" required={!current} optional={Boolean(current)}>
               <Input name="confirmPassword" type="password" autoComplete="new-password" required={!current} />
             </Field>
-            {current ? (
-              <Field label="Admin password required" optional hint="Enter your admin password to confirm this password change.">
-                <Input name="adminPassword" type="password" autoComplete="current-password" />
-              </Field>
-            ) : null}
             {current ? (
               <div className="form-span">
                 <h3>Linked children</h3>
@@ -321,13 +333,27 @@ export default function ParentsPage() {
               </Field>
             )}
             <div>
-              <Button type="submit">Save</Button>{' '}
-              <Button type="button" variant="ghost" onClick={() => setEditing(null)}>
+              <Button type="submit" disabled={busy}>
+                {busy ? 'Saving…' : 'Save'}
+              </Button>{' '}
+              <Button type="button" variant="ghost" onClick={() => setEditing(null)} disabled={busy}>
                 Cancel
               </Button>
             </div>
           </form>
         </AdminModal>
+      ) : null}
+      {adminPrompt ? (
+        <AdminPasswordPrompt
+          busy={busy}
+          error={error || null}
+          onClose={() => {
+            if (busy) return;
+            setAdminPrompt(null);
+            setError('');
+          }}
+          onConfirm={(adminPassword) => void saveParent(adminPrompt.form, adminPrompt.formEl, adminPassword)}
+        />
       ) : null}
     </>
   );

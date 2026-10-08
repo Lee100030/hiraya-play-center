@@ -1,10 +1,10 @@
-import type { HirayaDatabase, HirayaUser, StaffTask } from '@hiraya/types';
-import { displayName, laneLabel, newId, openTaskCountForTeacher, specialtyLaneLabel, staffDisplayRole, teacherInLane, type ManagementLaneId } from '@hiraya/utils';
-import { Button, Field, Input, Select, Textarea, assignedCount } from '@hiraya/ui';
+import type { HirayaDatabase, HirayaUser } from '@hiraya/types';
+import { displayName, laneLabel, openTaskCountForTeacher, specialtyLaneLabel, staffDisplayRole, teacherInLane, type ManagementLaneId } from '@hiraya/utils';
+import { Button, assignedCount } from '@hiraya/ui';
 import { FormEvent, useEffect, useState } from 'react';
+import { AdminPasswordModal } from '../components/AdminPasswordModal';
 import { DirectMessageModal } from '../components/DirectMessageModal';
 import { CertificateModal } from '../components/CertificateModal';
-import { EditorModal } from '../components/EditorModal';
 import { ProfileFact, ProfileModal } from '../components/ProfileModal';
 import { saveAccountPhoto } from '../components/ProfilePhotoField';
 import { EmptyCell, NameCell, RecordTable, StatusCell, assigned } from '../components/RecordTable';
@@ -37,8 +37,8 @@ export function TeachersPage({
   const [messaging, setMessaging] = useState<HirayaUser | null>(null);
   const [certificate, setCertificate] = useState<HirayaUser | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [assigning, setAssigning] = useState<HirayaUser | null>(null);
   const [busy, setBusy] = useState(false);
+  const [adminPrompt, setAdminPrompt] = useState<{ form: FormData; formEl: HTMLFormElement } | null>(null);
   const viewing = openId ? store.users.find((item) => item.userId === openId) : undefined;
   const viewingProfile = viewing ? (store.teacherProfiles || []).find((item) => item.userId === viewing.userId) : undefined;
 
@@ -99,11 +99,21 @@ export function TeachersPage({
     : undefined;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    const form = new FormData(event.currentTarget);
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
+    const password = String(form.get('password') || '');
+    if (current && password) {
+      setError(null);
+      setAdminPrompt({ form, formEl });
+      return;
+    }
+    await saveStaff(form, formEl, '');
+  }
+
+  async function saveStaff(form: FormData, formEl: HTMLFormElement, adminPassword: string) {
     const password = String(form.get('password') || '');
     const confirmPassword = String(form.get('confirmPassword') || '');
     const email = String(form.get('email') || '').trim();
-    const formEl = event.currentTarget;
     setBusy(true);
     setError(null);
     try {
@@ -130,13 +140,14 @@ export function TeachersPage({
         hireDate: String(form.get('hireDate') || ''),
         password: password || undefined,
         confirmPassword: confirmPassword || undefined,
-        adminPassword: String(form.get('adminPassword') || '') || undefined,
+        adminPassword: adminPassword || undefined,
       });
       const userId =
         saved.userId ||
         current?.userId ||
         (saved.store?.users || []).find((item) => (item.email || '').toLowerCase() === email.toLowerCase())?.userId;
       onStore(saved.store);
+      setAdminPrompt(null);
       try {
         const withPhoto = await saveAccountPhoto(userId, form, formEl);
         if (withPhoto) onStore(withPhoto);
@@ -199,46 +210,6 @@ export function TeachersPage({
       setNotice(active ? `${displayName(row)} is active.` : `${displayName(row)} is inactive.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update teacher status.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function assignTask(event: FormEvent<HTMLFormElement>) {
-    if (!assigning) return;
-    const form = new FormData(event.currentTarget);
-    const title = String(form.get('title') || '').trim();
-    if (!title) {
-      setError('Task title is required.');
-      return;
-    }
-    const stamp = new Date().toISOString();
-    const next: StaffTask = {
-      taskId: newId('tsk'),
-      title,
-      description: String(form.get('description') || '').trim(),
-      priority: String(form.get('priority') || 'normal'),
-      dueAt: String(form.get('dueAt') || ''),
-      teacherIds: assigning.userId,
-      classId: '',
-      studentId: '',
-      status: 'assigned',
-      response: '',
-      attachmentName: '',
-      assignedBy: actor.userId,
-      completedAt: '',
-      completedBy: '',
-      createdAt: stamp,
-      updatedAt: stamp,
-    };
-    setBusy(true);
-    setError(null);
-    try {
-      await saveStore({ ...store, staffTasks: [...(store.staffTasks || []), next] });
-      setAssigning(null);
-      setNotice(`Task assigned to ${displayName(assigning)}.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not assign that task.');
     } finally {
       setBusy(false);
     }
@@ -409,16 +380,6 @@ export function TeachersPage({
                 variant="ghost"
                 onClick={() => {
                   setOpenId(null);
-                  setAssigning(viewing);
-                }}
-              >
-                Assign task
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setOpenId(null);
                   setWorkspaceId(viewing.userId);
                 }}
               >
@@ -454,36 +415,6 @@ export function TeachersPage({
           </ProfileFact>
           <ProfileFact label="Assigned students">{assignedCount(assignedStudentsForTeacher(store, viewing.userId).length)}</ProfileFact>
         </ProfileModal>
-      ) : null}
-      {assigning ? (
-        <EditorModal
-          title={`Assign task · ${displayName(assigning)}`}
-          error={error}
-          busy={busy}
-          submitLabel="Assign task"
-          onClose={() => {
-            setAssigning(null);
-            setError(null);
-          }}
-          onSubmit={(event) => void assignTask(event)}
-        >
-          <Field label="Task title" required>
-            <Input name="title" required />
-          </Field>
-          <Field label="Description" optional>
-            <Textarea name="description" />
-          </Field>
-          <Field label="Priority">
-            <Select name="priority" defaultValue="normal">
-              <option value="low">low</option>
-              <option value="normal">normal</option>
-              <option value="high">high</option>
-            </Select>
-          </Field>
-          <Field label="Due date" optional>
-            <Input name="dueAt" type="date" />
-          </Field>
-        </EditorModal>
       ) : null}
       {certificate ? (
         <CertificateModal
@@ -528,10 +459,22 @@ export function TeachersPage({
           user={current}
           profile={profile}
           store={store}
-          error={error}
+          error={adminPrompt ? null : error}
           busy={busy}
           onClose={() => setEditing(null)}
           onSubmit={onSubmit}
+        />
+      ) : null}
+      {adminPrompt ? (
+        <AdminPasswordModal
+          busy={busy}
+          error={error}
+          onClose={() => {
+            if (busy) return;
+            setAdminPrompt(null);
+            setError(null);
+          }}
+          onConfirm={(adminPassword) => void saveStaff(adminPrompt.form, adminPrompt.formEl, adminPassword)}
         />
       ) : null}
     </>

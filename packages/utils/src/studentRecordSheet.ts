@@ -2,6 +2,7 @@ import type { HirayaDatabase, HirayaUser, Student } from '@hiraya/types';
 import { studentPlacement } from './assignments';
 import { formatPeso } from './certificateOfEmployment';
 import { sessionLeftLabel } from './studentBilling';
+import { studentNumber } from './studentNumber';
 import { paymentBalanceLabel, studentTuitionFee } from './tuitionLedger';
 
 function personName(user?: Pick<HirayaUser, 'fullname' | 'firstName' | 'lastName'> | null) {
@@ -125,7 +126,7 @@ export function downloadStudentRecord(store: HirayaDatabase, studentId: string) 
   const center = (store.settings?.centerName || 'Hiraya Kids Learning Center').trim();
   const tuition = studentTuitionFee(store, student.studentId);
   const facts: [string, string][] = [
-    ['Student number', shown(student.studentId)],
+    ['Student number', shown(studentNumber(student))],
     ['Birthday', dateLabel(student.birthdate)],
     ['Age', student.age ? `${student.age}` : '-'],
     ['Boy / Girl', genderLabel(student.gender)],

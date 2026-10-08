@@ -25,6 +25,7 @@ const PAGE_ALIASES: { view: ViewId; keys: string[] }[] = [
   { view: 'modules', keys: ['modules', 'module', 'lessons', 'curriculum'] },
   { view: 'programTuition', keys: ['program tuition', 'tuition fee', 'tuition management'] },
   { view: 'calendar', keys: ['calendar', 'schedule', 'schedules', 'timetable'] },
+  { view: 'abaSchedule', keys: ['aba', 'aba schedule', 'aba therapy', 'therapy schedule'] },
   { view: 'tasks', keys: ['tasks', 'task'] },
   { view: 'announcements', keys: ['announcements', 'announcement', 'news'] },
   { view: 'feedback', keys: ['feedback', 'reviews', 'ratings', 'parent feedback', 'teacher feedback'] },

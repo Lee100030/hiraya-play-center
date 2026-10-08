@@ -242,6 +242,12 @@ export const Icons = {
   tasks: (p: IconProps) => Icons.enrollment(p),
   announcements: (p: IconProps) => Icons.notifications(p),
   sessions: (p: IconProps) => Icons.payments(p),
+  abaSchedule: (p: IconProps) => (
+    <Svg {...p}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4M8 3v4M3 11h18M8 15h3M13 15h3M8 18h8" />
+    </Svg>
+  ),
   finance: (p: IconProps) => Icons.payments(p),
   teacherApplications: (p: IconProps) => Icons.teachers(p),
   messages: (p: IconProps) => Icons.chat(p),

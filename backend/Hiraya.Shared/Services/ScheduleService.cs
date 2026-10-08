@@ -84,6 +84,8 @@ public class ScheduleService
                 issues.Add($"A selected teacher already has \"{other.Title}\" at this time.");
 
             if (!string.IsNullOrWhiteSpace(candidate.Room) &&
+                !candidate.Room.StartsWith("aba:", StringComparison.OrdinalIgnoreCase) &&
+                !other.Room.StartsWith("aba:", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(candidate.Room, other.Room, StringComparison.OrdinalIgnoreCase))
                 issues.Add($"Room {candidate.Room} is already used by \"{other.Title}\".");
 

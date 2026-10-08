@@ -1,8 +1,8 @@
 # Hiraya Kids Learning Center — multi-platform clients
 
-This repository is the **React / Next.js / Expo / Electron** frontend for Hiraya Kids Learning Center. It talks to the existing **ASP.NET Core API** and **MySQL** database. The original .NET MAUI Hybrid app in `C:\Users\LEE\source\repos\Hiraya` is unchanged.
+This repository is the **React / Next.js / Expo / Electron** clients plus **Hiraya.Api** for Hiraya Kids Learning Center. How the live center works (enrollment, parents, ABA schedule, roles) is in **`docs/HIRAYA_SYSTEM_GUIDE.md`**.
 
-**Hosting:** GitHub stores the code. Vercel hosts the website. **Database:** Aiven MySQL is the cloud database. Everyday work on this PC still uses XAMPP through Hiraya.Api.
+**Live hosting:** GitHub stores the code. Vercel hosts the website (`https://www.hirayalearningcenter.app`). Render runs Hiraya.Api. Neon holds the center store. Everyday work on this PC can still run Hiraya.Api locally.
 
 ## Local first
 
@@ -17,20 +17,16 @@ This repository is the **React / Next.js / Expo / Electron** frontend for Hiraya
 |-----|--------|----------------|
 | **Website** | `apps/web` | Vercel (Next.js). Root Directory must be `apps/web`. |
 | **Desktop app** | `apps/desktop` | Electron on Windows. Not deployed on Vercel. |
-| **Mobile** | `apps/mobile` | Expo / Android. Not deployed on Vercel. |
-| **Central API** | `backend/Hiraya.Api` | Local hub for this PC, desktop, and mobile. Local MySQL `hiraya_learning_center` on port 5188. |
+| **Mobile** | `apps/mobile` | Expo / Android APK **1.0.1**. Not on Vercel. The client APK uses `https://www.hirayalearningcenter.app` (Hiraya.Api on Render). Tapping an announcement opens a full-message modal. |
+| **Central API** | `backend/Hiraya.Api` | Render in production. Local hub on this PC at port 5188. |
 
-### How GitHub, Vercel, and Aiven connect
+### How GitHub, Vercel, Render, and Neon connect
 
-DigitalOcean and Render are not part of this project. Do not follow `.do/app.yaml` or `render.yaml`.
-
-1. GitHub repo `Johnleelugnasin30/hiraya-play-center` is the source Vercel builds.
+1. GitHub repo `Johnleelugnasin30/hiraya-play-center` is the source Vercel and Render build.
 2. Vercel hosts the Next.js website only. Desktop and mobile stay off Vercel.
-3. On the Vercel project, set the **server** environment variable `HIRAYA_MYSQL` to the Aiven service URI. Optional: `HIRAYA_MYSQL_CA` with the Aiven CA certificate text so the certificate is verified.
-4. Do not put that URI in GitHub, and do not use a name that starts with `NEXT_PUBLIC_`, `VITE_`, or `EXPO_PUBLIC_`. The browser must never receive it.
-5. On Vercel there is no local API, so the website health check, public catalog, enrollment, and teacher application use Aiven directly.
-6. On this PC, Hiraya.Api is still preferred. The website uses Aiven only when that API is not configured.
-7. Do not import the local XAMPP database into Aiven.
+3. Render runs Hiraya.Api. The website proxies `/api` to that API. Packaged desktop uses `https://www.hirayalearningcenter.app`.
+4. Neon is opened only by the API process. Do not put that URI in GitHub, and do not use a name that starts with `NEXT_PUBLIC_`, `VITE_`, or `EXPO_PUBLIC_`.
+5. Push to `main` updates the website and the API. Operations are documented in `docs/HIRAYA_SYSTEM_GUIDE.md`.
 
 ### Vercel (website only)
 
@@ -38,7 +34,7 @@ DigitalOcean and Render are not part of this project. Do not follow `.do/app.yam
 2. Set **Root Directory** to `apps/web`.
 3. Framework preset: **Next.js**.
 4. Do not choose `apps/desktop` or `apps/mobile`.
-5. Set server env `HIRAYA_MYSQL` to the Aiven service URI. Do not set `HIRAYA_API_INTERNAL` unless a public Hiraya.Api address exists.
+5. Point the website at the public Hiraya.Api (Render). Do not put a database URI in the browser.
 
 Local commands:
 
@@ -105,4 +101,4 @@ Seed logins from the existing backend (development):
 
 Do not put database passwords or `HIRAYA_SESSION_SECRET` in any frontend env file.
 
-See `docs/ARCHITECTURE.md` and `docs/MIGRATION.md`. 
+See `docs/HIRAYA_SYSTEM_GUIDE.md` (current operations), `docs/ARCHITECTURE.md`, and `docs/MIGRATION.md`. 

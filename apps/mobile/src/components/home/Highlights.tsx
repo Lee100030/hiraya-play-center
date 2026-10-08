@@ -26,6 +26,7 @@ type Slide = {
   id: string;
   title: string;
   image: ImageSourcePropType;
+  news?: NewsItem;
 };
 
 export function HomeHighlights({
@@ -33,7 +34,7 @@ export function HomeHighlights({
   onOpen,
 }: {
   news: NewsItem[];
-  onOpen: () => void;
+  onOpen: (item?: NewsItem) => void;
 }) {
   const { width } = useWindowDimensions();
   const gutter = space.lg * 2;
@@ -48,6 +49,7 @@ export function HomeHighlights({
         id: item.newsId,
         title: item.title,
         image: CAMPUS[i % CAMPUS.length],
+        news: item,
       }));
     }
     return [
@@ -79,7 +81,7 @@ export function HomeHighlights({
         scrollEventThrottle={16}
         contentContainerStyle={{ gap: 12 }}
         renderItem={({ item }) => (
-          <PressScale onPress={onOpen} style={{ width: cardWidth }} accessibilityLabel={item.title}>
+          <PressScale onPress={() => onOpen(item.news)} style={{ width: cardWidth }} accessibilityLabel={item.title}>
             <View style={styles.card}>
               <Image source={item.image} style={styles.image} />
               <LinearGradient

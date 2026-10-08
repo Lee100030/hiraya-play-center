@@ -11,8 +11,9 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import type { SystemAlert } from '@hiraya/types';
+import type { NewsItem, SystemAlert } from '@hiraya/types';
 import { Body, Caption, ErrorState, LoadingState, AppHeader, EmptyState } from '../../src/components/ui';
+import { ReadModal } from '../../src/components/ReadModal';
 import { Enter } from '../../src/components/home/motion';
 import { useAuth } from '../../src/auth';
 import { api } from '../../src/auth';
@@ -44,6 +45,8 @@ export default function NotificationsTab() {
   const [localRead, setLocalRead] = useState<string[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [openNews, setOpenNews] = useState<NewsItem | null>(null);
+  const [openAlert, setOpenAlert] = useState<SystemAlert | null>(null);
   const teacher = isMobileTeacher(user?.role);
   const news = adminAnnouncements(store);
 
@@ -122,7 +125,13 @@ export default function NotificationsTab() {
           ) : (
             <Enter index={1} style={styles.list}>
               {news.map((item) => (
-                <View key={item.newsId} style={styles.row}>
+                <Pressable
+                  key={item.newsId}
+                  onPress={() => setOpenNews(item)}
+                  style={styles.row}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Read announcement ${item.title}`}
+                >
                   <View style={[styles.badge, { backgroundColor: colors.goldSoft }]}>
                     <Ionicons name="megaphone-outline" size={18} color={colors.green} />
                   </View>
@@ -131,9 +140,10 @@ export default function NotificationsTab() {
                       {item.title}
                     </Body>
                     <Caption numberOfLines={2}>{item.body}</Caption>
+                    <Caption style={{ marginTop: 4, color: colors.green }}>Tap to read</Caption>
                   </View>
                   <Caption style={styles.time}>{formatWhen(item.publishedAt)}</Caption>
-                </View>
+                </Pressable>
               ))}
             </Enter>
           )
@@ -184,7 +194,10 @@ export default function NotificationsTab() {
                     key={item.alertId}
                     item={item}
                     read={item.read || localRead.includes(item.alertId)}
-                    onRead={() => void markRead([item.alertId])}
+                    onRead={() => {
+                      setOpenAlert(item);
+                      void markRead([item.alertId]);
+                    }}
                     onDismiss={() => setHidden((current) => [...current, item.alertId])}
                   />
                 ))}
@@ -193,6 +206,21 @@ export default function NotificationsTab() {
           </>
         )}
       </ScrollView>
+      <ReadModal
+        visible={Boolean(openNews)}
+        title={openNews?.title}
+        date={openNews?.publishedAt}
+        body={openNews?.body}
+        onClose={() => setOpenNews(null)}
+      />
+      <ReadModal
+        visible={Boolean(openAlert)}
+        kicker={openAlert?.kind || 'Notification'}
+        title={openAlert?.title || openAlert?.kind || 'Notification'}
+        date={openAlert?.createdAt}
+        body={openAlert?.message}
+        onClose={() => setOpenAlert(null)}
+      />
     </View>
   );
 }

@@ -47,6 +47,11 @@ function stampRead(item: SystemAlert, now: string): SystemAlert {
   return { ...item, read: true, status: 'read', readAt: now };
 }
 
+export function markAlertRead(alerts: SystemAlert[], alertId: string): SystemAlert[] {
+  const now = new Date().toISOString();
+  return alerts.map((item) => (item.alertId === alertId && !isAlertRead(item) ? stampRead(item, now) : item));
+}
+
 export function markInboxRead(alerts: SystemAlert[], userId: string): SystemAlert[] {
   const now = new Date().toISOString();
   return alerts.map((item) =>

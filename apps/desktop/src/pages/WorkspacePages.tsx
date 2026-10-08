@@ -1,7 +1,9 @@
-import type { HirayaDatabase, HirayaUser } from '@hiraya/types';
-import { centerTuitionTotals, displayName, formatDate, inboxAlerts, isAlertRead, markInboxRead, operationsStats, removeAlerts, studentDisplay, type ManagementLaneId } from '@hiraya/utils';
+import type { HirayaDatabase, HirayaUser, SystemAlert } from '@hiraya/types';
+import { centerTuitionTotals, displayName, formatDate, formatDateTime, inboxAlerts, isAlertRead, markAlertRead, markInboxRead, operationsStats, removeAlerts, studentDisplay, type ManagementLaneId } from '@hiraya/utils';
 import { Button } from '@hiraya/ui';
+import { useState } from 'react';
 import { RecordTable, StatusCell } from '../components/RecordTable';
+import { DeskModal } from '../components/DeskModal';
 import { PageHeader } from '../components/PageHeader';
 import { PAGE_COPY } from '../lib/views';
 import { TeachersPage } from './TeachersPage';
@@ -13,6 +15,7 @@ import { EnrollmentPage } from './EnrollmentPage';
 import { ModulesPage } from './ModulesPage';
 import { ProgramTuitionPage } from './ProgramTuitionPage';
 import { CenterCalendarPage } from './CenterCalendarPage';
+import { AbaSchedulePage } from './AbaSchedulePage';
 import { TasksManagePage, AnnouncementsManagePage, SessionsManagePage, FeedbackManagePage } from './WorkflowPages';
 import { AttendanceManagePage, PaymentsManagePage, ProgressManagePage, SettingsPage, WebsiteCmsPage } from './RecordsPages';
 import { FinancePage } from './FinancePage';
@@ -35,6 +38,79 @@ function mentions(value: string | undefined, ...needles: string[]) {
 
 function opsFor(store: HirayaDatabase, studentId: string) {
   return (store.studentOps || []).find((row) => row.studentId === studentId);
+}
+
+function NotificationsManagePage({
+  store,
+  user,
+  saveStore,
+  onRefresh,
+}: {
+  store: HirayaDatabase;
+  user: HirayaUser;
+  saveStore: (next: HirayaDatabase) => Promise<void>;
+  onRefresh?: () => Promise<void> | void;
+}) {
+  const rows = inboxAlerts(store.alerts, user.userId);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const viewing = openId ? rows.find((row) => row.alertId === openId) || store.alerts.find((row) => row.alertId === openId) : undefined;
+
+  async function openAlert(row: SystemAlert) {
+    setOpenId(row.alertId);
+    if (isAlertRead(row)) return;
+    await saveStore({ ...store, alerts: markAlertRead(store.alerts, row.alertId) });
+  }
+
+  return (
+    <>
+      <RecordTable
+        title={PAGE_COPY.notifications.title}
+        description={PAGE_COPY.notifications.description}
+        rows={rows}
+        rowKey={(row) => row.alertId}
+        search={(row, q) => `${row.title} ${row.message} ${row.kind}`.toLowerCase().includes(q)}
+        searchPlaceholder="Search notifications"
+        emptyTitle="No notifications"
+        emptyHint="Alerts for this workspace will appear here. Double-click a row to read the full message."
+        statusOf={(row) => (isAlertRead(row) ? 'read' : 'unread')}
+        onRowDoubleClick={(row) => void openAlert(row)}
+        crud={{
+          deleteLabel: 'Delete',
+          onDelete: async (selected) => {
+            if (!selected.length) return false;
+            if (!window.confirm(`Delete ${selected.length === 1 ? 'this notification' : `${selected.length} notifications`}?`)) {
+              return false;
+            }
+            await saveStore({ ...store, alerts: removeAlerts(store.alerts, selected.map((item) => item.alertId)) });
+          },
+          onRefresh,
+        }}
+        actions={
+          rows.some((row) => !isAlertRead(row)) ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void saveStore({ ...store, alerts: markInboxRead(store.alerts, user.userId) })}
+            >
+              Mark all read
+            </Button>
+          ) : null
+        }
+        columns={[
+          { key: 'title', header: 'Title', render: (row) => row.title || row.kind },
+          { key: 'msg', header: 'Message', render: (row) => row.message || '—' },
+          { key: 'status', header: 'Status', render: (row) => <StatusCell value={isAlertRead(row) ? 'read' : 'unread'} /> },
+          { key: 'date', header: 'Date', render: (row) => formatDate(row.createdAt) },
+        ]}
+      />
+      {viewing ? (
+        <DeskModal title={viewing.title || viewing.kind || 'Notification'} onClose={() => setOpenId(null)}>
+          <p className="desk-modal-meta">{formatDateTime(viewing.createdAt)}</p>
+          <p className="notice-full-message">{viewing.message || 'No message.'}</p>
+        </DeskModal>
+      ) : null}
+    </>
+  );
 }
 
 export function WorkspacePages({
@@ -74,6 +150,7 @@ export function WorkspacePages({
     return <ProgramTuitionPage store={store} saveStore={saveStore} />;
   }
   if (view === 'calendar') return <CenterCalendarPage store={store} user={user} saveStore={saveStore} />;
+  if (view === 'abaSchedule') return <AbaSchedulePage store={store} user={user} saveStore={saveStore} />;
   if (view === 'tasks') return <TasksManagePage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} />;
   if (view === 'announcements') return <AnnouncementsManagePage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} />;
   if (view === 'feedback') return <FeedbackManagePage store={store} user={user} saveStore={saveStore} lane={peopleLane} />;
@@ -111,48 +188,7 @@ export function WorkspacePages({
   }
 
   if (view === 'notifications') {
-    const rows = inboxAlerts(store.alerts, user.userId);
-    return (
-      <RecordTable
-        title={PAGE_COPY.notifications.title}
-        description={PAGE_COPY.notifications.description}
-        rows={rows}
-        rowKey={(row) => row.alertId}
-        search={(row, q) => `${row.title} ${row.message} ${row.kind}`.toLowerCase().includes(q)}
-        searchPlaceholder="Search notifications"
-        emptyTitle="No notifications"
-        emptyHint="Alerts for this workspace will appear here."
-        statusOf={(row) => (isAlertRead(row) ? 'read' : 'unread')}
-        crud={{
-          deleteLabel: 'Delete',
-          onDelete: async (selected) => {
-            if (!selected.length) return false;
-            if (!window.confirm(`Delete ${selected.length === 1 ? 'this notification' : `${selected.length} notifications`}?`)) {
-              return false;
-            }
-            await saveStore({ ...store, alerts: removeAlerts(store.alerts, selected.map((row) => row.alertId)) });
-          },
-          onRefresh,
-        }}
-        actions={
-          rows.some((row) => !isAlertRead(row)) ? (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void saveStore({ ...store, alerts: markInboxRead(store.alerts, user.userId) })}
-            >
-              Mark all read
-            </Button>
-          ) : null
-        }
-        columns={[
-          { key: 'title', header: 'Title', render: (row) => row.title || row.kind },
-          { key: 'msg', header: 'Message', render: (row) => row.message || '—' },
-          { key: 'status', header: 'Status', render: (row) => <StatusCell value={isAlertRead(row) ? 'read' : 'unread'} /> },
-          { key: 'date', header: 'Date', render: (row) => formatDate(row.createdAt) },
-        ]}
-      />
-    );
+    return <NotificationsManagePage store={store} user={user} saveStore={saveStore} onRefresh={onRefresh} />;
   }
 
   if (view === 'monitoring') {

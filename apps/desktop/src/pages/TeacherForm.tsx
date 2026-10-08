@@ -93,8 +93,8 @@ export function StaffForm({
       <FormSection title="Security">
         {user ? (
           <p className="muted form-span">
-            The stored password cannot be displayed. Leave blank to keep it. Setting a new password requires your
-            administrator password.
+            The stored password cannot be displayed. Leave blank to keep it. Save will ask for your administrator
+            password if you set a new one.
           </p>
         ) : null}
         <Field label={user ? 'Set new password' : 'Password'} required={!user} optional={Boolean(user)}>
@@ -115,11 +115,6 @@ export function StaffForm({
         >
           <Input name="confirmPassword" type="password" autoComplete="new-password" required={!user} />
         </Field>
-        {user ? (
-          <Field label="Admin password required" optional hint="Enter your admin password to confirm this password change.">
-            <Input name="adminPassword" type="password" autoComplete="current-password" />
-          </Field>
-        ) : null}
       </FormSection>
     </EditorModal>
   );

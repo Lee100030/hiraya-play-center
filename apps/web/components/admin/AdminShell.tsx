@@ -24,6 +24,7 @@ const navGroups = [
       { href: '/admin/modules', label: 'Module management', icon: '▤' },
       { href: '/admin/program-tuition', label: 'Program tuition management', icon: '₱' },
       { href: '/admin/schedules', label: 'Schedule management', icon: '◷' },
+      { href: '/admin/aba-schedule', label: 'ABA schedule', icon: '▦' },
       { href: '/admin/announcements', label: 'Announcement management', icon: '✉' },
       { href: '/admin/sessions', label: 'Session management', icon: '◌' },
     ],

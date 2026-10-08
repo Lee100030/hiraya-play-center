@@ -23,7 +23,7 @@ export function HomeActivity({
   onOpen,
 }: {
   items: SystemAlert[];
-  onOpen: () => void;
+  onOpen: (item: SystemAlert) => void;
 }) {
   return (
     <View>
@@ -39,7 +39,7 @@ export function HomeActivity({
           {items.map((item, index) => (
             <PressScale
               key={item.alertId}
-              onPress={onOpen}
+              onPress={() => onOpen(item)}
               style={[styles.row, index === items.length - 1 && styles.rowLast]}
               accessibilityLabel={`${item.title || item.kind}. ${formatWhen(item.createdAt)}`}
             >

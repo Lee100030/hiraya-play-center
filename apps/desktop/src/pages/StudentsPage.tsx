@@ -1,5 +1,5 @@
 import type { HirayaDatabase, HirayaUser, Student } from '@hiraya/types';
-import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, displayName, downloadStudentRecord, isStudentHereToday, laneLabel, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentPaymentBalance, studentTuitionFee, upsertStudentBalance, upsertStudentSessions, type ManagementLaneId } from '@hiraya/utils';
+import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, displayName, downloadStudentRecord, isStudentHereToday, laneLabel, nextStudentNumber, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentNumber, studentNumberTaken, studentPaymentBalance, studentQrFromNumber, studentTuitionFee, upsertStudentBalance, upsertStudentSessions, type ManagementLaneId } from '@hiraya/utils';
 import { Field, Input, ProgramSpecialtySelect, Select, Button } from '@hiraya/ui';
 import { FormEvent, useState } from 'react';
 import { DirectMessageModal } from '../components/DirectMessageModal';
@@ -163,6 +163,7 @@ export function StudentsPage({
     const birthdate = String(form.get('birthdate') || '');
     const parentId = String(form.get('parentId') || '');
     const slot = String(form.get('slot') || '').trim();
+    const typedNumber = String(form.get('studentNumber') || '').trim();
     const next = studentRecord({
       ...(current || {}),
       firstName: String(form.get('firstName') || ''),
@@ -177,6 +178,7 @@ export function StudentsPage({
       parentId,
       status: String(form.get('status') || 'active'),
       notes: String(form.get('notes') || ''),
+      qrCode: studentQrFromNumber(typedNumber || studentNumber(current) || nextStudentNumber()),
       gradeLevel: resolveStudentProgramValue(
         String(form.get('specialty') || form.get('program') || programChoice || current?.gradeLevel || ''),
         store,
@@ -194,6 +196,9 @@ export function StudentsPage({
     setError(null);
     try {
       if (!parentId) throw new Error('Link a parent account. Children do not sign in; parents use the app.');
+      if (studentNumberTaken(working, studentNumber(next), next.studentId)) {
+        throw new Error('That student number is already used by another learner.');
+      }
       const ops = working.studentOps.filter((item) => item.studentId !== next.studentId);
       const currentOps = working.studentOps.find((item) => item.studentId === next.studentId);
       const parentStudents = parentId ? withParentLink(working, parentId, next.studentId) : working.parentStudents;
@@ -332,7 +337,7 @@ export function StudentsPage({
         rows={rows}
         rowKey={(row) => row.studentId}
         search={(row, q) =>
-          `${studentDisplay(row)} ${row.studentId} ${row.program} ${row.contactNumber}`.toLowerCase().includes(q)
+          `${studentDisplay(row)} ${studentNumber(row)} ${row.studentId} ${row.program} ${row.contactNumber}`.toLowerCase().includes(q)
         }
         searchPlaceholder="Filter this list of students"
         emptyTitle="No students found"
@@ -394,7 +399,7 @@ export function StudentsPage({
         }}
         columns={[
           { key: 'name', header: 'Student name', render: (row) => <NameCell name={studentDisplay(row)} photo={studentPhoto(row)} /> },
-          { key: 'number', header: 'Student number', render: (row) => assigned(row.studentId) },
+          { key: 'number', header: 'Student number', render: (row) => assigned(studentNumber(row)) },
           {
             key: 'parent',
             header: 'Parent / guardian',
@@ -558,7 +563,7 @@ export function StudentsPage({
         >
           <ProfileFact label="Sessions left">{sessionLeftLabel(store, viewing.studentId)}</ProfileFact>
           <ProfileFact label="Remaining balance">{paymentBalanceLabel(store, viewing.studentId)}</ProfileFact>
-          <ProfileFact label="Student number">{assigned(viewing.studentId)}</ProfileFact>
+          <ProfileFact label="Student number">{assigned(studentNumber(viewing))}</ProfileFact>
           <ProfileFact label="Parent / guardian">{assigned(viewingParent ? displayName(viewingParent) : '')}</ProfileFact>
           <ProfileFact label="Program">{assigned(viewingPlace?.programName || viewing.program)}</ProfileFact>
           <ProfileFact label="Class">{assigned(viewingPlace?.className)}</ProfileFact>
@@ -590,6 +595,7 @@ export function StudentsPage({
       ) : null}
       {editing ? (
         <EditorModal
+          key={current?.studentId || 'new-student'}
           title={current ? `Edit ${studentDisplay(current)}` : 'Add student'}
           error={error}
           busy={busy}
@@ -618,8 +624,8 @@ export function StudentsPage({
             <Field label="Middle name" optional>
               <Input name="middleName" defaultValue={current?.middleName} />
             </Field>
-            <Field label="Student number" optional hint="Assigned automatically on save if empty.">
-              <Input value={current?.studentId || 'Assigned on save'} readOnly />
+            <Field label="Student number" optional hint="You can type or change this. Leave blank to assign on save.">
+              <Input name="studentNumber" defaultValue={studentNumber(current)} placeholder="Assigned on save" />
             </Field>
             <Field label="Boy / Girl" optional>
               <Select name="gender" defaultValue={current?.gender || ''}>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import type { NewsItem, SystemAlert } from '@hiraya/types';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -26,6 +27,7 @@ import {
 import { formatPeso, studentPaymentBalance, unreadInboxAlerts } from '@hiraya/utils';
 import { isMobileParent, isMobileTeacher } from '../../src/rbac';
 import { colors, space } from '../../src/theme';
+import { ReadModal } from '../../src/components/ReadModal';
 
 export default function HomeTab() {
   const { user } = useAuth();
@@ -34,6 +36,8 @@ export default function HomeTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
+  const [openNews, setOpenNews] = useState<NewsItem | null>(null);
+  const [openAlert, setOpenAlert] = useState<SystemAlert | null>(null);
   const family = isMobileParent(user?.role);
   const teacher = isMobileTeacher(user?.role);
   const child = family ? selected : undefined;
@@ -174,16 +178,37 @@ export default function HomeTab() {
             <HomeStats items={stats} />
           </Enter>
           <Enter index={2} style={styles.section}>
-            <HomeHighlights news={news} onOpen={() => router.push(teacher ? '/(tabs)/alerts' : '/announcements')} />
+            <HomeHighlights
+              news={news}
+              onOpen={(item) => {
+                if (item) setOpenNews(item);
+                else router.push(teacher ? '/(tabs)/alerts' : '/announcements');
+              }}
+            />
           </Enter>
           <Enter index={3} style={styles.section}>
             <HomeQuickActions items={actions} />
           </Enter>
           <Enter index={4} style={styles.section}>
-            <HomeActivity items={activity} onOpen={() => router.push('/(tabs)/alerts')} />
+            <HomeActivity items={activity} onOpen={(item) => setOpenAlert(item)} />
           </Enter>
         </View>
       </ScrollView>
+      <ReadModal
+        visible={Boolean(openNews)}
+        title={openNews?.title}
+        date={openNews?.publishedAt}
+        body={openNews?.body}
+        onClose={() => setOpenNews(null)}
+      />
+      <ReadModal
+        visible={Boolean(openAlert)}
+        kicker={openAlert?.kind || 'Notification'}
+        title={openAlert?.title || openAlert?.kind || 'Notification'}
+        date={openAlert?.createdAt}
+        body={openAlert?.message}
+        onClose={() => setOpenAlert(null)}
+      />
     </View>
   );
 }

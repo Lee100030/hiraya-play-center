@@ -2768,6 +2768,23 @@ body:has(.modal-backdrop) .assistant-dock {
   font-size: 0.85rem;
 }
 
+.notice-full-message {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.admin-password-form {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-password-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .feedback-read {
   display: grid;
   gap: 14px;
@@ -4118,6 +4135,163 @@ select.teacher-att-select.hlc-select {
 
 .day-board-hint {
   margin: 10px 0 0;
+  color: var(--desk-muted);
+  font-size: 0.8rem;
+}
+
+.aba-sheet {
+  border: 1px solid #163b2a;
+  overflow: hidden;
+  background: #fff;
+}
+
+.aba-sheet-head {
+  background: #163b2a;
+  color: #f4f1e9;
+  text-align: center;
+  padding: 14px 12px 12px;
+}
+
+.aba-sheet-head p {
+  margin: 0;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.aba-sheet-head h2 {
+  margin: 6px 0 4px;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
+
+.aba-sheet-range {
+  font-style: italic;
+  font-weight: 600 !important;
+  letter-spacing: 0.12em !important;
+}
+
+.aba-sheet-scroll {
+  overflow: auto;
+}
+
+.aba-sheet table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+.aba-sheet th,
+.aba-sheet td {
+  border: 1px solid #c9b57a;
+  vertical-align: stretch;
+}
+
+.aba-sheet thead th {
+  background: #e6c15a;
+  color: #163b2a;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.aba-sheet tbody th {
+  width: 110px;
+  background: #f6d5c4;
+  color: #5c2e22;
+  text-align: center;
+  padding: 8px 6px;
+}
+
+.aba-sheet tbody th span {
+  display: block;
+  font-weight: 800;
+}
+
+.aba-day-off,
+.aba-approve {
+  display: block;
+  margin: 6px auto 0;
+  border: 0;
+  background: transparent;
+  color: #163b2a;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.aba-cell {
+  padding: 0;
+  min-height: 88px;
+  background: #f7edd4;
+}
+
+.aba-cell button {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 88px;
+  margin: 0;
+  padding: 8px 6px;
+  border: 0;
+  background: transparent;
+  color: #163b2a;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+}
+
+.aba-cell button:disabled {
+  cursor: default;
+}
+
+.aba-cell span {
+  display: block;
+}
+
+.aba-cell.is-break {
+  background: #4a1848;
+}
+
+.aba-cell.is-break button {
+  color: #f4f1e9;
+}
+
+.aba-cell.is-off {
+  background: #cfd3d6;
+}
+
+.aba-cell.is-prep,
+.aba-cell.is-session {
+  background: #fff;
+}
+
+.aba-cell.is-pending {
+  background: #fff;
+  outline: 2px solid #c9a227;
+  outline-offset: -2px;
+}
+
+.aba-cell.is-approved {
+  background: #5ec4c4;
+}
+
+.aba-cell.is-empty button:not(:disabled) {
+  color: #9a7b3c;
+}
+
+.aba-sheet-hint {
+  margin: 0;
+  padding: 10px 12px;
+  background: #f4f1e9;
   color: var(--desk-muted);
   font-size: 0.8rem;
 }

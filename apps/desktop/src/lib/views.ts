@@ -48,6 +48,10 @@ export const PAGE_COPY: Record<ViewId, { title: string; description: string }> =
     description: 'One sheet for every income and expense line. Student payments stay income. Teacher salary stays on Teachers payment.',
   },
   calendar: { title: 'Center calendar', description: 'One calendar for the center. Assign class schedules or teacher tasks; teachers are notified on mobile.' },
+  abaSchedule: {
+    title: 'ABA schedule',
+    description: 'Weekly ABA therapy board per therapist: 2-hour sessions, 30-minute breaks, prep, day-off, and makeup slots that wait for approval.',
+  },
   holidays: { title: 'Holidays', description: 'School calendar holidays.' },
   teacherSchedule: { title: "Teachers' schedule", description: 'Use Schedule management to assign teacher times.' },
   dayOff: { title: "Teacher's day off", description: 'Day-off requests.' },

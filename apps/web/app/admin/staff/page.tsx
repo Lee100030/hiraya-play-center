@@ -2,6 +2,7 @@
 
 import { AdminProfileFact, AdminProfileModal } from '@/components/admin/AdminProfileModal';
 import { AdminModal } from '@/components/admin/AdminModal';
+import { AdminPasswordPrompt } from '@/components/admin/AdminPasswordPrompt';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { AdminTable } from '@/components/admin/AdminTable';
 import { CertificateModal } from '@/components/admin/CertificateModal';
@@ -24,6 +25,8 @@ export default function AdminStaffPage() {
   const [certificate, setCertificate] = useState<HirayaUser | null>(null);
   const [viewing, setViewing] = useState<HirayaUser | null>(null);
   const [error, setError] = useState('');
+  const [adminPrompt, setAdminPrompt] = useState<{ form: FormData; formEl: HTMLFormElement } | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,9 +56,21 @@ export default function AdminStaffPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
+    const password = String(form.get('password') || '');
+    if (current && password) {
+      setError('');
+      setAdminPrompt({ form, formEl });
+      return;
+    }
+    await saveStaff(form, formEl, '');
+  }
+
+  async function saveStaff(form: FormData, formEl: HTMLFormElement, adminPassword: string) {
     const password = String(form.get('password') || '');
     setError('');
+    setBusy(true);
     try {
       await api.saveStaff({
         userId: current?.userId,
@@ -69,14 +84,17 @@ export default function AdminStaffPage() {
         status: String(form.get('status') || 'active'),
         password: password || undefined,
         confirmPassword: password || undefined,
-        adminPassword: String(form.get('adminPassword') || '') || undefined,
+        adminPassword: adminPassword || undefined,
       });
-      if (current?.userId) await saveAccountPhoto(current.userId, form, event.currentTarget);
+      if (current?.userId) await saveAccountPhoto(current.userId, form, formEl);
       await refresh();
+      setAdminPrompt(null);
       setEditing(null);
       setCreating(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save staff');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -215,9 +233,6 @@ export default function AdminStaffPage() {
               <Link className="hlc-btn hlc-btn-ghost" href={`/admin/staff/${viewingLive.userId}`}>
                 Open workspace
               </Link>
-              <Link className="hlc-btn hlc-btn-ghost" href={`/admin/staff/${viewingLive.userId}`}>
-                Assign task
-              </Link>
               <Button
                 type="button"
                 onClick={() => {
@@ -262,8 +277,8 @@ export default function AdminStaffPage() {
               <Button type="button" variant="ghost" onClick={() => { setCreating(false); setEditing(null); }}>
                 Cancel
               </Button>
-              <Button type="submit" form="staff-form">
-                Save
+              <Button type="submit" form="staff-form" disabled={busy}>
+                {busy ? 'Saving…' : 'Save'}
               </Button>
             </>
           }
@@ -318,13 +333,20 @@ export default function AdminStaffPage() {
             <Field label={current ? 'Set new password' : 'Password'} required={!current} optional={Boolean(current)}>
               <Input name="password" type="password" autoComplete="new-password" placeholder={current ? '••••••••' : undefined} minLength={current ? undefined : 8} required={!current} />
             </Field>
-            {current ? (
-              <Field label="Admin password required" optional hint="Required only if you set a new password.">
-                <Input name="adminPassword" type="password" autoComplete="current-password" />
-              </Field>
-            ) : null}
           </form>
         </AdminModal>
+      ) : null}
+      {adminPrompt ? (
+        <AdminPasswordPrompt
+          busy={busy}
+          error={error || null}
+          onClose={() => {
+            if (busy) return;
+            setAdminPrompt(null);
+            setError('');
+          }}
+          onConfirm={(adminPassword) => void saveStaff(adminPrompt.form, adminPrompt.formEl, adminPassword)}
+        />
       ) : null}
 
       {removing ? (

@@ -1,15 +1,15 @@
 # Architecture
 
-The original product is a **.NET MAUI Blazor Hybrid** client plus **Blazor Server** public site, both calling **Hiraya.Api** (ASP.NET Core Minimal APIs) over **EF Core → MySQL**.
+Live operations for staff are in **`docs/HIRAYA_SYSTEM_GUIDE.md`**.
 
-The new clients do **not** connect to the database. They use the same HTTP API and `X-Hiraya-Session` header.
+The clients do **not** connect to the database. They use Hiraya.Api and the `X-Hiraya-Session` header.
 
 ```text
                  ┌───────────────────────┐
                  │  Next.js website      │
-                 │  apps/web             │
+                 │  Vercel · apps/web    │
                  └──────────┬────────────┘
-                            │
+                            │  /api proxy
         ┌───────────────────┼───────────────────┐
         │                   │                   │
 ┌───────▼────────┐  ┌───────▼────────┐  ┌───────▼────────┐
@@ -21,14 +21,11 @@ The new clients do **not** connect to the database. They use the same HTTP API a
                             │  HTTP + X-Hiraya-Session
                      ┌──────▼───────┐
                      │  Hiraya.Api  │
-                     │  backend/    │
+                     │  Render      │
                      └──────┬───────┘
-                            │  EF Core
+                            │  center document
                      ┌──────▼───────┐
-                     │ MySQL        │
-                     │ hiraya_      │
-                     │ learning_    │
-                     │ center       │
+                     │ Neon store   │
                      └──────────────┘
 ```
 
@@ -53,6 +50,8 @@ Most operational CRUD still uses `GET/PUT /api/store` — the same document sync
 
 ## Platform UX
 
-- **Web:** public marketing + full operations + family portal, responsive sidebar that collapses on small screens.
-- **Mobile:** family-first bottom tabs (home, children, schedule, alerts, more). Staff remains desktop-oriented, matching the original Android rule.
-- **Desktop:** native Electron window, application menu, wide operations desk (not a browser chrome around the marketing site).
+- **Web:** public marketing + enrollment + Super Admin operations. Website apply creates the parent, the child, and the family link at once.
+- **Mobile:** teachers and parents only (home, schedule, alerts, progress). Children do not sign in.
+- **Desktop:** Super Admin control desk — people, finance, calendar, **ABA schedule**, sessions, enrollment.
+
+Ordinary staff saves use `POST /api/store/patch`. Public enrollment uses `POST /api/public/enrollment`.

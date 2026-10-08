@@ -66,7 +66,8 @@ export type HklcNavId =
   | 'announcements'
   | 'sessions'
   | 'messages'
-  | 'feedback';
+  | 'feedback'
+  | 'abaSchedule';
 
 export type HklcNavItem = {
   id: HklcNavId;
@@ -91,6 +92,7 @@ export const HKLC_NAV_GROUPS: HklcNavGroup[] = [
       { id: 'modules', label: 'Module management', sheet: 'Curriculum Implementation and Monitoring', roles: CLASSROOM },
       { id: 'programTuition', label: 'Program tuition management', sheet: 'Final audited cash payments', roles: ADMINS },
       { id: 'calendar', label: 'Center calendar', sheet: 'HIRAYA CALENDAR', roles: CLASSROOM },
+      { id: 'abaSchedule', label: 'ABA schedule', sheet: 'TJess ABA', roles: CLASSROOM },
       { id: 'announcements', label: 'Announcement management', sheet: 'Weekly Template for posting', roles: ADMINS },
       { id: 'feedback', label: 'Feedback', sheet: 'Weekly Template for posting', roles: ADMINS },
       { id: 'sessions', label: 'Session management', sheet: "Student's Sheet", roles: ADMINS },

@@ -29,6 +29,7 @@ const HREF: Record<HklcNavId, string> = {
   payments: '/admin/payments',
   finance: '/admin/payments',
   calendar: '/admin/schedules',
+  abaSchedule: '/admin/aba-schedule',
   holidays: '/admin/schedules',
   teacherSchedule: '/admin/schedules',
   dayOff: '/admin/staff',

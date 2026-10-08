@@ -11,7 +11,7 @@ import { useStore } from '@/components/StoreProvider';
 import { api } from '@/lib/api';
 import { ProfilePhotoField, saveStudentPhoto } from '@/components/admin/ProfilePhotoField';
 import { Button, EmptyState, EmptyValue, Field, FieldLegend, Input, Loading, PersonAvatar, ProgramSpecialtySelect, Select, StatusBadge, Textarea, emptyCell } from '@hiraya/ui';
-import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, downloadStudentRecord, isStudentHereToday, laneLabel, newId, parsePeopleLane, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentPaymentBalance, studentTuitionFee, upsertStudentBalance, upsertStudentSessions } from '@hiraya/utils';
+import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, downloadStudentRecord, isStudentHereToday, laneLabel, newId, nextStudentNumber, parsePeopleLane, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentNumber, studentNumberTaken, studentPaymentBalance, studentQrFromNumber, studentTuitionFee, upsertStudentBalance, upsertStudentSessions } from '@hiraya/utils';
 import type { Student } from '@hiraya/types';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -69,7 +69,7 @@ export default function AdminStudentsPage() {
       store.students
         .filter((student) => {
           const parent = parents.find((item) => item.userId === student.parentId);
-          const hay = `${studentDisplay(student)} ${student.gradeLevel} ${student.program} ${student.emergencyContact} ${parent?.fullname || ''}`.toLowerCase();
+          const hay = `${studentDisplay(student)} ${studentNumber(student)} ${student.gradeLevel} ${student.program} ${student.emergencyContact} ${parent?.fullname || ''}`.toLowerCase();
           return studentInLane(store, student, lane) && hay.includes(query.toLowerCase());
         })
         .sort(compareStudentNames),
@@ -181,6 +181,7 @@ export default function AdminStudentsPage() {
     event.preventDefault();
     if (!current) return;
     const form = new FormData(event.currentTarget);
+    const typedNumber = String(form.get('studentNumber') || '').trim();
     const next: Student = {
       ...current,
       studentId: current.studentId || newId('stu'),
@@ -197,11 +198,15 @@ export default function AdminStudentsPage() {
       status: String(form.get('status') || 'active'),
       notes: String(form.get('notes') || ''),
       parentId: String(form.get('parentId') || current.parentId || ''),
+      qrCode: studentQrFromNumber(typedNumber || studentNumber(current) || nextStudentNumber()),
     };
     next.fullname = [next.firstName, next.middleName, next.lastName].filter(Boolean).join(' ');
     try {
       if (!next.parentId) {
         throw new Error('Link a parent account. Children do not sign in; parents use the app.');
+      }
+      if (studentNumberTaken(store, studentNumber(next), next.studentId)) {
+        throw new Error('That student number is already used by another learner.');
       }
     const now = new Date().toISOString();
     let working = store;
@@ -304,6 +309,12 @@ export default function AdminStudentsPage() {
         onRowOpen={(row) => open(row, 'view')}
         columns={[
           { key: 'name', header: 'Name', sortValue: (row) => studentDisplay(row), render: (row) => studentDisplay(row) },
+          {
+            key: 'number',
+            header: 'Student number',
+            sortValue: (row) => studentNumber(row),
+            render: (row) => emptyCell(studentNumber(row)),
+          },
           {
             key: 'grade',
             header: 'Age / Grade',
@@ -433,6 +444,7 @@ export default function AdminStudentsPage() {
             </>
           }
         >
+          <AdminProfileFact label="Student number">{emptyCell(studentNumber(current))}</AdminProfileFact>
           <AdminProfileFact label="Sessions left">{sessionLeftLabel(store, current.studentId)}</AdminProfileFact>
           <AdminProfileFact label="Remaining balance">{paymentBalanceLabel(store, current.studentId)}</AdminProfileFact>
           <AdminProfileFact label="Age / grade">
@@ -469,6 +481,7 @@ export default function AdminStudentsPage() {
 
       {mode === 'edit' && current ? (
         <AdminModal
+          key={current.studentId || 'new-student'}
           title={current.studentId ? `Edit ${studentDisplay(current)}` : 'Add student'}
           onClose={() => setMode(null)}
           footer={
@@ -500,6 +513,9 @@ export default function AdminStudentsPage() {
             </Field>
             <Field label="Last name" required>
               <Input name="lastName" defaultValue={current.lastName} required />
+            </Field>
+            <Field label="Student number" optional hint="You can type or change this. Leave blank to assign on save.">
+              <Input name="studentNumber" defaultValue={studentNumber(current)} placeholder="Assigned on save" />
             </Field>
             <Field label="Birthdate" optional>
               <Input name="birthdate" type="date" defaultValue={current.birthdate} />

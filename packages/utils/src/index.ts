@@ -289,6 +289,7 @@ export {
 export { normalizePersonalEmail, ownedPersonalEmail, personalEmailError, personalEmailOwnerError } from './personalEmail';
 export { scrubLeftoverPaymentData } from './paymentCleanup';
 export { downloadStudentRecord } from './studentRecordSheet';
+export { nextStudentNumber, studentNumber, studentNumberTaken, studentQrFromNumber } from './studentNumber';
 export { applyStorePatch, diffStore, STORE_ROW_IDS, type StorePatchBody } from './storePatch';
 export {
   teacherPaymentRows,
@@ -339,6 +340,7 @@ export {
   isAlertRead,
   isDirectAlert,
   markAllDirectsRead,
+  markAlertRead,
   markInboxRead,
   markThreadRead,
   messageContacts,
@@ -382,5 +384,30 @@ export {
   type HklcNavId,
   type HklcNavItem,
 } from './hklcOperations';
+export {
+  ABA_LANE,
+  ABA_SLOTS,
+  ABA_WEEK_KIND,
+  BREAK_ABA_CELL,
+  EMPTY_ABA_CELL,
+  abaCellKey,
+  abaCellLines,
+  abaCellTone,
+  abaRoom,
+  abaStudents,
+  abaTherapistLabel,
+  abaTherapists,
+  abaWeekDates,
+  abaWeekRangeLabel,
+  abaWeekdayLabel,
+  addDays,
+  mondayOf,
+  readAbaWeek,
+  writeAbaWeek,
+  type AbaCell,
+  type AbaCellKind,
+  type AbaCellStatus,
+  type AbaSlot,
+} from './abaSchedule';
 export { createErrorReport, reportClientError, sanitizeErrorMessage, type HirayaErrorReport } from './errorReport';
 
