@@ -43,7 +43,7 @@ export default function App() {
     if (!user) return;
     const timer = window.setInterval(() => {
       void api.getStore().then(setStore).catch(() => undefined);
-    }, 15000);
+    }, 30000);
     return () => window.clearInterval(timer);
   }, [user]);
 
@@ -183,6 +183,7 @@ export default function App() {
           store={store}
           name={displayName(user)}
           role={user.role}
+          saveStore={saveStore}
           onView={(id) => {
             setView(id);
             setPeopleLane(null);

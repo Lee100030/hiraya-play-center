@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cashFlowLines, financeMonth, upsertCenterExpense, upsertOpeningBalance } from './src/finance.ts';
+import { dropStudentSessionPackage } from './src/sessionPackage.ts';
+import { cashFlowLines, financeMonth, removeCashFlowLine, scrubLeftoverFinance, upsertCenterExpense, upsertOpeningBalance } from './src/finance.ts';
 
 function store() {
   return {
-    students: [{ studentId: 'stu_1', program: 'Playgroup', fullname: 'Ana' }],
+    students: [{ studentId: 'stu_1', program: 'Playgroup', fullname: 'Ana', status: 'active' }],
     programs: [],
+    sessionPackages: [{ packageId: 'pkg_1', studentId: 'stu_1', status: 'active', createdAt: '2026-09-01' }],
     payments: [
       {
         paymentId: 'pay_1',
@@ -130,4 +132,49 @@ test('teacher pay with pending status still posts to cash flow when money was pa
   assert.equal(salary?.amount, 8000);
   assert.equal(salary?.detail, 'Liza Cruz');
   assert.equal(salary?.kind, 'expense');
+});
+
+test('deleting a payment, session package, or student clears income', () => {
+  const paid = store();
+  assert.equal(financeMonth(paid, '2026-09').income, 6200);
+  const cancelled = {
+    ...paid,
+    payments: paid.payments.map((row) => (row.paymentId === 'pay_1' ? { ...row, amountPaid: 0, paymentStatus: 'cancelled' } : row)),
+  };
+  assert.equal(financeMonth(cancelled, '2026-09').income, 1200);
+  const withoutPay = removeCashFlowLine(paid, 'pay_1');
+  assert.equal(financeMonth(withoutPay, '2026-09').income, 1200);
+  const withoutBook = upsertCenterExpense(paid, {
+    expenseId: 'inc_drop',
+    expenseDate: '2026-09-06',
+    item: 'Donation',
+    category: 'other',
+    kind: 'income',
+    amount: 300,
+    paidTo: 'A parent',
+    paidBy: 'Office',
+    note: '',
+    createdAt: '2026-09-06T00:00:00.000Z',
+    updatedAt: '2026-09-06T00:00:00.000Z',
+  });
+  assert.equal(financeMonth(withoutBook, '2026-09').income, 6500);
+  assert.equal(financeMonth(removeCashFlowLine(withoutBook, 'inc_drop'), '2026-09').income, 6200);
+  const withPack = {
+    ...paid,
+    sessionPackages: [{ packageId: 'pkg_1', studentId: 'stu_1', totalSessions: 8, usedSessions: 1, remainingSessions: 7, status: 'active' }],
+  };
+  const afterPack = dropStudentSessionPackage(withPack, 'stu_1');
+  assert.equal(afterPack.sessionPackages.length, 0);
+  assert.equal(financeMonth(afterPack, '2026-09').income, 0);
+  const afterStudent = { ...paid, students: [] };
+  assert.equal(financeMonth(afterStudent, '2026-09').income, 0);
+  assert.equal(financeMonth(afterStudent, '2026-09').salary, 8000);
+});
+
+test('playgroup income is dropped when the session package is gone', () => {
+  const leftover = { ...store(), sessionPackages: [] };
+  assert.equal(financeMonth(leftover, '2026-09').income, 0);
+  const cleaned = scrubLeftoverFinance(leftover);
+  assert.equal(cleaned.payments.some((row) => row.paymentId === 'pay_1'), false);
+  assert.equal(financeMonth(cleaned, '2026-09').income, 0);
 });

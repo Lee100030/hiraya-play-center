@@ -40,6 +40,7 @@ import {
   studentPaymentTypeLabel,
   updateStudentPayment,
   cancelStudentPayment,
+  deletePaymentRecord,
   upsertTeacherAttendanceDay,
 } from '@hiraya/utils';
 import { Button, EmptyState, Field, Input, Select, Textarea } from '@hiraya/ui';
@@ -756,7 +757,7 @@ function StudentReceivedModal({
                                 setError(null);
                                 try {
                                   await saveStore(cancelStudentPayment(store, row.paymentId, actor.userId));
-                                  setNotice('Payment cancelled. Totals were recalculated.');
+                                  setNotice('Payment cancelled. It is no longer counted in Income and expenses.');
                                 } catch (err) {
                                   setError(err instanceof Error ? err.message : 'Could not cancel payment.');
                                 } finally {
@@ -766,6 +767,28 @@ function StudentReceivedModal({
                             }}
                           >
                             Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => {
+                              void (async () => {
+                                if (!window.confirm('Delete this payment from Income and expenses? This cannot be undone.')) return;
+                                setBusy(true);
+                                setError(null);
+                                try {
+                                  await saveStore(deletePaymentRecord(store, row.paymentId));
+                                  setNotice('Payment deleted. Income and expenses were updated.');
+                                } catch (err) {
+                                  setError(err instanceof Error ? err.message : 'Could not delete payment.');
+                                } finally {
+                                  setBusy(false);
+                                }
+                              })();
+                            }}
+                          >
+                            Delete
                           </Button>
                           </>
                         )}

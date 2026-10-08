@@ -1,7 +1,7 @@
 import type { HirayaDatabase, HirayaUser, NewsItem, Schedule, SessionPackage, StaffTask, SystemAlert } from '@hiraya/types';
-import { displayName, feedbackLaneLabel, formatDate, formatDateTime, isAdmin, laneLabel, newId, parseFeedbackLane, sessionLeftFor, staffDisplayRole, studentDisplay, studentInLane, compareStudentNames, completeOneSession, normalizeSessionPackage, placeStudentSessionPackage, studentSessionPackage, type ManagementLaneId } from '@hiraya/utils';
+import { displayName, dropStudentSessionPackage, feedbackLaneLabel, formatDate, formatDateTime, isAdmin, laneLabel, newId, parseFeedbackLane, scrubLeftoverSessionPackages, sessionLeftFor, staffDisplayRole, studentDisplay, studentInLane, compareStudentNames, completeOneSession, normalizeSessionPackage, placeStudentSessionPackage, studentSessionPackage, type ManagementLaneId } from '@hiraya/utils';
 import { Button, Field, Input, PhotoCardPicker, Select, Textarea } from '@hiraya/ui';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { DeskModal } from '../components/DeskModal';
 import { LaneSessionPackage } from '../components/LaneSessionPackage';
 import { EditorModal, FormSection } from '../components/EditorModal';
@@ -540,6 +540,16 @@ export function SessionsManagePage({
   const [editing, setEditing] = useState<SessionPackage | 'new' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const scrubbedPackages = useRef(false);
+  useEffect(() => {
+    if (scrubbedPackages.current) return;
+    const next = scrubLeftoverSessionPackages(store);
+    if (!next) return;
+    scrubbedPackages.current = true;
+    void saveStore(next).catch(() => {
+      scrubbedPackages.current = false;
+    });
+  }, [store, saveStore]);
   const current = editing && editing !== 'new' ? editing : null;
   const studentOptions = store.students.filter((item) => studentInLane(store, item, lane)).sort(compareStudentNames);
   const rows = studentOptions.map((student) => {
@@ -620,10 +630,30 @@ export function SessionsManagePage({
         emptyTitle="No students in this list"
         emptyHint="Add learners in Student management, or pick another program lane."
         statusOf={(row) => row.latest?.status || (row.pack.hasPackage ? 'active' : 'none')}
-        crud={{
+          crud={{
           addLabel: '+ Add Package',
           onAdd: () => setEditing('new'),
           onEdit: (row) => openEdit(row),
+          onDelete: async (selected) => {
+            const withPack = selected.filter((row) => row.latest);
+            if (!withPack.length) {
+              window.alert('Select a student who has a session package.');
+              return false;
+            }
+            const label =
+              withPack.length === 1 ? studentDisplay(withPack[0].student) : `${withPack.length} session packages`;
+            if (
+              !window.confirm(
+                `Delete ${label}? Counted payments for ${withPack.length === 1 ? 'this student' : 'these students'} will also leave Income and expenses.`,
+              )
+            ) {
+              return false;
+            }
+            let next = store;
+            for (const row of withPack) next = dropStudentSessionPackage(next, row.student.studentId);
+            await saveStore(next);
+          },
+          deleteLabel: 'Delete package',
           onRefresh,
           singleActions: [
             {

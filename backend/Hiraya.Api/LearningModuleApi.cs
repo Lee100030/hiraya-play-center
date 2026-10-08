@@ -15,7 +15,7 @@ public static class LearningModuleApi
             if (actor is null)
                 return Results.Unauthorized();
             if (!Navigation.CanViewLearningModules(actor.Role))
-                return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+                return Results.Json(new { error = "Learning modules are for teachers and parents." }, statusCode: StatusCodes.Status403Forbidden);
             var db = await repo.LoadAsync();
             var list = LearningModuleService.Visible(db, actor, hidden && Navigation.CanManageLearningModules(actor.Role)).ToList();
             return Results.Json(list, JsonDefaults.Options);

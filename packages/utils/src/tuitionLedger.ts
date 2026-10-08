@@ -296,10 +296,12 @@ export function cancelStudentPayment(store: HirayaDatabase, paymentId: string, a
   if (!current) throw new Error('Payment not found.');
   const locked = lockTuition(store, current.studentId);
   const now = new Date().toISOString();
+  const prior = pesos(current.amountPaid || current.amount || 0);
   const payments = (locked.payments || []).map((row) =>
     row.paymentId === id
       ? {
           ...row,
+          amountPaid: 0,
           paymentStatus: 'cancelled',
           history: [
             ...(row.history || []),
@@ -308,13 +310,26 @@ export function cancelStudentPayment(store: HirayaDatabase, paymentId: string, a
               changedBy: actorId,
               changedAt: now,
               action: 'cancelled',
-              summary: `Payment of ₱${formatPeso(row.amountPaid || row.amount || 0)} cancelled.`,
+              summary: `Payment of ₱${formatPeso(prior)} cancelled.`,
             },
           ],
         }
       : row,
   );
   return withStanding({ ...locked, payments }, current.studentId);
+}
+
+/** Hard-remove a student or teacher payment so Income and expenses no longer include it. */
+export function deletePaymentRecord(store: HirayaDatabase, paymentId: string) {
+  const id = (paymentId || '').trim();
+  const current = (store.payments || []).find((row) => row.paymentId === id);
+  if (!current) throw new Error('Payment not found.');
+  const next = {
+    ...store,
+    payments: (store.payments || []).filter((row) => row.paymentId !== id),
+  };
+  if (isTeacherPayment(current)) return next;
+  return withStanding(next, current.studentId);
 }
 
 export function centerTuitionTotals(store: HirayaDatabase) {

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { addLearningProgram, displayName, isBuiltinManagementLane, managementLanesFor, PAYMENT_LANES, parsePaymentLane, removeLearningProgram, roleLabel } from '@hiraya/utils';
+import { addLearningProgram, displayName, isAlertRead, isBuiltinManagementLane, managementLanesFor, markAllDirectsRead, markInboxRead, PAYMENT_LANES, parsePaymentLane, removeLearningProgram, roleLabel, unreadDirectAlerts, unreadInboxAlerts } from '@hiraya/utils';
 import { Button, Field, Input } from '@hiraya/ui';
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/components/StoreProvider';
@@ -74,26 +74,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const [programBusy, setProgramBusy] = useState(false);
   const [programError, setProgramError] = useState('');
   const unreadMessages = useMemo(
-    () =>
-      store.alerts.filter(
-        (item) =>
-          (item.kind || '').toLowerCase() === 'direct' &&
-          item.recipientId === user?.userId &&
-          !item.read &&
-          item.status !== 'sent',
-      ).length,
+    () => unreadDirectAlerts(store.alerts, user?.userId || '').length,
     [store.alerts, user?.userId],
   );
   const unread = useMemo(
-    () =>
-      store.alerts.filter(
-        (item) =>
-          (item.kind || '').toLowerCase() !== 'direct' &&
-          item.status !== 'read' &&
-          (!item.recipientId || item.recipientId === user?.userId || item.recipientId === 'everyone'),
-      ).length +
-      store.enrollmentApplications.filter((row) => row.status === 'pending_review' || row.status === 'pending').length,
-    [store.alerts, store.enrollmentApplications, user?.userId],
+    () => unreadInboxAlerts(store.alerts, user?.userId || '').length,
+    [store.alerts, user?.userId],
   );
 
   function onSearch(event: FormEvent<HTMLFormElement>) {
@@ -103,27 +89,29 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   const notesList = useMemo(
-    () =>
-      store.alerts
-        .filter(
-          (item) =>
-            (item.kind || '').toLowerCase() !== 'direct' &&
-            (!item.recipientId || item.recipientId === user?.userId || item.recipientId === 'everyone'),
-        )
-        .slice(0, 8),
+    () => unreadInboxAlerts(store.alerts, user?.userId || '').slice(0, 8),
     [store.alerts, user?.userId],
   );
 
   async function markAlertRead(alertId: string) {
-    const now = new Date().toISOString();
     const current = store.alerts.find((item) => item.alertId === alertId);
-    if (!current || current.read) return;
+    if (!current || isAlertRead(current)) return;
+    const now = new Date().toISOString();
     await save({
       ...store,
       alerts: store.alerts.map((item) =>
         item.alertId === alertId ? { ...item, read: true, status: 'read', readAt: now } : item,
       ),
     });
+  }
+
+  async function clearInbox() {
+    if (!user?.userId) return;
+    await save({
+      ...store,
+      alerts: markAllDirectsRead(markInboxRead(store.alerts, user.userId), user.userId),
+    });
+    setNotes(false);
   }
 
   async function signOut() {
@@ -373,7 +361,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           {notes ? (
             <div className="admin-pop">
               <strong>Inbox</strong>
-              {notesList.length === 0 ? <p>No alerts.</p> : null}
+              {notesList.length === 0 ? <p>No unread alerts.</p> : null}
               {notesList.map((item) => (
                 <button
                   key={item.alertId}
@@ -386,8 +374,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   {item.title || item.kind}
                 </button>
               ))}
-              <Link href="/admin/enrollments" onClick={() => setNotes(false)}>
-                Review enrollments
+              {unread > 0 || unreadMessages > 0 ? (
+                <button type="button" onClick={() => void clearInbox()}>
+                  Empty inbox
+                </button>
+              ) : null}
+              <Link href="/admin/messages" onClick={() => setNotes(false)}>
+                Open notifications
               </Link>
             </div>
           ) : null}

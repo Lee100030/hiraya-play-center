@@ -184,6 +184,12 @@ export function friendlyError(
   if (lower.includes('teachers and parents only') || lower.includes('super administrator signs in')) return message;
   if (status === 401 && mode !== 'login') return 'Your session expired. Sign in again.';
   if (lower.includes('unauthorized') || lower.includes('401')) return 'Your session expired. Sign in again.';
+  if (status === 403 || lower === 'forbidden' || lower.includes('forbidden')) {
+    if (message && message.length < 160 && lower !== 'forbidden') return message;
+    return mode === 'login'
+      ? 'This sign-in is not allowed on the phone app. Teachers and parents use this app. The Super Administrator signs in on Desktop or the website.'
+      : 'This action is not allowed on your account. Teachers and parents use the phone app. Ask the center if you need access.';
+  }
   if (
     mode === 'login' &&
     (lower.includes('incorrect') || lower.includes('invalid') || lower.includes('password') || lower.includes('sign-in') || lower.includes('credentials'))

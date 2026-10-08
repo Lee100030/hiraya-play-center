@@ -84,6 +84,22 @@ export function parentsForStudent(store: HirayaDatabase, studentId: string): Hir
   });
 }
 
+export function removeStudentLinkedRecords(store: HirayaDatabase, studentIds: string[]): HirayaDatabase {
+  const ids = new Set(studentIds.map((id) => (id || '').trim().toLowerCase()).filter(Boolean));
+  const keep = (value?: string | null) => !ids.has((value || '').trim().toLowerCase());
+  return {
+    ...store,
+    students: (store.students || []).filter((row) => keep(row.studentId)),
+    enrollments: (store.enrollments || []).filter((row) => keep(row.studentId)),
+    parentStudents: (store.parentStudents || []).filter((row) => keep(row.studentId)),
+    payments: (store.payments || []).filter((row) => isTeacherPayment(row) || keep(row.studentId)),
+    sessionPackages: (store.sessionPackages || []).filter((row) => keep(row.studentId)),
+    sessionHistory: (store.sessionHistory || []).filter((row) => keep(row.studentId)),
+    studentOps: (store.studentOps || []).filter((row) => keep(row.studentId)),
+    attendance: (store.attendance || []).filter((row) => keep(row.studentId)),
+  };
+}
+
 export {
   studentPaymentBalance,
   paymentBalanceLabel,
@@ -91,6 +107,7 @@ export {
   recordStudentAmountReceived,
   updateStudentPayment,
   cancelStudentPayment,
+  deletePaymentRecord,
   studentTuitionFee,
   studentTotalPaid,
   studentRemainingBalance,

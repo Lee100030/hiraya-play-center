@@ -11,7 +11,7 @@ import { useStore } from '@/components/StoreProvider';
 import { api } from '@/lib/api';
 import { ProfilePhotoField, saveStudentPhoto } from '@/components/admin/ProfilePhotoField';
 import { Button, EmptyState, EmptyValue, Field, FieldLegend, Input, Loading, PersonAvatar, ProgramSpecialtySelect, Select, StatusBadge, Textarea, emptyCell } from '@hiraya/ui';
-import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, downloadStudentRecord, isStudentHereToday, laneLabel, newId, parsePeopleLane, paymentBalanceLabel, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentPaymentBalance, studentTuitionFee, upsertStudentBalance, upsertStudentSessions } from '@hiraya/utils';
+import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, downloadStudentRecord, isStudentHereToday, laneLabel, newId, parsePeopleLane, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentPaymentBalance, studentTuitionFee, upsertStudentBalance, upsertStudentSessions } from '@hiraya/utils';
 import type { Student } from '@hiraya/types';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -259,7 +259,14 @@ export default function AdminStudentsPage() {
 
   async function remove() {
     if (!current?.studentId) return;
-    await save({ ...store, students: store.students.filter((item) => item.studentId !== current.studentId) });
+    if (
+      !window.confirm(
+        `Delete ${studentDisplay(current)}, related enrollments, session packages, and counted payments? Prefer Archive unless this was added by mistake.`,
+      )
+    ) {
+      return;
+    }
+    await save(removeStudentLinkedRecords(store, [current.studentId]));
     setMode(null);
     setCurrent(null);
   }

@@ -1,12 +1,16 @@
 import { PermissionKeys, UserRoles, type HirayaDatabase, type HirayaUser } from '@hiraya/types';
 import { allows } from '@hiraya/utils';
 
+function sameRole(role: string | null | undefined, expected: string) {
+  return (role || '').trim().toLowerCase() === expected;
+}
+
 export function isMobileTeacher(role?: string | null) {
-  return role === UserRoles.Teacher;
+  return sameRole(role, UserRoles.Teacher);
 }
 
 export function isMobileParent(role?: string | null) {
-  return role === UserRoles.Parent;
+  return sameRole(role, UserRoles.Parent);
 }
 
 export function canUseMobileApp(role?: string | null) {

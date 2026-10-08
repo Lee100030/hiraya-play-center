@@ -10,6 +10,60 @@ export function isDirectAlert(item: Pick<SystemAlert, 'kind'>) {
   return (item.kind || '').toLowerCase() === 'direct';
 }
 
+const READ_STATUSES = new Set(['read', 'archived', 'cleared', 'deleted']);
+
+export function isAlertRead(item: Pick<SystemAlert, 'read' | 'status'>) {
+  if (item.read) return true;
+  return READ_STATUSES.has((item.status || '').trim().toLowerCase());
+}
+
+export function alertVisibleTo(item: Pick<SystemAlert, 'recipientId'>, userId: string) {
+  const to = (item.recipientId || '').trim().toLowerCase();
+  const me = (userId || '').trim().toLowerCase();
+  if (!me) return false;
+  if (!to || to === 'everyone' || to === 'all' || to === 'staff' || to === 'admin') return true;
+  return to === me;
+}
+
+function isOwnDirect(item: Pick<SystemAlert, 'kind' | 'recipientId' | 'status'>, userId: string) {
+  if (!isDirectAlert(item)) return false;
+  if ((item.recipientId || '').trim().toLowerCase() !== (userId || '').trim().toLowerCase()) return false;
+  return (item.status || '').trim().toLowerCase() !== 'sent';
+}
+
+export function inboxAlerts(alerts: SystemAlert[] | undefined, userId: string) {
+  return (alerts || []).filter((item) => !isDirectAlert(item) && alertVisibleTo(item, userId));
+}
+
+export function unreadInboxAlerts(alerts: SystemAlert[] | undefined, userId: string) {
+  return inboxAlerts(alerts, userId).filter((item) => !isAlertRead(item));
+}
+
+export function unreadDirectAlerts(alerts: SystemAlert[] | undefined, userId: string) {
+  return (alerts || []).filter((item) => isOwnDirect(item, userId) && !isAlertRead(item));
+}
+
+function stampRead(item: SystemAlert, now: string): SystemAlert {
+  return { ...item, read: true, status: 'read', readAt: now };
+}
+
+export function markInboxRead(alerts: SystemAlert[], userId: string): SystemAlert[] {
+  const now = new Date().toISOString();
+  return alerts.map((item) =>
+    !isDirectAlert(item) && alertVisibleTo(item, userId) && !isAlertRead(item) ? stampRead(item, now) : item,
+  );
+}
+
+export function markAllDirectsRead(alerts: SystemAlert[], userId: string): SystemAlert[] {
+  const now = new Date().toISOString();
+  return alerts.map((item) => (isOwnDirect(item, userId) && !isAlertRead(item) ? stampRead(item, now) : item));
+}
+
+export function removeAlerts(alerts: SystemAlert[], ids: string[]): SystemAlert[] {
+  const drop = new Set(ids);
+  return alerts.filter((item) => !drop.has(item.alertId));
+}
+
 export function packedMemberIds(value?: string | null) {
   return (value || '')
     .split(',')
@@ -98,9 +152,9 @@ export function markThreadRead(alerts: SystemAlert[], actorId: string, threadId:
     isDirectAlert(item) &&
     item.relatedRecordId === threadId &&
     item.recipientId === actorId &&
-    !item.read &&
+    !isAlertRead(item) &&
     item.status !== 'sent'
-      ? { ...item, read: true, status: 'read', readAt: now }
+      ? stampRead(item, now)
       : item,
   );
 }

@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (loginValue: string, password: string, remember = true) => {
     const withTimeout = async (run: () => Promise<AuthSession>) => {
       const timeout = new Promise<never>((_, reject) => {
-        window.setTimeout(() => reject(new Error('Sign-in timed out')), 8000);
+        window.setTimeout(() => reject(new Error('Sign-in timed out')), 60000);
       });
       return Promise.race([run(), timeout]);
     };

@@ -1,4 +1,5 @@
 import type { HirayaDatabase } from '@hiraya/types';
+import { sessionPackageStats } from './sessionPackage';
 
 export function isTeacherApplication(row: { applicationKind?: string | null }) {
   return (row.applicationKind || '').toLowerCase() === 'teacher';
@@ -36,6 +37,7 @@ export function operationsStats(store: HirayaDatabase) {
       row.startAt.slice(0, 10) > today,
   );
   const pendingTasks = (store.staffTasks || []).filter((row) => !['completed', 'cancelled'].includes(row.status));
+  const sessionPackages = sessionPackageStats(store);
   return {
     totalStudents: activeStudents.length,
     activeTeachers: activeTeachers.length,
@@ -47,6 +49,8 @@ export function operationsStats(store: HirayaDatabase) {
     todayClasses: todayClasses.length,
     upcomingClasses: upcomingClasses.length,
     pendingTasks: pendingTasks.length,
+    sessionPackages: sessionPackages.total,
+    activeSessionPackages: sessionPackages.active,
     notifications: store.alerts.filter(
       (row) => (row.kind || '').toLowerCase() !== 'direct' && !row.read && row.status !== 'read',
     ).length,

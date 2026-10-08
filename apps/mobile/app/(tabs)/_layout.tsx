@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/auth';
 import { useCenter } from '../../src/store';
 import { isMobileParent, isMobileTeacher } from '../../src/rbac';
+import { unreadInboxAlerts } from '@hiraya/utils';
 import { colors, fonts } from '../../src/theme';
 import { FloatingMessageButton } from '../../src/components/FloatingMessageButton';
 import { FloatingFeedbackButton } from '../../src/components/FloatingFeedbackButton';
@@ -17,7 +18,7 @@ export default function TabsLayout() {
   const { user, ready } = useAuth();
   const { store } = useCenter();
   const insets = useSafeAreaInsets();
-  const unread = store.alerts.filter((item) => !item.read && item.kind !== 'direct').length;
+  const unread = unreadInboxAlerts(store.alerts, user?.userId || '').length;
   const teacher = isMobileTeacher(user?.role);
   const parent = isMobileParent(user?.role);
   if (!ready) return null;

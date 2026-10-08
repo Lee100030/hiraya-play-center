@@ -145,7 +145,7 @@ export function CashFlowSheet({
       <div className="cash-sheet-head">
         <div>
           <h2>Cash flow sheet · {monthLabel}</h2>
-          <p>Type each income or expense on its own row. Student payments and teacher salary are already listed from those records.</p>
+          <p>Type each income or expense on its own row. Removing a student payment or teacher pay row also removes that original record from Income and expenses.</p>
         </div>
         <button
           type="button"
@@ -202,7 +202,7 @@ export function CashFlowSheet({
                   onRemove={() => void onRemove(line.id)}
                 />
               ) : (
-                <ReadOnlyRow key={`${line.source}-${line.id}`} line={line} />
+                <ReadOnlyRow key={`${line.source}-${line.id}`} line={line} busy={busy} onRemove={() => void onRemove(line.id)} />
               ),
             )}
             <EditableRow
@@ -230,7 +230,15 @@ export function CashFlowSheet({
   );
 }
 
-function ReadOnlyRow({ line }: { line: CashFlowLine }) {
+function ReadOnlyRow({
+  line,
+  busy,
+  onRemove,
+}: {
+  line: CashFlowLine;
+  busy?: boolean;
+  onRemove: () => void;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -245,7 +253,13 @@ function ReadOnlyRow({ line }: { line: CashFlowLine }) {
         <td className="cash-more-cell">
           <MoreButton open={open} onToggle={() => setOpen((value) => !value)} />
         </td>
-        <td />
+        <td className="cash-actions">
+          <button type="button" className="hlc-btn hlc-btn-icon cash-remove" aria-label="Remove row" title="Remove row" disabled={busy} onClick={onRemove}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+            </svg>
+          </button>
+        </td>
       </tr>
       {open ? (
         <tr className="cash-more-row">

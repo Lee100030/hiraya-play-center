@@ -14,6 +14,8 @@ import {
   parsePaymentLane,
   removeLearningProgram,
   roleLabel,
+  unreadDirectAlerts,
+  unreadInboxAlerts,
   type FeedbackLaneId,
   type ManagementLaneId,
   type PaymentLaneId,
@@ -70,22 +72,8 @@ export function Shell({
   const [programBusy, setProgramBusy] = useState(false);
   const [programError, setProgramError] = useState<string | null>(null);
   const programLanes = useMemo(() => managementLanesFor(store), [store]);
-  const alerts = useMemo(
-    () =>
-      [...(store.alerts || [])]
-        .filter((alert) => (alert.kind || '').toLowerCase() !== 'direct')
-        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')),
-    [store.alerts],
-  );
-  const unreadAlerts = alerts.filter((alert) => !alert.read);
-  const unread = unreadAlerts.length;
-  const unreadMessages = (store.alerts || []).filter(
-    (alert) =>
-      (alert.kind || '').toLowerCase() === 'direct' &&
-      alert.recipientId === user.userId &&
-      !alert.read &&
-      alert.status !== 'sent',
-  ).length;
+  const unread = unreadInboxAlerts(store.alerts, user.userId).length;
+  const unreadMessages = unreadDirectAlerts(store.alerts, user.userId).length;
   const groups = desktopNav(user.role);
   const section =
     groups.find((group) => group.items.some((item) => item.id === view))?.label || 'Dashboard';

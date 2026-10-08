@@ -27,7 +27,7 @@ public static class FeedbackApi
             var actor = await ParentPortalApi.ActorAsync(request, repo);
             if (actor is null)
                 return Results.Unauthorized();
-            if (actor.Role != UserRoles.Parent)
+            if (!UserRoles.IsParent(actor.Role))
                 return Results.Json(new { error = "Only parents can send this feedback." }, statusCode: StatusCodes.Status403Forbidden);
 
             try

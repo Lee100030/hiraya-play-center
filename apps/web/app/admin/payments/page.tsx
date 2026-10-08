@@ -29,6 +29,7 @@ import {
   recordStudentAmountReceived,
   updateStudentPayment,
   cancelStudentPayment,
+  deletePaymentRecord,
   programForStudent,
   studentTuitionFee,
   studentTotalPaid,
@@ -994,7 +995,7 @@ function StudentReceivedModal({
                               setError(null);
                               try {
                                 await save(cancelStudentPayment(store, row.paymentId, actor.userId));
-                                setNotice('Payment cancelled. Totals were recalculated.');
+                                setNotice('Payment cancelled. It is no longer counted in Income and expenses.');
                               } catch (err) {
                                 setError(err instanceof Error ? err.message : 'Could not cancel payment.');
                               } finally {
@@ -1004,6 +1005,28 @@ function StudentReceivedModal({
                           }}
                         >
                           Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => {
+                            void (async () => {
+                              if (!window.confirm('Delete this payment from Income and expenses? This cannot be undone.')) return;
+                              setBusy(true);
+                              setError(null);
+                              try {
+                                await save(deletePaymentRecord(store, row.paymentId));
+                                setNotice('Payment deleted. Income and expenses were updated.');
+                              } catch (err) {
+                                setError(err instanceof Error ? err.message : 'Could not delete payment.');
+                              } finally {
+                                setBusy(false);
+                              }
+                            })();
+                          }}
+                        >
+                          Delete
                         </Button>
                         </>
                       )}

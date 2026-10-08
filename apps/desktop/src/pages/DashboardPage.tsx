@@ -1,7 +1,7 @@
 import type { HirayaDatabase } from '@hiraya/types';
-import { currentMonthKey, financeMonth, formatPeso, hklcTaskBoards, isAdmin, isTeacherApplication, operationsStats } from '@hiraya/utils';
-import { FinanceCategoryChart, FinanceColumnChart, FinanceLegend, StatusBadge } from '@hiraya/ui';
-import { type ReactNode, useState } from 'react';
+import { cashFlowLines, currentMonthKey, financeMonth, formatPeso, hklcTaskBoards, isAdmin, isTeacherApplication, operationsStats, removeCashFlowLine, scrubLeftoverCenterRecords } from '@hiraya/utils';
+import { FinanceCategoryChart, FinanceColumnChart, FinanceLegend, FinanceLinesDelete, StatusBadge } from '@hiraya/ui';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Icons } from '../icons';
 import { greeting, statusLabel, type ViewId } from '../lib/views';
 
@@ -31,12 +31,24 @@ export function DashboardPage({
   name,
   role,
   onView,
+  saveStore,
 }: {
   store: HirayaDatabase;
   name: string;
   role?: string;
   onView: (id: ViewId) => void;
+  saveStore?: (next: HirayaDatabase) => Promise<void>;
 }) {
+  const scrubbedLeftovers = useRef(false);
+  useEffect(() => {
+    if (!saveStore || scrubbedLeftovers.current) return;
+    const next = scrubLeftoverCenterRecords(store);
+    if (!next) return;
+    scrubbedLeftovers.current = true;
+    void saveStore(next).catch(() => {
+      scrubbedLeftovers.current = false;
+    });
+  }, [store, saveStore]);
   const today = todayKey();
   const stats = operationsStats(store);
   const pending = store.enrollmentApplications.filter(
@@ -58,7 +70,9 @@ export function DashboardPage({
   const unreadAlerts = (store.alerts || []).filter((row) => !row.read && (row.kind || '').toLowerCase() !== 'direct');
   const activity = [...store.auditLogs].slice(0, 6);
   const [financeMonthKey, setFinanceMonthKey] = useState(currentMonthKey);
+  const [financeBusy, setFinanceBusy] = useState(false);
   const book = isAdmin(role) ? financeMonth(store, financeMonthKey) : null;
+  const financeLines = book ? cashFlowLines(store, book.month) : [];
 
   return (
     <>
@@ -102,8 +116,8 @@ export function DashboardPage({
         <Stat
           icon={<Icons.sessions />}
           label="Session packages"
-          value={(store.sessionPackages || []).length}
-          hint={`${(store.sessionPackages || []).filter((row) => row.status === 'active').length} active`}
+          value={stats.sessionPackages}
+          hint={`${stats.activeSessionPackages} active`}
           onClick={() => onView('sessions')}
         />
         <Stat
@@ -145,6 +159,28 @@ export function DashboardPage({
               <strong>₱{formatPeso(book.opening)}</strong>
             </article>
           </div>
+          {saveStore ? (
+            <FinanceLinesDelete
+              lines={financeLines}
+              busy={financeBusy}
+              onDelete={async (ids) => {
+                setFinanceBusy(true);
+                try {
+                  let next = store;
+                  for (const id of ids) {
+                    try {
+                      next = removeCashFlowLine(next, id);
+                    } catch {
+                      /* already gone */
+                    }
+                  }
+                  await saveStore(next);
+                } finally {
+                  setFinanceBusy(false);
+                }
+              }}
+            />
+          ) : null}
           <div className="finance-charts">
             <article className="panel">
               <h3>Last six months</h3>

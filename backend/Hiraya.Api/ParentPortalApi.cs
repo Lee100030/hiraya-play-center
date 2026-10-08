@@ -15,8 +15,8 @@ public static class ParentPortalApi
             var actor = await ActorAsync(request, repo);
             if (actor is null)
                 return SessionExpired();
-            if (actor.Role != UserRoles.Parent)
-                return Forbidden();
+            if (!UserRoles.IsParent(actor.Role))
+                return Forbidden("This parent page is only for parent accounts.");
             return Results.Json(StoreSanitizer.PublicCopy(new HirayaDatabase { Users = [actor] }).Users[0], JsonDefaults.Options);
         });
 
@@ -25,13 +25,13 @@ public static class ParentPortalApi
             var actor = await ActorAsync(request, repo);
             if (actor is null)
                 return SessionExpired();
-            if (actor.Role != UserRoles.Parent)
-                return Forbidden();
+            if (!UserRoles.IsParent(actor.Role))
+                return Forbidden("This parent page is only for parent accounts.");
             var db = await repo.LoadAsync();
             var parentId = request.Query["parentId"].FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(parentId) &&
                 !string.Equals(parentId, actor.UserId, StringComparison.OrdinalIgnoreCase))
-                return Forbidden();
+                return Forbidden("You can only view your own children.");
             return Results.Json(FamilyPortal.VisibleStudents(db, actor), JsonDefaults.Options);
         });
 
@@ -58,8 +58,10 @@ public static class ParentPortalApi
             await ChildResourceAsync(request, repo, studentId, (db, actor) =>
                 Results.Json(PaymentService.Visible(db, actor).Where(p => PaymentService.ResolveStudentId(db, p) == studentId).ToList(), JsonDefaults.Options)));
 
-        app.MapPost("/api/parent/children", () => Forbidden());
-        app.MapDelete("/api/parent/children/{studentId}", (string studentId) => Forbidden());
+        app.MapPost("/api/parent/children", () =>
+            Forbidden("Children are linked by the center. Ask Hiraya staff to connect your child to this parent account."));
+        app.MapDelete("/api/parent/children/{studentId}", (string studentId) =>
+            Forbidden("Children cannot be removed from the phone app. Ask Hiraya staff if a child should be unlinked."));
 
         app.MapGet("/api/parents/{parentId}/children", async (string parentId, HttpRequest request, IHirayaRepository repo) =>
         {
@@ -67,9 +69,9 @@ public static class ParentPortalApi
             if (actor is null)
                 return SessionExpired();
             if (!Navigation.CanManageStudents(actor.Role))
-                return Forbidden();
+                return Forbidden("Only the center can look up another family's children.");
             var db = await repo.LoadAsync();
-            var parent = db.Users.FirstOrDefault(u => u.UserId == parentId && u.Role == UserRoles.Parent);
+            var parent = db.Users.FirstOrDefault(u => u.UserId == parentId && UserRoles.IsParent(u.Role));
             if (parent is null)
                 return Results.NotFound();
             return Results.Json(FamilyPortal.VisibleStudents(db, parent), JsonDefaults.Options);
@@ -251,11 +253,11 @@ public static class ParentPortalApi
         var actor = await ActorAsync(request, repo);
         if (actor is null)
             return SessionExpired();
-        if (actor.Role != UserRoles.Parent)
-            return Forbidden();
+        if (!UserRoles.IsParent(actor.Role))
+            return Forbidden("This parent page is only for parent accounts.");
         var db = await repo.LoadAsync();
         if (!FamilyAccess.CanViewStudent(db, actor, studentId))
-            return Forbidden();
+            return Forbidden("That child is not linked to this parent account.");
         return ok(db, actor);
     }
 
@@ -300,8 +302,10 @@ public static class ParentPortalApi
         return Results.Json(new { error = ex.Message }, statusCode: notFound ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest);
     }
 
-    private static IResult Forbidden() =>
-        Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+    private static IResult Forbidden(string? message = null) =>
+        Results.Json(
+            new { error = string.IsNullOrWhiteSpace(message) ? "You do not have access to that on this account." : message },
+            statusCode: StatusCodes.Status403Forbidden);
 
     internal static string ClientHost(HttpRequest request) =>
         request.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";

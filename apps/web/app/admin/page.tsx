@@ -2,11 +2,11 @@
 
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/components/StoreProvider';
-import { Loading, StatusBadge } from '@hiraya/ui';
+import { FinanceLinesDelete, Loading, StatusBadge } from '@hiraya/ui';
 import { FinanceCategoryChart, FinanceColumnChart, FinanceLegend } from '@hiraya/ui';
-import { centerTuitionTotals, currentMonthKey, financeMonth, formatDate, formatPeso, isAdmin, isTeacherApplication, operationsStats } from '@hiraya/utils';
+import { cashFlowLines, centerTuitionTotals, currentMonthKey, financeMonth, formatDate, formatPeso, isAdmin, isTeacherApplication, operationsStats, removeCashFlowLine, scrubLeftoverCenterRecords } from '@hiraya/utils';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 
 function monthKey(iso: string) {
@@ -17,12 +17,24 @@ function monthKey(iso: string) {
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
-  const { store, loading, error } = useStore();
+  const { store, loading, error, save } = useStore();
+  const scrubbedLeftovers = useRef(false);
+  useEffect(() => {
+    if (loading || scrubbedLeftovers.current) return;
+    const next = scrubLeftoverCenterRecords(store);
+    if (!next) return;
+    scrubbedLeftovers.current = true;
+    void save(next).catch(() => {
+      scrubbedLeftovers.current = false;
+    });
+  }, [loading, store, save]);
   const [sort, setSort] = useState<'date' | 'name'>('date');
   const [page, setPage] = useState(0);
   const [query, setQuery] = useState('');
   const [financeMonthKey, setFinanceMonthKey] = useState(currentMonthKey);
+  const [financeBusy, setFinanceBusy] = useState(false);
   const book = isAdmin(user?.role) ? financeMonth(store, financeMonthKey) : null;
+  const financeLines = book ? cashFlowLines(store, book.month) : [];
 
   const stats = operationsStats(store);
   const learnerApplications = store.enrollmentApplications.filter((row) => !isTeacherApplication(row));
@@ -174,6 +186,26 @@ export default function AdminDashboardPage() {
               <strong>₱{formatPeso(book.opening)}</strong>
             </article>
           </div>
+          <FinanceLinesDelete
+            lines={financeLines}
+            busy={financeBusy}
+            onDelete={async (ids) => {
+              setFinanceBusy(true);
+              try {
+                let next = store;
+                for (const id of ids) {
+                  try {
+                    next = removeCashFlowLine(next, id);
+                  } catch {
+                    /* already gone */
+                  }
+                }
+                await save(next);
+              } finally {
+                setFinanceBusy(false);
+              }
+            }}
+          />
           <div className="finance-charts">
             <section className="hlc-card chart-panel">
               <h2>Last six months</h2>

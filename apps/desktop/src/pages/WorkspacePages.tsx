@@ -1,5 +1,5 @@
 import type { HirayaDatabase, HirayaUser } from '@hiraya/types';
-import { centerTuitionTotals, displayName, formatDate, operationsStats, studentDisplay, type ManagementLaneId } from '@hiraya/utils';
+import { centerTuitionTotals, displayName, formatDate, inboxAlerts, isAlertRead, markInboxRead, operationsStats, removeAlerts, studentDisplay, type ManagementLaneId } from '@hiraya/utils';
 import { Button } from '@hiraya/ui';
 import { RecordTable, StatusCell } from '../components/RecordTable';
 import { PageHeader } from '../components/PageHeader';
@@ -111,20 +111,44 @@ export function WorkspacePages({
   }
 
   if (view === 'notifications') {
+    const rows = inboxAlerts(store.alerts, user.userId);
     return (
       <RecordTable
         title={PAGE_COPY.notifications.title}
         description={PAGE_COPY.notifications.description}
-        rows={store.alerts.filter((row) => (row.kind || '').toLowerCase() !== 'direct')}
+        rows={rows}
+        rowKey={(row) => row.alertId}
         search={(row, q) => `${row.title} ${row.message} ${row.kind}`.toLowerCase().includes(q)}
         searchPlaceholder="Search notifications"
         emptyTitle="No notifications"
         emptyHint="Alerts for this workspace will appear here."
-        statusOf={(row) => (row.read ? 'read' : 'unread')}
+        statusOf={(row) => (isAlertRead(row) ? 'read' : 'unread')}
+        crud={{
+          deleteLabel: 'Delete',
+          onDelete: async (selected) => {
+            if (!selected.length) return false;
+            if (!window.confirm(`Delete ${selected.length === 1 ? 'this notification' : `${selected.length} notifications`}?`)) {
+              return false;
+            }
+            await saveStore({ ...store, alerts: removeAlerts(store.alerts, selected.map((row) => row.alertId)) });
+          },
+          onRefresh,
+        }}
+        actions={
+          rows.some((row) => !isAlertRead(row)) ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void saveStore({ ...store, alerts: markInboxRead(store.alerts, user.userId) })}
+            >
+              Mark all read
+            </Button>
+          ) : null
+        }
         columns={[
           { key: 'title', header: 'Title', render: (row) => row.title || row.kind },
           { key: 'msg', header: 'Message', render: (row) => row.message || '—' },
-          { key: 'status', header: 'Status', render: (row) => <StatusCell value={row.read ? 'read' : 'unread'} /> },
+          { key: 'status', header: 'Status', render: (row) => <StatusCell value={isAlertRead(row) ? 'read' : 'unread'} /> },
           { key: 'date', header: 'Date', render: (row) => formatDate(row.createdAt) },
         ]}
       />

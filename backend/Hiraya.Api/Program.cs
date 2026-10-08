@@ -35,50 +35,10 @@ else if (builder.Environment.IsDevelopment())
 
 builder.Services.AddCors(options =>
 {
+    // Sessions travel in X-Hiraya-Session, not cookies. Expo / okhttp often send
+    // Origin: null or a Metro LAN host; a tight origin list answers those with 403 Forbidden.
     options.AddDefaultPolicy(policy =>
-    {
-        var origins = new List<string>
-        {
-            "http://127.0.0.1:5288",
-            "http://localhost:5288",
-            "https://127.0.0.1:5288",
-            "https://localhost:5288",
-            "http://127.0.0.1:5000",
-            "http://localhost:5000",
-            "http://127.0.0.1:3000",
-            "http://localhost:3000",
-            "http://127.0.0.1:3001",
-            "http://localhost:3001",
-            "http://127.0.0.1:5173",
-            "http://localhost:5173",
-            "http://127.0.0.1:8081",
-            "http://localhost:8081",
-            "https://www.hirayalearningcenter.app",
-            "https://hirayalearningcenter.app",
-            "https://hiraya-play-center-web.vercel.app"
-        };
-        var publicUrl = Environment.GetEnvironmentVariable("HIRAYA_PUBLIC_URL")?.Trim().TrimEnd('/');
-        if (!string.IsNullOrWhiteSpace(publicUrl))
-            origins.Add(publicUrl);
-
-        var extra = Environment.GetEnvironmentVariable("HIRAYA_CORS_ORIGINS");
-        if (!string.IsNullOrWhiteSpace(extra))
-        {
-            foreach (var origin in extra.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                origins.Add(origin.TrimEnd('/'));
-        }
-
-        var openCors = Environment.GetEnvironmentVariable("HIRAYA_ALLOW_OPEN_CORS");
-        if (builder.Environment.IsDevelopment() ||
-            string.Equals(openCors, "1", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(openCors, "true", StringComparison.OrdinalIgnoreCase))
-        {
-            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-            return;
-        }
-
-        policy.WithOrigins(origins.ToArray()).AllowAnyHeader().AllowAnyMethod();
-    });
+        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
 });
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -256,15 +216,26 @@ app.MapPost("/api/auth/login", async (LoginRequest body, HttpRequest request, Po
                         || string.Equals(request.Headers["X-Hiraya-Client"], "mobile", StringComparison.OrdinalIgnoreCase);
         if (fromPhone)
         {
-            await repo.MutateAsync(async db =>
+            var whoUser = live;
+            _ = Task.Run(async () =>
             {
-                var name = string.IsNullOrWhiteSpace(live.Fullname) ? live.Username : live.Fullname.Trim();
-                var who = string.IsNullOrWhiteSpace(live.Email) ? name : $"{name} ({live.Email})";
-                var message = $"{who} signed in on the phone.";
-                AuditService.Append(db, live, AuditModules.Auth, "login", "user", live.UserId, message);
-                var admins = NotificationService.Recipients(db, NotificationAudiences.Admins);
-                NotificationService.PushToUsers(db, admins.Select(admin => admin.UserId), message, "mobile-login", "Phone sign-in");
-                await Task.CompletedTask;
+                try
+                {
+                    await repo.MutateAsync(async db =>
+                    {
+                        var name = string.IsNullOrWhiteSpace(whoUser.Fullname) ? whoUser.Username : whoUser.Fullname.Trim();
+                        var who = string.IsNullOrWhiteSpace(whoUser.Email) ? name : $"{name} ({whoUser.Email})";
+                        var message = $"{who} signed in on the phone.";
+                        AuditService.Append(db, whoUser, AuditModules.Auth, "login", "user", whoUser.UserId, message);
+                        var admins = NotificationService.Recipients(db, NotificationAudiences.Admins);
+                        NotificationService.PushToUsers(db, admins.Select(admin => admin.UserId), message, "mobile-login", "Phone sign-in");
+                        await Task.CompletedTask;
+                    });
+                }
+                catch
+                {
+                    // Phone sign-in must not wait on a full store rewrite.
+                }
             });
         }
         var token = SessionTokens.Issue(
@@ -313,7 +284,7 @@ app.MapPost("/api/auth/password/request-code", async (
     if (actor is null)
         return Results.Unauthorized();
     if (!UserRoles.IsAdmin(actor.Role))
-        return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+        return Results.Json(new { error = "Only the Super Administrator can request a password verification code." }, statusCode: StatusCodes.Status403Forbidden);
     if (!throttle.Allow($"pw-code:{actor.UserId}", 6, TimeSpan.FromMinutes(15)))
         return Results.Json(new { error = SensitiveActionCodes.TooMany }, statusCode: StatusCodes.Status429TooManyRequests);
     if (!PasswordHasher.Verify(body.CurrentPassword, actor.Password))
@@ -352,7 +323,7 @@ app.MapPost("/api/auth/password", async (
     var targetId = string.IsNullOrWhiteSpace(body.UserId) ? actor.UserId : body.UserId;
     var changingOther = !string.Equals(actor.UserId, targetId, StringComparison.OrdinalIgnoreCase);
     if (changingOther && !Navigation.CanManageUsers(actor.Role))
-        return Results.Json(new { error = "Forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+        return Results.Json(new { error = "You can only change your own password on the phone app." }, statusCode: StatusCodes.Status403Forbidden);
 
     try
     {

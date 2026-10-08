@@ -1,4 +1,4 @@
-import { hirayaApiUnavailable, proxyToHirayaApi } from '@/lib/server/backend';
+import { apiCorsPreflight, hirayaApiUnavailable, proxyToHirayaApi } from '@/lib/server/backend';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -15,4 +15,8 @@ export async function POST(request: Request) {
   });
   const proxied = await proxyToHirayaApi(tagged, '/api/auth/login');
   return proxied || hirayaApiUnavailable();
+}
+
+export function OPTIONS() {
+  return apiCorsPreflight();
 }

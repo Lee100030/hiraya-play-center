@@ -1,5 +1,5 @@
 import type { HirayaDatabase, HirayaUser, Student } from '@hiraya/types';
-import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, displayName, downloadStudentRecord, isStudentHereToday, laneLabel, paymentBalanceLabel, programForLane, programForStudent, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentPaymentBalance, studentTuitionFee, upsertStudentBalance, upsertStudentSessions, type ManagementLaneId } from '@hiraya/utils';
+import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, displayName, downloadStudentRecord, isStudentHereToday, laneLabel, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentPaymentBalance, studentTuitionFee, upsertStudentBalance, upsertStudentSessions, type ManagementLaneId } from '@hiraya/utils';
 import { Field, Input, ProgramSpecialtySelect, Select, Button } from '@hiraya/ui';
 import { FormEvent, useState } from 'react';
 import { DirectMessageModal } from '../components/DirectMessageModal';
@@ -57,11 +57,6 @@ export function StudentsPage({
     ? (store.studentDocuments || []).filter((item) => item.studentId === viewing.studentId).length
     : 0;
   const editorSessions = sessionLeftFor(store, current?.studentId || '');
-  const suggestedPackage = editorSessions.hasPackage
-    ? 0
-    : programForStudent(store, current?.studentId || '')?.packageSessions ||
-      (lane ? programForLane(store, lane)?.packageSessions : 0) ||
-      0;
   const editorBill = studentPaymentBalance(store, current?.studentId || '');
 
   function studentPhoto(row?: Student) {
@@ -282,19 +277,16 @@ export function StudentsPage({
     if (!rows.length) return false;
     if (
       !window.confirm(
-        `Delete ${rows.length === 1 ? studentDisplay(rows[0]) : `${rows.length} students`} and related class enrollments? Prefer Archive unless this was added by mistake.`,
+        `Delete ${rows.length === 1 ? studentDisplay(rows[0]) : `${rows.length} students`}, related enrollments, session packages, and counted payments? Prefer Archive unless this was added by mistake.`,
       )
     ) {
       return false;
     }
-    const ids = new Set(rows.map((row) => row.studentId));
     await persist(
-      {
-        ...store,
-        students: store.students.filter((item) => !ids.has(item.studentId)),
-        enrollments: store.enrollments.filter((item) => !ids.has(item.studentId)),
-        parentStudents: store.parentStudents.filter((item) => !ids.has(item.studentId)),
-      },
+      removeStudentLinkedRecords(
+        store,
+        rows.map((row) => row.studentId),
+      ),
       rows.length === 1 ? 'Student deleted.' : `${rows.length} students deleted.`,
     );
   }
@@ -662,7 +654,7 @@ export function StudentsPage({
                 name="sessionsRemaining"
                 type="number"
                 min={0}
-                defaultValue={editorSessions.hasPackage ? editorSessions.remaining : suggestedPackage || ''}
+                defaultValue={editorSessions.hasPackage ? editorSessions.remaining : ''}
                 placeholder="10"
               />
             </Field>
@@ -671,7 +663,7 @@ export function StudentsPage({
                 name="sessionsTotal"
                 type="number"
                 min={0}
-                defaultValue={editorSessions.hasPackage ? editorSessions.total : suggestedPackage || ''}
+                defaultValue={editorSessions.hasPackage ? editorSessions.total : ''}
                 placeholder="10"
               />
             </Field>

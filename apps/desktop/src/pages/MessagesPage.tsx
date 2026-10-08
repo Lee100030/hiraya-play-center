@@ -4,12 +4,14 @@ import {
   groupMemberNames,
   groupThreadKey,
   directThreadKey,
+  isAlertRead,
   markThreadRead,
   messageContacts,
   myChatGroups,
   packedMemberIds,
   roleLabel,
   threadMessages,
+  unreadDirectAlerts,
 } from '@hiraya/utils';
 import { Button, Field, Input, PersonAvatar, Textarea } from '@hiraya/ui';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -156,7 +158,7 @@ export function MessengerInbox({
         const threadId = directThreadKey(user.userId, person.userId);
         const thread = threadMessages(store.alerts, user.userId, threadId);
         const last = thread[thread.length - 1];
-        const unread = thread.some((item) => !item.read && item.status !== 'sent');
+        const unread = thread.some((item) => !isAlertRead(item) && item.status !== 'sent');
         return { kind: 'dm' as const, person, threadId, last, unread };
       })
       .filter(
@@ -173,7 +175,7 @@ export function MessengerInbox({
         const threadId = groupThreadKey(group.groupId);
         const thread = threadMessages(store.alerts, user.userId, threadId);
         const last = thread[thread.length - 1];
-        const unread = thread.some((item) => !item.read && item.status !== 'sent');
+        const unread = thread.some((item) => !isAlertRead(item) && item.status !== 'sent');
         return { kind: 'group' as const, group, threadId, last, unread };
       })
       .filter((row) => !q || `${row.group.name} ${groupMemberNames(store, row.group)}`.toLowerCase().includes(q));
@@ -185,6 +187,27 @@ export function MessengerInbox({
       return (b.last?.createdAt || '').localeCompare(a.last?.createdAt || '');
     });
   }, [groups, people]);
+  const ghostRead = useRef(false);
+  useEffect(() => {
+    if (ghostRead.current) return;
+    const known = new Set(inbox.map((row) => row.threadId));
+    const leftover = unreadDirectAlerts(store.alerts, user.userId).filter(
+      (item) => !known.has(item.relatedRecordId || ''),
+    );
+    if (!leftover.length) return;
+    ghostRead.current = true;
+    const ids = new Set(leftover.map((item) => item.alertId));
+    const now = new Date().toISOString();
+    const next = {
+      ...store,
+      alerts: store.alerts.map((item) =>
+        ids.has(item.alertId) ? { ...item, read: true, status: 'read', readAt: now } : item,
+      ),
+    };
+    void saveStore(next).catch(() => {
+      ghostRead.current = false;
+    });
+  }, [inbox, saveStore, store, user.userId]);
 
   const rows = active ? threadMessages(store.alerts, user.userId, active.threadId) : [];
   const candidateMembers = store.users.filter(

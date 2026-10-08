@@ -1,4 +1,5 @@
 import type { HirayaDatabase, SessionPackage } from '@hiraya/types';
+import { isTeacherPayment } from './paymentLanes';
 
 function newId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -28,6 +29,64 @@ function sameStudent(rowId: string, studentId: string) {
 
 function packageStatus(status: string | undefined) {
   return (status || '').trim().toLowerCase();
+}
+
+function studentStillOnRoll(store: HirayaDatabase, studentId: string) {
+  const student = (store.students || []).find((row) => sameStudent(row.studentId, studentId));
+  if (!student) return false;
+  const status = (student.status || 'active').trim().toLowerCase();
+  return status !== 'archived' && status !== 'inactive' && status !== 'deleted';
+}
+
+function samePackageList(left: SessionPackage[], right: SessionPackage[]) {
+  if (left.length !== right.length) return false;
+  const ids = new Set(right.map((row) => row.packageId));
+  return left.every((row) => ids.has(row.packageId));
+}
+
+/** One current package per student still on the roll. Leftover and orphan rows are ignored. */
+export function liveSessionPackages(store: HirayaDatabase): SessionPackage[] {
+  const seen = new Set<string>();
+  const live: SessionPackage[] = [];
+  for (const student of store.students || []) {
+    if (!studentStillOnRoll(store, student.studentId)) continue;
+    const row = studentSessionPackage(store, student.studentId);
+    if (!row || seen.has(row.packageId)) continue;
+    seen.add(row.packageId);
+    live.push(row);
+  }
+  return live;
+}
+
+export function sessionPackageStats(store: HirayaDatabase) {
+  const live = liveSessionPackages(store);
+  const active = live.filter((row) => {
+    const status = packageStatus(row.status);
+    return status === 'active' || status === 'almost_finished' || !status;
+  });
+  return { total: live.length, active: active.length };
+}
+
+/** Drop extra package rows (deleted students, duplicates) so Session packages stops counting leftovers. */
+export function scrubLeftoverSessionPackages(store: HirayaDatabase): HirayaDatabase | null {
+  const keep = new Set(liveSessionPackages(store).map((row) => row.packageId));
+  const current = store.sessionPackages || [];
+  const next = current.filter((row) => keep.has(row.packageId));
+  const history = (store.sessionHistory || []).filter((row) => keep.has(row.packageId));
+  if (samePackageList(current, next) && history.length === (store.sessionHistory || []).length) return null;
+  return { ...store, sessionPackages: next, sessionHistory: history };
+}
+
+export function dropStudentSessionBalance(store: HirayaDatabase, studentId: string): HirayaDatabase {
+  const id = (studentId || '').trim();
+  if (!id) return store;
+  const packs = store.sessionPackages || [];
+  if (!packs.some((row) => sameStudent(row.studentId, id))) return store;
+  return {
+    ...store,
+    sessionPackages: packs.filter((row) => !sameStudent(row.studentId, id)),
+    sessionHistory: (store.sessionHistory || []).filter((row) => !sameStudent(row.studentId, id)),
+  };
 }
 
 /** The one package that counts for a student: newest non-suspended row. */
@@ -134,10 +193,13 @@ export function upsertStudentSessions(
   totalInput: number | string,
   programId = '',
 ): HirayaDatabase {
-  const remaining = Math.max(0, Number(remainingInput) || 0);
-  const total = Math.max(remaining, Math.max(0, Number(totalInput) || 0));
+  const remainingRaw = String(remainingInput ?? '').trim();
+  const totalRaw = String(totalInput ?? '').trim();
+  if (!remainingRaw && !totalRaw) return store;
+  const remaining = Math.max(0, Number(remainingRaw) || 0);
+  const total = Math.max(remaining, Math.max(0, Number(totalRaw) || 0));
   const latest = studentSessionPackage(store, studentId);
-  if (total <= 0) return store;
+  if (total <= 0) return dropStudentSessionBalance(store, studentId);
   const now = new Date().toISOString();
   const next = normalizeSessionPackage({
     packageId: latest?.packageId || newId('pkg'),
@@ -153,6 +215,21 @@ export function upsertStudentSessions(
     updatedAt: now,
   });
   return placeStudentSessionPackage(store, next);
+}
+
+/** Drop this student’s session package, use history, and counted payments so Income and expenses clear. */
+export function dropStudentSessionPackage(store: HirayaDatabase, studentId: string): HirayaDatabase {
+  const id = (studentId || '').trim();
+  if (!id) throw new Error('Student is required.');
+  const packs = store.sessionPackages || [];
+  if (!packs.some((row) => sameStudent(row.studentId, id))) {
+    throw new Error('No session package to delete.');
+  }
+  const next = dropStudentSessionBalance(store, id);
+  return {
+    ...next,
+    payments: (next.payments || []).filter((row) => isTeacherPayment(row) || !sameStudent(row.studentId, id)),
+  };
 }
 
 export function completeOneSession(

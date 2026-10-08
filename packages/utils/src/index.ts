@@ -189,7 +189,7 @@ export function statusTone(status?: string): 'success' | 'warn' | 'danger' | 'mu
   return 'muted';
 }
 
-export { remainingSessions, remainingSessionsFor, normalizeSessionPackage, completeOneSession, upsertStudentSessions, studentSessionPackage, studentSessionAccount, placeStudentSessionPackage, useOneSession } from './sessionPackage';
+export { remainingSessions, remainingSessionsFor, normalizeSessionPackage, completeOneSession, upsertStudentSessions, studentSessionPackage, studentSessionAccount, placeStudentSessionPackage, dropStudentSessionPackage, dropStudentSessionBalance, liveSessionPackages, sessionPackageStats, scrubLeftoverSessionPackages, useOneSession } from './sessionPackage';
 export {
   EXPENSE_CATEGORIES,
   INCOME_BUCKETS,
@@ -210,6 +210,9 @@ export {
   monthLabel,
   openingBalanceFor,
   remittanceForDay,
+  removeCashFlowLine,
+  scrubLeftoverCenterRecords,
+  scrubLeftoverFinance,
   removeCenterExpense,
   teacherSalaryForMonth,
   upsertCenterExpense,
@@ -252,6 +255,8 @@ export {
   recordStudentAmountReceived,
   updateStudentPayment,
   cancelStudentPayment,
+  deletePaymentRecord,
+  removeStudentLinkedRecords,
   studentTuitionFee,
   studentTotalPaid,
   studentRemainingBalance,
@@ -324,17 +329,25 @@ export {
   teacherIdForStudent,
 } from './assignments';
 export {
+  alertVisibleTo,
   areCoParents,
   canDirectMessage,
   directThreadKey,
   groupMemberNames,
   groupThreadKey,
+  inboxAlerts,
+  isAlertRead,
   isDirectAlert,
+  markAllDirectsRead,
+  markInboxRead,
   markThreadRead,
   messageContacts,
   myChatGroups,
   packedMemberIds,
+  removeAlerts,
   threadMessages,
+  unreadDirectAlerts,
+  unreadInboxAlerts,
 } from './messaging';
 export {
   MANAGEMENT_LANES,

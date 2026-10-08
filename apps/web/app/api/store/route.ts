@@ -12,3 +12,8 @@ export async function PUT(request: Request) {
   const proxied = await proxyToHirayaApi(request, '/api/store');
   return proxied || hirayaApiUnavailable();
 }
+
+export async function OPTIONS(request: Request) {
+  const proxied = await proxyToHirayaApi(request, '/api/store');
+  return proxied || hirayaApiUnavailable();
+}

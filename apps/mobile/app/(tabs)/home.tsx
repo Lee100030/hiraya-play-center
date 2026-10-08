@@ -23,7 +23,7 @@ import {
   todayAttendanceStatus,
   todayKey,
 } from '../../src/selectors';
-import { formatPeso, studentPaymentBalance } from '@hiraya/utils';
+import { formatPeso, studentPaymentBalance, unreadInboxAlerts } from '@hiraya/utils';
 import { isMobileParent, isMobileTeacher } from '../../src/rbac';
 import { colors, space } from '../../src/theme';
 
@@ -38,7 +38,7 @@ export default function HomeTab() {
   const teacher = isMobileTeacher(user?.role);
   const child = family ? selected : undefined;
   const today = schedulesForDay(store, todayKey(), child, teacher ? user?.userId : undefined);
-  const unread = store.alerts.filter((item) => !item.read && item.kind !== 'direct').length;
+  const unread = unreadInboxAlerts(store.alerts, user?.userId || '').length;
   const upcoming = nextHighlight(store, child, teacher ? user?.userId : undefined);
   const remaining = remainingForStudent(store, child?.studentId);
   const balance = child ? studentPaymentBalance(store, child.studentId) : null;

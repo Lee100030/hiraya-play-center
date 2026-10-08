@@ -10,6 +10,7 @@ import { MANAGEMENT_LANES, managementLanesFor, specialtyLaneId, statusLabel, sta
 import type { HirayaDatabase } from '@hiraya/types';
 
 export { CashFlowSheet, type CashFlowDraft } from './CashFlowSheet';
+export { FinanceLinesDelete } from './FinanceLinesDelete';
 export { FinanceCategoryChart, FinanceColumnChart, FinanceLegend, type FinanceBar, type FinanceSlice } from './FinanceCharts';
 export { PersonAvatar, personInitial, type PersonAvatarSize } from './PersonAvatar';
 export { PhotoCardPicker, type PhotoCardPerson } from './PhotoCardPicker';

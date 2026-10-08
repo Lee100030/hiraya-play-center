@@ -10,18 +10,20 @@ import { Button, EmptyState, Field, Input, Loading, Select, StatusBadge, emptyCe
 import {
   completeOneSession,
   compareStudentNames,
+  dropStudentSessionPackage,
   laneLabel,
   newId,
   normalizeSessionPackage,
   parsePeopleLane,
   placeStudentSessionPackage,
+  scrubLeftoverSessionPackages,
   sessionLeftFor,
   studentDisplay,
   studentSessionPackage,
   studentInLane,
 } from '@hiraya/utils';
 import type { SessionPackage, Student } from '@hiraya/types';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 type SessionRow = {
@@ -36,6 +38,16 @@ export default function AdminSessionsPage() {
   const lane = parsePeopleLane(useSearchParams().get('lane'), store);
   const [editing, setEditing] = useState<SessionPackage | 'new' | null>(null);
   const [error, setError] = useState('');
+  const scrubbedPackages = useRef(false);
+  useEffect(() => {
+    if (loading || scrubbedPackages.current) return;
+    const next = scrubLeftoverSessionPackages(store);
+    if (!next) return;
+    scrubbedPackages.current = true;
+    void save(next).catch(() => {
+      scrubbedPackages.current = false;
+    });
+  }, [loading, store, save]);
   const studentOptions = useMemo(
     () => store.students.filter((item) => studentInLane(store, item, lane)).sort(compareStudentNames),
     [store, lane],
@@ -76,6 +88,25 @@ export default function AdminSessionsPage() {
     setError('');
     await save(placeStudentSessionPackage(store, next));
     setEditing(null);
+  }
+
+  async function deletePackage(row: SessionRow) {
+    if (!row.latest) {
+      window.alert('This student has no session package to delete.');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Delete the session package for ${studentDisplay(row.student)}? Counted payments for this student will also leave Income and expenses.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await save(dropStudentSessionPackage(store, row.student.studentId));
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not delete package');
+    }
   }
 
   async function completeOne(row: SessionRow) {
@@ -166,6 +197,11 @@ export default function AdminSessionsPage() {
                 <button type="button" className="table-action" onClick={() => void completeOne(row)}>
                   Complete one
                 </button>
+                {row.latest ? (
+                  <button type="button" className="table-action" onClick={() => void deletePackage(row)}>
+                    Delete
+                  </button>
+                ) : null}
               </div>
             ),
           },
@@ -186,6 +222,11 @@ export default function AdminSessionsPage() {
               <button type="button" className="icon-btn" onClick={() => void completeOne(row)}>
                 Complete one
               </button>
+              {row.latest ? (
+                <button type="button" className="icon-btn" onClick={() => void deletePackage(row)}>
+                  Delete
+                </button>
+              ) : null}
             </div>
           </article>
         )}

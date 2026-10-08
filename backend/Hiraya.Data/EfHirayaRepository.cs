@@ -9,10 +9,14 @@ namespace Hiraya.Data;
 
 public class EfHirayaRepository : IHirayaRepository
 {
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(20);
+
     private readonly IDbContextFactory<HirayaLearningCenterDbContext> _factory;
     private readonly ILogger<EfHirayaRepository> _logger;
     private readonly IEmailSender _email;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private HirayaDatabase? _cache;
+    private DateTime _cacheAtUtc;
 
     public EfHirayaRepository(
         IDbContextFactory<HirayaLearningCenterDbContext> factory,
@@ -34,6 +38,7 @@ public class EfHirayaRepository : IHirayaRepository
             var db = await LoadUnlockedAsync(ct);
             await mutator(db);
             await SaveUnlockedAsync(db, ct);
+            Remember(db);
         }
         finally
         {
@@ -43,10 +48,18 @@ public class EfHirayaRepository : IHirayaRepository
 
     public async Task<HirayaDatabase> LoadAsync(CancellationToken ct = default)
     {
+        var hit = SnapshotCache();
+        if (hit is not null)
+            return hit;
         await _gate.WaitAsync(ct);
         try
         {
-            return await LoadUnlockedAsync(ct);
+            hit = SnapshotCache();
+            if (hit is not null)
+                return hit;
+            var data = await LoadUnlockedAsync(ct);
+            Remember(data);
+            return Clone(data);
         }
         finally
         {
@@ -60,6 +73,7 @@ public class EfHirayaRepository : IHirayaRepository
         try
         {
             await SaveUnlockedAsync(database, ct);
+            Remember(database);
         }
         finally
         {
@@ -82,6 +96,7 @@ public class EfHirayaRepository : IHirayaRepository
             {
                 merged = StoreSanitizer.MergeStoreWrite(current, edited, actor);
                 await SaveChangedAsync(current, merged, ct);
+                Remember(merged);
                 notices = SessionNoticeMail.Take();
             }
             finally
@@ -451,6 +466,20 @@ public class EfHirayaRepository : IHirayaRepository
                 Status = "active"
             });
         }
+    }
+
+    private HirayaDatabase? SnapshotCache()
+    {
+        var cache = _cache;
+        if (cache is null || DateTime.UtcNow - _cacheAtUtc >= CacheTtl)
+            return null;
+        return Clone(cache);
+    }
+
+    private void Remember(HirayaDatabase data)
+    {
+        _cache = Clone(data);
+        _cacheAtUtc = DateTime.UtcNow;
     }
 
     private static HirayaDatabase Clone(HirayaDatabase db)

@@ -8,10 +8,10 @@ public static class ProductAccounts
         "Only the Super Administrator, teachers, and parents may sign in. Children use a parent account.";
 
     public static bool MaySignIn(string? role) =>
-        role is UserRoles.SuperAdmin or UserRoles.Teacher or UserRoles.Parent;
+        UserRoles.Is(role, UserRoles.SuperAdmin, UserRoles.Teacher, UserRoles.Parent);
 
     public static bool IsAssignableRole(string? role) =>
-        role is UserRoles.Teacher or UserRoles.Parent;
+        UserRoles.Is(role, UserRoles.Teacher, UserRoles.Parent);
 
     public static void NormalizeDirectory(HirayaDatabase db)
     {

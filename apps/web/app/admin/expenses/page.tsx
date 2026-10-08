@@ -2,7 +2,7 @@
 
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { useStore } from '@/components/StoreProvider';
-import { Button, CashFlowSheet, EmptyState, Loading, type CashFlowDraft } from '@hiraya/ui';
+import { Button, CashFlowSheet, EmptyState, FinanceLinesDelete, Loading, type CashFlowDraft } from '@hiraya/ui';
 import {
   cashFlowLines,
   cashFlowTeacherNames,
@@ -11,11 +11,12 @@ import {
   formatPeso,
   incomeBucketLabel,
   remittanceForDay,
-  removeCenterExpense,
+  removeCashFlowLine,
+  scrubLeftoverCenterRecords,
   upsertCenterExpense,
   upsertOpeningBalance,
 } from '@hiraya/utils';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 function newId() {
   return `exp_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -38,10 +39,21 @@ export default function AdminExpensesPage() {
   const lines = useMemo(() => cashFlowLines(store, book.month), [store, book.month]);
   const teachers = useMemo(() => cashFlowTeacherNames(store), [store]);
   const remittance = remittanceForDay(store, day);
+  const scrubbedLeftovers = useRef(false);
 
   useEffect(() => {
     setOpening(book.opening ? String(book.opening) : '');
   }, [book.month, book.opening]);
+
+  useEffect(() => {
+    if (loading || scrubbedLeftovers.current) return;
+    const next = scrubLeftoverCenterRecords(store);
+    if (!next) return;
+    scrubbedLeftovers.current = true;
+    void save(next).catch(() => {
+      scrubbedLeftovers.current = false;
+    });
+  }, [loading, store, save]);
 
   async function saveOpening(event: FormEvent) {
     event.preventDefault();
@@ -93,7 +105,7 @@ export default function AdminExpensesPage() {
     setError('');
     setMessage('');
     try {
-      await save(removeCenterExpense(store, expenseId));
+      await save(removeCashFlowLine(store, expenseId));
       setMessage('Row removed.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not remove that row.');
@@ -131,6 +143,31 @@ export default function AdminExpensesPage() {
           <strong>₱{formatPeso(book.net)}</strong>
         </article>
       </div>
+      <FinanceLinesDelete
+        lines={lines}
+        busy={busy}
+        onDelete={async (ids) => {
+          setBusy(true);
+          setError('');
+          setMessage('');
+          try {
+            let next = store;
+            for (const id of ids) {
+              try {
+                next = removeCashFlowLine(next, id);
+              } catch {
+                /* already gone */
+              }
+            }
+            await save(next);
+            setMessage(ids.length === 1 ? 'Row removed from income and expenses.' : `${ids.length} rows removed from income and expenses.`);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not remove those rows.');
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
       <form className="lane-session-package cash-opening" onSubmit={(event) => void saveOpening(event)}>
         <label>
           Opening cash for {book.label}

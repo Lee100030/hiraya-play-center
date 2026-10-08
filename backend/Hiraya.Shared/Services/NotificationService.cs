@@ -172,6 +172,13 @@ public class NotificationService
         return StudentIdsForParent(db, parentB).Overlaps(kidsA);
     }
 
+    static bool TeacherTeachesParentsKids(HirayaDatabase db, HirayaUser parent, string teacherId)
+    {
+        var kids = StudentIdsForParent(db, parent.UserId);
+        if (kids.Count == 0) return false;
+        return FamilyAccess.AssignedStudentIdsForTeacher(db, teacherId).Overlaps(kids);
+    }
+
     public static HashSet<string> StudentIdsForParent(HirayaDatabase db, string parentId)
     {
         var ids = db.ParentStudents
@@ -192,14 +199,17 @@ public class NotificationService
             return false;
 
         if (UserRoles.IsAdmin(actor.Role))
-            return target.Role is UserRoles.Teacher or UserRoles.Parent || UserRoles.IsAdmin(target.Role);
+            return UserRoles.IsTeacher(target.Role) || UserRoles.IsParent(target.Role) || UserRoles.IsAdmin(target.Role);
 
-        if (actor.Role == UserRoles.Teacher)
-            return target.Role == UserRoles.Teacher || UserRoles.IsAdmin(target.Role);
+        if (UserRoles.IsTeacher(actor.Role))
+            return UserRoles.IsTeacher(target.Role) ||
+                   UserRoles.IsAdmin(target.Role) ||
+                   (UserRoles.IsParent(target.Role) && TeacherTeachesParentsKids(db, target, actor.UserId));
 
-        if (actor.Role == UserRoles.Parent)
+        if (UserRoles.IsParent(actor.Role))
             return UserRoles.IsAdmin(target.Role) ||
-                   (target.Role == UserRoles.Parent && AreCoParents(db, actor.UserId, target.UserId));
+                   (UserRoles.IsParent(target.Role) && AreCoParents(db, actor.UserId, target.UserId)) ||
+                   (UserRoles.IsTeacher(target.Role) && TeacherTeachesParentsKids(db, actor, target.UserId));
 
         return false;
     }

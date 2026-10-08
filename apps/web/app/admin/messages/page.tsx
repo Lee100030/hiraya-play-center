@@ -11,6 +11,7 @@ import {
   directThreadKey,
   groupMemberNames,
   groupThreadKey,
+  isAlertRead,
   markThreadRead,
   messageContacts,
   myChatGroups,
@@ -91,7 +92,7 @@ export default function AdminMessagesPage() {
         messages,
         preview: last?.message || 'Start a conversation',
         timestamp: last?.createdAt || '',
-        unread: messages.some((item) => !item.read && item.status !== 'sent'),
+        unread: messages.some((item) => !isAlertRead(item) && item.status !== 'sent'),
       };
     });
   }, [store, user]);
@@ -109,7 +110,7 @@ export default function AdminMessagesPage() {
         messages,
         preview: last?.message || 'No messages yet',
         timestamp: last?.createdAt || '',
-        unread: messages.some((item) => !item.read && item.status !== 'sent'),
+        unread: messages.some((item) => !isAlertRead(item) && item.status !== 'sent'),
       };
     });
   }, [store, user]);

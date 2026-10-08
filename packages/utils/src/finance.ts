@@ -2,8 +2,9 @@ import type { CenterExpense, HirayaDatabase, OpeningBalance, Payment } from '@hi
 import { programLane } from './managementLanes';
 import { isTeacherPayment } from './paymentLanes';
 import { staffDisplayName, uniqueStaffTeachers } from './staffDedupe';
+import { scrubLeftoverSessionPackages, studentSessionPackage } from './sessionPackage';
 import { teacherPayCashAmount } from './teacherPayments';
-import { paymentCountsTowardPaid, pesos } from './tuitionLedger';
+import { deletePaymentRecord, paymentCountsTowardPaid, pesos } from './tuitionLedger';
 
 export const INCOME_BUCKETS = [
   { id: 'playgroup', label: 'Playgroup' },
@@ -91,6 +92,62 @@ function countedAmount(row: Payment) {
   return pesos(row.amountPaid || 0);
 }
 
+function studentCountsInFinance(store: HirayaDatabase, studentId?: string | null) {
+  const id = (studentId || '').trim().toLowerCase();
+  if (!id) return false;
+  const student = (store.students || []).find((row) => (row.studentId || '').trim().toLowerCase() === id);
+  if (!student) return false;
+  const status = (student.status || 'active').trim().toLowerCase();
+  return status !== 'archived' && status !== 'inactive' && status !== 'deleted';
+}
+
+const DROPPED_PAY = new Set(['cancelled', 'canceled', 'void', 'failed', 'refunded', 'rejected', 'waived']);
+
+function sessionIncomeNeedsPackage(store: HirayaDatabase, row: Payment) {
+  const student = (store.students || []).find((item) => (item.studentId || '').trim().toLowerCase() === (row.studentId || '').trim().toLowerCase());
+  const lane = programLane(student?.program || student?.gradeLevel || '', store);
+  return lane === 'playgroup' || lane === 'tutorial';
+}
+
+function countsAsStudentIncome(store: HirayaDatabase, row: Payment) {
+  if (isTeacherPayment(row)) return false;
+  if (!studentCountsInFinance(store, row.studentId)) return false;
+  if (countedAmount(row) <= 0) return false;
+  if (incomeBucketFor(store, row) === 'opening') return false;
+  if (sessionIncomeNeedsPackage(store, row) && !studentSessionPackage(store, row.studentId)) return false;
+  return true;
+}
+
+function keepStoredPayment(store: HirayaDatabase, row: Payment) {
+  const status = (row.paymentStatus || '').trim().toLowerCase();
+  if (DROPPED_PAY.has(status)) return false;
+  if (isTeacherPayment(row)) return true;
+  if (!studentCountsInFinance(store, row.studentId)) return false;
+  if (sessionIncomeNeedsPackage(store, row) && !studentSessionPackage(store, row.studentId)) return false;
+  return true;
+}
+
+function sameIdList(left: { paymentId?: string }[], right: { paymentId?: string }[]) {
+  if (left.length !== right.length) return false;
+  const ids = new Set(right.map((row) => row.paymentId));
+  return left.every((row) => ids.has(row.paymentId));
+}
+
+/** Remove leftover payments so Income and expenses drop after session / student / finance deletes. */
+export function scrubLeftoverFinance(store: HirayaDatabase): HirayaDatabase | null {
+  const current = store.payments || [];
+  const payments = current.filter((row) => keepStoredPayment(store, row));
+  if (sameIdList(current, payments)) return null;
+  return { ...store, payments };
+}
+
+export function scrubLeftoverCenterRecords(store: HirayaDatabase): HirayaDatabase | null {
+  const sessions = scrubLeftoverSessionPackages(store);
+  const afterSessions = sessions || store;
+  const finance = scrubLeftoverFinance(afterSessions);
+  return finance || sessions;
+}
+
 export function incomeBucketFor(store: HirayaDatabase, payment: Payment): IncomeBucketId | 'opening' {
   const set = (payment.incomeBucket || '').trim().toLowerCase();
   if (set === 'opening') return 'opening';
@@ -113,7 +170,7 @@ export function invoiceForMonth(store: HirayaDatabase, month: string) {
   const key = monthKeyFromDate(month) || month;
   return pesos(
     (store.payments || [])
-      .filter((row) => !isTeacherPayment(row) && paymentWhen(row) === key && incomeBucketFor(store, row) !== 'opening')
+      .filter((row) => paymentWhen(row) === key && countsAsStudentIncome(store, row))
       .reduce((sum, row) => sum + countedAmount(row), 0),
   );
 }
@@ -161,9 +218,8 @@ export function incomeBucketsForMonth(store: HirayaDatabase, month: string) {
   const key = monthKeyFromDate(month) || month;
   const totals = Object.fromEntries(INCOME_BUCKETS.map((row) => [row.id, 0])) as Record<IncomeBucketId, number>;
   for (const row of store.payments || []) {
-    if (isTeacherPayment(row) || paymentWhen(row) !== key) continue;
+    if (paymentWhen(row) !== key || !countsAsStudentIncome(store, row)) continue;
     const bucket = incomeBucketFor(store, row);
-    if (bucket === 'opening') continue;
     totals[bucket] = pesos(totals[bucket] + countedAmount(row));
   }
   for (const row of store.centerExpenses || []) {
@@ -276,6 +332,16 @@ export function removeCenterExpense(store: HirayaDatabase, expenseId: string): H
   };
 }
 
+/** Remove a cash-flow sheet row, including student payments and teacher pay that feed Income and expenses. */
+export function removeCashFlowLine(store: HirayaDatabase, lineId: string): HirayaDatabase {
+  const id = (lineId || '').trim();
+  if (!id) throw new Error('That row was already removed.');
+  if ((store.centerExpenses || []).some((row) => row.expenseId === id)) {
+    return removeCenterExpense(store, id);
+  }
+  return deletePaymentRecord(store, id);
+}
+
 export type CashFlowLine = {
   id: string;
   source: 'payment' | 'salary' | 'book';
@@ -318,8 +384,7 @@ export function cashFlowLines(store: HirayaDatabase, month: string): CashFlowLin
       });
       continue;
     }
-    if (countedAmount(row) <= 0) continue;
-    if (incomeBucketFor(store, row) === 'opening') continue;
+    if (!countsAsStudentIncome(store, row)) continue;
     const student = (store.students || []).find((item) => item.studentId === row.studentId);
     const name = (student?.fullname || '').trim() || 'Student payment';
     lines.push({
@@ -357,10 +422,9 @@ export function cashFlowLines(store: HirayaDatabase, month: string): CashFlowLin
 export function remittanceForDay(store: HirayaDatabase, date: string) {
   const day = (date || '').slice(0, 10);
   const rows = (store.payments || []).filter((row) => {
-    if (isTeacherPayment(row)) return false;
-    if (incomeBucketFor(store, row) === 'opening') return false;
+    if (!countsAsStudentIncome(store, row)) return false;
     const when = (row.paymentDate || row.paidAt || '').slice(0, 10);
-    return when === day && countedAmount(row) > 0;
+    return when === day;
   });
   const groups = new Map<string, { receivedBy: string; total: number; buckets: Record<string, number> }>();
   for (const row of rows) {
