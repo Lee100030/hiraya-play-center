@@ -23,7 +23,7 @@ public static class CentralHub
             store = "/api/store",
             publicSite = "/api/public/site",
             publicEnrollment = "/api/public/enrollment",
-            enrollmentActions = "/api/enrollment/applications/{id}/{approve|reject|cancel}",
+            enrollmentActions = "/api/enrollment/applications/{id}/{approve|reject|cancel|interview}",
             staff = "/api/staff",
             parents = "/api/admin/parents",
             parentPortal = "/api/parent",
