@@ -52,6 +52,8 @@ public class HirayaSmtpOptions
             return false;
         if (string.Equals(live.Host, "file", StringComparison.OrdinalIgnoreCase))
             return true;
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("HIRAYA_BREVO_API_KEY")))
+            return true;
         return !string.IsNullOrWhiteSpace(live.Password) || !string.IsNullOrWhiteSpace(live.GmailPassword);
     }
 

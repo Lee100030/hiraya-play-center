@@ -58,6 +58,11 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.AddSingleton<IHirayaAppPaths>(_ =>
     new DefaultHirayaAppPaths(builder.Environment.ContentRootPath));
 builder.Services.AddHttpClient("hiraya-api");
+builder.Services.AddHttpClient("brevo", client =>
+{
+    client.BaseAddress = new Uri("https://api.brevo.com/");
+    client.Timeout = TimeSpan.FromSeconds(25);
+});
 builder.Services.Configure<Hiraya.Shared.HirayaApiOptions>(_ => { });
 builder.Services.AddSingleton<HirayaApiStatus>();
 builder.Services.AddSingleton<HirayaActorContext>();

@@ -904,6 +904,7 @@ export class HirayaApi {
         amount: Number.isFinite(amount) ? amount : undefined,
         amountPaid: Number.isFinite(amountPaid) ? amountPaid : undefined,
       }),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
     });
     return this.parse(res);
   }

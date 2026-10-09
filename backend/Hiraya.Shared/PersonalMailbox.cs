@@ -40,6 +40,23 @@ public static class PersonalMailbox
         return true;
     }
 
+    public static bool TryRecipient(string? personalEmail, string? loginEmail, out string email, out string error)
+    {
+        if (TryNormalize(personalEmail, out email, out _))
+        {
+            error = "";
+            return true;
+        }
+        if (TryNormalize(loginEmail, out email, out _))
+        {
+            error = "";
+            return true;
+        }
+        email = "";
+        error = "Enter their personal email, such as name@gmail.com. Hiraya sign-in addresses cannot receive mail.";
+        return false;
+    }
+
     public static string KeepOrReplace(string? incoming, string? existing)
     {
         var raw = (incoming ?? "").Trim();

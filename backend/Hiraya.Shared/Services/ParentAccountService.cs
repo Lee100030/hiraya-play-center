@@ -445,8 +445,15 @@ public class ParentAccountService
                 center, invite.Parent.Fullname, url, expires, reset, await ContactAsync());
             try
             {
-                await _email.SendAsync(invite.Parent.Email, subject, text, html);
-                sent = true;
+                if (!PersonalMailbox.TryRecipient(invite.Parent.PersonalEmail, invite.Parent.Email, out var to, out var addressError))
+                {
+                    emailError = addressError;
+                }
+                else
+                {
+                    await _email.SendAsync(to, subject, text, html);
+                    sent = true;
+                }
             }
             catch (Exception ex)
             {

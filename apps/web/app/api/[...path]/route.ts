@@ -1,6 +1,6 @@
 import { hirayaApiUnavailable, proxyToHirayaApi } from '@/lib/server/backend';
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 async function handle(request: Request, context: { params: Promise<{ path: string[] }> }) {
