@@ -220,6 +220,7 @@ export function incomeBucketsForMonth(store: HirayaDatabase, month: string) {
   for (const row of store.payments || []) {
     if (paymentWhen(row) !== key || !countsAsStudentIncome(store, row)) continue;
     const bucket = incomeBucketFor(store, row);
+    if (bucket === 'opening') continue;
     totals[bucket] = pesos(totals[bucket] + countedAmount(row));
   }
   for (const row of store.centerExpenses || []) {
