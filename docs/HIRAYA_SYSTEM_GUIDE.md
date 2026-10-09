@@ -19,13 +19,13 @@ All three talk to **Hiraya.Api**. The API holds the center document (students, p
 | Piece | Where it runs |
 |-------|----------------|
 | Source | GitHub `Johnleelugnasin30/hiraya-play-center` |
-| Website | Vercel project `hiraya-play-center-web` (`apps/web`) at https://www.hirayalearningcenter.app |
-| API | Render, reached through the same website `/api` path |
+| Website | Render `hiraya-web` at https://hirayakidslearningcenter.com (IONOS DNS). Until that service exists, the old Vercel site remains rollback only. |
+| API | Render `https://hiraya-play-center.onrender.com` |
 | Data | Neon (JSON center store through Hiraya.Api) |
 
-Push to `main` updates GitHub. Vercel rebuilds the website. Render rebuilds the API.
+Push to `main` updates GitHub and Render. Disconnect Vercel only after the Render website is verified.
 
-Do not put database URIs or mail secrets in `NEXT_PUBLIC_`, `VITE_`, or `EXPO_PUBLIC_` variables. Packaged desktop uses `VITE_API_URL=https://www.hirayalearningcenter.app`.
+Do not put database URIs or mail secrets in `NEXT_PUBLIC_`, `VITE_`, or `EXPO_PUBLIC_` variables. New desktop/mobile builds use `https://hiraya-play-center.onrender.com`.
 
 The first API call after idle can be slow while Render wakes. That is expected on the current plan.
 

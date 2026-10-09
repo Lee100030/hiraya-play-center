@@ -6,7 +6,9 @@ const { pathToFileURL } = require('url');
 app.setName('HIRAYA Desktop');
 
 const APP_ORIGIN = 'hiraya://app';
-const PUBLIC_SITE = 'https://www.hirayalearningcenter.app';
+const PUBLIC_SITE = 'https://hirayakidslearningcenter.com';
+const LIVE_API = 'https://hiraya-play-center.onrender.com';
+const API_CUSTOM = 'https://api.hirayakidslearningcenter.com';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -62,7 +64,7 @@ function installAppProtocol() {
 
 function installApiCors() {
   session.defaultSession.webRequest.onHeadersReceived(
-    { urls: [`${PUBLIC_SITE}/*`] },
+    { urls: [`${PUBLIC_SITE}/*`, `https://www.hirayakidslearningcenter.com/*`, `${LIVE_API}/*`, `${API_CUSTOM}/*`] },
     (details, callback) => {
       const responseHeaders = {
         ...(details.responseHeaders || {}),

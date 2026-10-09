@@ -2,7 +2,7 @@
 
 This repository is the **React / Next.js / Expo / Electron** clients plus **Hiraya.Api** for Hiraya Kids Learning Center. How the live center works (enrollment, parents, ABA schedule, roles) is in **`docs/HIRAYA_SYSTEM_GUIDE.md`**.
 
-**Live hosting:** GitHub stores the code. Vercel hosts the website (`https://www.hirayalearningcenter.app`). Render runs Hiraya.Api. Neon holds the center store. Everyday work on this PC can still run Hiraya.Api locally.
+**Live hosting:** GitHub stores the code. Render runs Hiraya.Api (`https://hiraya-play-center.onrender.com`) and is the target host for the website (`hiraya-web`). Canonical public domain: `https://hirayakidslearningcenter.com` (IONOS DNS → Render). Neon holds the center store. Vercel / `hirayalearningcenter.app` stay only as rollback until you disconnect them. Everyday work on this PC can still run Hiraya.Api locally. See `docs/HIRAYA_HOSTING_MIGRATION_PLAN.md`.
 
 ## Local first
 
@@ -15,26 +15,26 @@ This repository is the **React / Next.js / Expo / Electron** clients plus **Hira
 
 | App | Folder | Where it runs |
 |-----|--------|----------------|
-| **Website** | `apps/web` | Vercel (Next.js). Root Directory must be `apps/web`. |
-| **Desktop app** | `apps/desktop` | Electron on Windows. Not deployed on Vercel. |
-| **Mobile** | `apps/mobile` | Expo / Android APK **1.0.1**. Not on Vercel. The client APK uses `https://www.hirayalearningcenter.app` (Hiraya.Api on Render). Tapping an announcement opens a full-message modal. |
-| **Central API** | `backend/Hiraya.Api` | Render in production. Local hub on this PC at port 5188. |
+| **Website** | `apps/web` | Render Node web service `hiraya-web` (Next.js, build from repo root). |
+| **Desktop app** | `apps/desktop` | Electron on Windows. Not hosted on Render. Packaged API URL is the Render API. |
+| **Mobile** | `apps/mobile` | Expo / Android. Not hosted on Render. New EAS builds use the Render API URL. Installed APKs still use the old website until you rebuild. |
+| **Central API** | `backend/Hiraya.Api` | Render Docker service. Local hub on this PC at port 5188. |
 
-### How GitHub, Vercel, Render, and Neon connect
+### How GitHub, Render, IONOS, and Neon connect
 
-1. GitHub repo `Johnleelugnasin30/hiraya-play-center` is the source Vercel and Render build.
-2. Vercel hosts the Next.js website only. Desktop and mobile stay off Vercel.
-3. Render runs Hiraya.Api. The website proxies `/api` to that API. Packaged desktop uses `https://www.hirayalearningcenter.app`.
+1. GitHub repo `Johnleelugnasin30/hiraya-play-center` is the source Render builds.
+2. Render runs Hiraya.Api (Docker) and the Next.js website (Node). Desktop and mobile stay off Render hosting.
+3. The website proxies `/api` to Hiraya.Api via `HIRAYA_API_INTERNAL`. New desktop/mobile builds call `https://hiraya-play-center.onrender.com` until `api.hirayakidslearningcenter.com` is live.
 4. Neon is opened only by the API process. Do not put that URI in GitHub, and do not use a name that starts with `NEXT_PUBLIC_`, `VITE_`, or `EXPO_PUBLIC_`.
-5. Push to `main` updates the website and the API. Operations are documented in `docs/HIRAYA_SYSTEM_GUIDE.md`.
+5. IONOS holds DNS for `hirayakidslearningcenter.com` only. Do not upload the app to IONOS webspace.
+6. Push to `main` updates the API (and the website once `hiraya-web` exists). Operations: `docs/HIRAYA_SYSTEM_GUIDE.md`.
 
-### Vercel (website only)
+### Render (website + API)
 
-1. Import GitHub repo `Johnleelugnasin30/hiraya-play-center`.
-2. Set **Root Directory** to `apps/web`.
-3. Framework preset: **Next.js**.
-4. Do not choose `apps/desktop` or `apps/mobile`.
-5. Point the website at the public Hiraya.Api (Render). Do not put a database URI in the browser.
+1. Keep the existing Docker API. Do not generate a new `HIRAYA_SESSION_SECRET`.
+2. Create **hiraya-web** from this repo (root directory empty), Node 22, commands in `render.yaml`.
+3. Set website `HIRAYA_API_INTERNAL` to the API origin.
+4. Add custom domains in Render, then paste the records Render shows into IONOS.
 
 Local commands:
 

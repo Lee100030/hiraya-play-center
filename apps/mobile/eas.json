@@ -14,7 +14,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://www.hirayalearningcenter.app"
+        "EXPO_PUBLIC_API_URL": "https://hiraya-play-center.onrender.com"
       }
     },
     "production": {
@@ -24,7 +24,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://www.hirayalearningcenter.app"
+        "EXPO_PUBLIC_API_URL": "https://hiraya-play-center.onrender.com"
       }
     }
   }

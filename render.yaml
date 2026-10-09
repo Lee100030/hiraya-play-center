@@ -1,6 +1,11 @@
+# Hiraya Kids Learning Center — Render Blueprint
+# Secrets stay in the Render dashboard. Do not put URIs, API keys, or session secrets here.
+# If the live API service is already named hiraya-play-center, do not create a second Docker API.
+# HIRAYA_SESSION_SECRET must remain sync:false so a Blueprint apply does not log everyone out.
+
 services:
   - type: web
-    name: hiraya-api
+    name: hiraya-play-center
     runtime: docker
     region: singapore
     plan: starter
@@ -10,10 +15,30 @@ services:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
       - key: HIRAYA_PUBLIC_URL
-        value: https://www.hirayalearningcenter.app
-      - key: HIRAYA_CORS_ORIGINS
-        value: https://www.hirayalearningcenter.app,https://hirayalearningcenter.app,https://hiraya-play-center-web.vercel.app
+        value: https://hirayakidslearningcenter.com
       - key: HIRAYA_MYSQL
         sync: false
+      - key: HIRAYA_POSTGRES
+        sync: false
       - key: HIRAYA_SESSION_SECRET
-        generateValue: true
+        sync: false
+      - key: HIRAYA_BREVO_API_KEY
+        sync: false
+      - key: HIRAYA_SMTP_FROM
+        sync: false
+
+  - type: web
+    name: hiraya-web
+    runtime: node
+    region: singapore
+    plan: starter
+    healthCheckPath: /
+    buildCommand: corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --frozen-lockfile && pnpm --filter @hiraya/web run build
+    startCommand: corepack enable && pnpm --filter @hiraya/web exec next start --hostname 0.0.0.0 --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: HIRAYA_API_INTERNAL
+        value: https://hiraya-play-center.onrender.com

@@ -1,6 +1,6 @@
 {
   "name": "@hiraya/web",
-  "description": "HIRAYA website (Next.js) — deploy this folder on Vercel",
+  "description": "HIRAYA website (Next.js) — Node web service on Render (monorepo root build)",
   "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@9.15.4",

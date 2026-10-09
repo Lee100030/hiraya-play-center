@@ -23,11 +23,11 @@ export function publicSiteUrl(website?: string) {
   const raw = (website || '').trim();
   try {
     const uri = new URL(raw);
-    if (uri.protocol !== 'http:' && uri.protocol !== 'https:') return 'https://www.hirayalearningcenter.app';
-    if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(uri.hostname)) return 'https://www.hirayalearningcenter.app';
+    if (uri.protocol !== 'http:' && uri.protocol !== 'https:') return 'https://hirayakidslearningcenter.com';
+    if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(uri.hostname)) return 'https://hirayakidslearningcenter.com';
     return uri.origin;
   } catch {
-    return 'https://www.hirayalearningcenter.app';
+    return 'https://hirayakidslearningcenter.com';
   }
 }
 

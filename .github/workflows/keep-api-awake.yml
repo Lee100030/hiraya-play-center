@@ -13,4 +13,5 @@ jobs:
       - name: Wake Render API
         run: curl --fail --silent --show-error --max-time 90 "https://hiraya-play-center.onrender.com/api/health"
       - name: Wake website proxy
-        run: curl --fail --silent --show-error --max-time 90 "https://www.hirayalearningcenter.app/api/health"
+        continue-on-error: true
+        run: curl --fail --silent --show-error --max-time 90 "https://hirayakidslearningcenter.com/api/health"

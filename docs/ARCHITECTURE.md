@@ -7,7 +7,7 @@ The clients do **not** connect to the database. They use Hiraya.Api and the `X-H
 ```text
                  ┌───────────────────────┐
                  │  Next.js website      │
-                 │  Vercel · apps/web    │
+                 │  Render · apps/web    │
                  └──────────┬────────────┘
                             │  /api proxy
         ┌───────────────────┼───────────────────┐

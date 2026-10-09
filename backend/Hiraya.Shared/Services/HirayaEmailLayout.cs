@@ -50,13 +50,13 @@ public static class HirayaEmailLayout
     {
         var raw = (website ?? "").Trim();
         if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri))
-            return "https://www.hirayalearningcenter.app";
+            return "https://hirayakidslearningcenter.com";
         if (uri.Scheme is not ("http" or "https"))
-            return "https://www.hirayalearningcenter.app";
+            return "https://hirayakidslearningcenter.com";
         var host = uri.Host;
         if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
             host is "127.0.0.1" or "::1" or "0.0.0.0")
-            return "https://www.hirayalearningcenter.app";
+            return "https://hirayakidslearningcenter.com";
         return uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
     }
 
