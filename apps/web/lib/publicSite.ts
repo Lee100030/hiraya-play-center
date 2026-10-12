@@ -52,6 +52,17 @@ export function facebookHref(site?: PublicSite | null): string {
   return HIRAYA_FACEBOOK_URL;
 }
 
+export function parseValueItems(raw?: string | null): { title: string; body: string }[] {
+  const text = (raw || '').trim();
+  if (!text) return [];
+  const chunks = text.split(/\s*(?=\d+\.\s)/).map((part) => part.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
+  return chunks.map((chunk) => {
+    const split = chunk.match(/^(.+?)\s+[—–-]\s+(.+)$/);
+    if (split) return { title: split[1].trim(), body: split[2].trim() };
+    return { title: chunk, body: '' };
+  });
+}
+
 export function withPublicFallback(site?: Partial<PublicSite> | null): PublicSite {
   const merged: PublicSite = {
     ...publicDefaults,

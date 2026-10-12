@@ -2,7 +2,7 @@
 
 import { PublicChrome } from '@/components/public/PublicChrome';
 import { CAMPUS_PHOTOS } from '@/lib/campus';
-import { crestSrc } from '@/lib/publicSite';
+import { crestSrc, parseValueItems } from '@/lib/publicSite';
 import { usePublicSite } from '@/hooks/usePublicSite';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -25,6 +25,7 @@ const staffHighlights = [
 export default function AboutPage() {
   const { site } = usePublicSite();
   const src = crestSrc(site);
+  const valueItems = parseValueItems(site.values);
 
   return (
     <PublicChrome>
@@ -57,27 +58,43 @@ export default function AboutPage() {
           <p className="eyebrow">Guiding lights</p>
           <h2>Mission, vision, and values</h2>
         </header>
-        <div className="program-grid">
-          <article className="info-card">
-            <div className="program-mark" aria-hidden="true">
-              <span>M</span>
-            </div>
-            <h3>Mission</h3>
-            <p>{site.mission}</p>
-          </article>
-          <article className="info-card">
-            <div className="program-mark" aria-hidden="true">
-              <span>V</span>
-            </div>
-            <h3>Vision</h3>
-            <p>{site.vision}</p>
-          </article>
-          <article className="info-card">
+        <div className="mvv-layout">
+          <div className="mvv-pair">
+            <article className="info-card mvv-statement">
+              <div className="program-mark" aria-hidden="true">
+                <span>M</span>
+              </div>
+              <h3>Mission</h3>
+              <p>{site.mission}</p>
+            </article>
+            <article className="info-card mvv-statement">
+              <div className="program-mark" aria-hidden="true">
+                <span>V</span>
+              </div>
+              <h3>Vision</h3>
+              <p>{site.vision}</p>
+            </article>
+          </div>
+          <article className="info-card mvv-values">
             <div className="program-mark" aria-hidden="true">
               <span>♥</span>
             </div>
             <h3>Values</h3>
-            <p>{site.values}</p>
+            {valueItems.length > 1 ? (
+              <ol className="values-list">
+                {valueItems.map((item, index) => (
+                  <li key={item.title}>
+                    <span className="values-num">{index + 1}</span>
+                    <div>
+                      <strong>{item.title}</strong>
+                      {item.body ? <p>{item.body}</p> : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p>{site.values}</p>
+            )}
           </article>
         </div>
       </section>
