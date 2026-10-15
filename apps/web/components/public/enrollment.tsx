@@ -218,7 +218,7 @@ function EnrollmentModal({
       const raw = err instanceof Error ? err.message : '';
       setError(
         /mysql/i.test(raw)
-          ? 'This tab is showing an old error. Close the form, press Ctrl+Shift+R, then submit once more. The live database is Neon PostgreSQL, not MySQL.'
+          ? 'This email is already used at this center. Use a different parent email.'
           : raw || 'Could not submit enrollment to HIRAYA. Make sure the API is running.',
       );
     } finally {

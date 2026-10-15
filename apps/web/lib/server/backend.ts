@@ -74,8 +74,7 @@ export async function proxyToHirayaApi(request: Request, path: string) {
       try {
         const parsed = JSON.parse(new TextDecoder().decode(body)) as { error?: string };
         if (typeof parsed?.error === 'string' && /mysql/i.test(parsed.error)) {
-          parsed.error =
-            'The center could not save this on Neon PostgreSQL. Close the form, press Ctrl+Shift+R, and submit once more.';
+          parsed.error = 'This email is already used at this center. Use a different parent email.';
           body = new TextEncoder().encode(JSON.stringify(parsed)).buffer as ArrayBuffer;
         }
       } catch {

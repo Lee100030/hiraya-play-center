@@ -77,6 +77,19 @@ public class EnrollmentService
                 string.Equals(a.StudentFullname, childName, StringComparison.OrdinalIgnoreCase));
             if (duplicate)
                 throw new InvalidOperationException("An application for this child is already waiting for review.");
+            var emailInUse = db.Users.Any(u =>
+                string.Equals(u.Email, guardianEmail, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(u.PersonalEmail, guardianEmail, StringComparison.OrdinalIgnoreCase) ||
+                LoginIdentity.Matches(u, guardianEmail));
+            if (emailInUse)
+            {
+                var owner = db.Users.First(u =>
+                    string.Equals(u.Email, guardianEmail, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(u.PersonalEmail, guardianEmail, StringComparison.OrdinalIgnoreCase) ||
+                    LoginIdentity.Matches(u, guardianEmail));
+                if (!UserRoles.IsParent(owner.Role))
+                    throw new InvalidOperationException("This email is already used at this center. Use a different parent email.");
+            }
             var application = new EnrollmentApplication
             {
                 ApplicationId = applicationId,
@@ -661,6 +674,8 @@ public class EnrollmentService
         var address = NoteValue(app.Notes, "Address");
         if (existing != null)
         {
+            if (!UserRoles.IsParent(existing.Role))
+                throw new InvalidOperationException("This email is already used at this center. Use a different parent email.");
             if (string.IsNullOrWhiteSpace(existing.Phone))
                 existing.Phone = (app.ParentPhone ?? "").Trim();
             if (string.IsNullOrWhiteSpace(existing.Address) && address.Length > 0)

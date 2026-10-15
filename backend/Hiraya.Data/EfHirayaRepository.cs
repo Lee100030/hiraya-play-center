@@ -437,7 +437,7 @@ public class EfHirayaRepository : IHirayaRepository
         if (detail.Contains("23505", StringComparison.Ordinal) ||
             detail.Contains("unique", StringComparison.OrdinalIgnoreCase) ||
             detail.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
-            return "This parent email already has a center account. Use that same email, or a different parent email, then submit again.";
+            return "This email is already used at this center. Use a different parent email.";
         if (detail.Contains("22001", StringComparison.Ordinal) ||
             detail.Contains("too long", StringComparison.OrdinalIgnoreCase) ||
             detail.Contains("varying(191)", StringComparison.OrdinalIgnoreCase))
