@@ -4,7 +4,7 @@ This repository is the **React / Next.js / Expo / Electron** clients plus **Hira
 
 **Live hosting:** GitHub stores the code. Render runs Hiraya.Api (`https://hiraya-play-center.onrender.com`) and is the target host for the website (`hiraya-web`). Canonical public domain: `https://hirayakidslearningcenter.com` (IONOS DNS → Render). Neon holds the center store. Vercel / `hirayalearningcenter.app` stay only as rollback until you disconnect them. Everyday work on this PC can still run Hiraya.Api locally. See `docs/HIRAYA_HOSTING_MIGRATION_PLAN.md`.
 
-## Local first
+## Local first 
 
 1. Point Hiraya.Api at **Neon PostgreSQL** (`HIRAYA_POSTGRES`).
 2. `npm run dev:api` → Hiraya.Api at `http://127.0.0.1:5188` 
