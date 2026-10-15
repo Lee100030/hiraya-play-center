@@ -646,10 +646,12 @@ public class EnrollmentService
     static HirayaUser? FindExistingParent(HirayaDatabase db, EnrollmentApplication app)
     {
         var email = (app.ParentEmail ?? "").Trim();
+        if (email.Length == 0)
+            return null;
         return db.Users.FirstOrDefault(u =>
-            UserRoles.IsParent(u.Role) &&
-            (LoginIdentity.Matches(u, email) ||
-             string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)));
+            LoginIdentity.Matches(u, email) ||
+            string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(u.PersonalEmail, email, StringComparison.OrdinalIgnoreCase));
     }
 
     private static HirayaUser EnsureParentFromApplication(HirayaDatabase db, EnrollmentApplication app)

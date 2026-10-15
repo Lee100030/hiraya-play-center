@@ -350,7 +350,7 @@ public class EfHirayaRepository : IHirayaRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed saving HLCMS store.");
-            throw new InvalidOperationException("The center could not save those changes. Please try again in a moment.");
+            throw new InvalidOperationException(SaveFailureMessage(ex));
         }
     }
 
@@ -427,8 +427,22 @@ public class EfHirayaRepository : IHirayaRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed saving HLCMS store patch.");
-            throw new InvalidOperationException("The center could not save those changes. Please try again in a moment.");
+            throw new InvalidOperationException(SaveFailureMessage(ex));
         }
+    }
+
+    private static string SaveFailureMessage(Exception ex)
+    {
+        var detail = (ex.InnerException?.Message ?? ex.Message) ?? "";
+        if (detail.Contains("23505", StringComparison.Ordinal) ||
+            detail.Contains("unique", StringComparison.OrdinalIgnoreCase) ||
+            detail.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
+            return "This parent email already has a center account. Use that same email, or a different parent email, then submit again.";
+        if (detail.Contains("22001", StringComparison.Ordinal) ||
+            detail.Contains("too long", StringComparison.OrdinalIgnoreCase) ||
+            detail.Contains("varying(191)", StringComparison.OrdinalIgnoreCase))
+            return "Some application details were too long for an old database column. Neon is being updated. Close this window and try again in a few minutes.";
+        return "The center could not save those changes on Neon PostgreSQL. Close this window, refresh, and try again.";
     }
 
     private static bool Same<T>(T before, T after) =>

@@ -9,6 +9,7 @@ services:
     runtime: docker
     region: singapore
     plan: starter
+    autoDeploy: true
     healthCheckPath: /api/health
     dockerfilePath: Dockerfile
     envVars:
@@ -30,6 +31,7 @@ services:
     runtime: node
     region: singapore
     plan: starter
+    autoDeploy: true
     healthCheckPath: /
     buildCommand: corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --frozen-lockfile && pnpm --filter @hiraya/web run build
     startCommand: pnpm --filter @hiraya/web exec next start --hostname 0.0.0.0 --port $PORT

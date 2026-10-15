@@ -215,10 +215,11 @@ function EnrollmentModal({
       setOk(true);
       form.reset();
     } catch (err) {
+      const raw = err instanceof Error ? err.message : '';
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Could not submit enrollment to HIRAYA. Make sure the API is running.',
+        /mysql/i.test(raw)
+          ? 'This tab is showing an old error. Close the form, press Ctrl+Shift+R, then submit once more. The live database is Neon PostgreSQL, not MySQL.'
+          : raw || 'Could not submit enrollment to HIRAYA. Make sure the API is running.',
       );
     } finally {
       setSaving(false);
