@@ -77,7 +77,7 @@ public class PortalAuthService
                 if (local is not null)
                     return local;
                 throw new InvalidOperationException(await ReadErrorAsync(response)
-                    ?? "Could not reach the learning center service. Start Hiraya.Api and MySQL, then try again.");
+                    ?? "Could not reach the learning center service. Confirm Hiraya.Api can reach Neon, then try again.");
             }
 
             _status.MarkOnline();
@@ -97,7 +97,7 @@ public class PortalAuthService
             var local = await TryLocalFallbackAsync(key, password);
             if (local is not null)
                 return local;
-            throw new InvalidOperationException("Could not reach the learning center service. Start Hiraya.Api and MySQL, then try again.");
+            throw new InvalidOperationException("Could not reach the learning center service. Confirm Hiraya.Api can reach Neon, then try again.");
         }
     }
 

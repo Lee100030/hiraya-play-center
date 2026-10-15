@@ -6,7 +6,7 @@ This repository is the **React / Next.js / Expo / Electron** clients plus **Hira
 
 ## Local first
 
-1. Start **XAMPP MySQL** (`hiraya_learning_center`).
+1. Point Hiraya.Api at **Neon PostgreSQL** (`HIRAYA_POSTGRES`).
 2. `npm run dev:api` → Hiraya.Api at `http://127.0.0.1:5188` 
 3. `npm start` → website at `http://127.0.0.1:3000`
 4. Optional: `npm run dev:desktop` and `npm run dev:mobile` against the same API.
@@ -51,7 +51,7 @@ pnpm build:mobile
 - Node.js 22+
 - pnpm 9 (`npx pnpm@9.15.4` if pnpm is not installed globally)
 - .NET 10 SDK (to run the existing API)
-- MySQL (`hiraya_learning_center`, typically XAMPP)
+- Neon PostgreSQL (`HIRAYA_POSTGRES`)
 
 ## Run in VS Code / Cursor
 
@@ -69,7 +69,7 @@ You can also press **F5** and choose **Run website**, or **Terminal → Run Task
 
 `pnpm` does not need to be installed globally. `npm start` runs the Next.js app.
 
-Login and school data are **centralized**. Start MySQL (XAMPP), then the API in a second terminal:
+Login and school data are **centralized**. Confirm Neon is reachable, then start the API in a second terminal:
 
 ```bash
 npm run dev:api

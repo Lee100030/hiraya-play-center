@@ -4,7 +4,7 @@ namespace Hiraya.Data;
 
 /// <summary>
 /// Same center model as <see cref="HirayaLearningCenterDbContext"/>, with its own
-/// PostgreSQL migrations. MySQL migrations are not applied to Neon.
+/// PostgreSQL migrations for Neon. Older MySQL migration files are not applied.
 /// </summary>
 public class HirayaNeonDbContext : HirayaLearningCenterDbContext
 {

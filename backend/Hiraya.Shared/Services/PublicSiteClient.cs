@@ -78,7 +78,7 @@ public class PublicSiteClient
         if ((int)response.StatusCode >= 500)
         {
             var down = await ReadErrorAsync(response, ct);
-            throw new InvalidOperationException(down ?? "Could not reach the learning center service. Start Hiraya.Api and MySQL, then try again.");
+            throw new InvalidOperationException(down ?? "Could not reach the learning center service. Confirm Hiraya.Api can reach Neon, then try again.");
         }
         if (!response.IsSuccessStatusCode)
         {

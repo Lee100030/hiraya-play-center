@@ -139,7 +139,7 @@ public class HttpHirayaRepository : IHirayaRepository
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Local Hiraya store is unavailable.");
-            throw new InvalidOperationException("The learning center service is not available. Start Hiraya.Api and MySQL, then try again.");
+            throw new InvalidOperationException("The learning center service is not available. Confirm Hiraya.Api can reach Neon, then try again.");
         }
     }
 

@@ -23,7 +23,7 @@ public static class HirayaDb
         if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("HIRAYA_SQLSERVER")))
             return SqlServer;
 
-        return MySql;
+        return Postgres;
     }
 
     public static string ResolveConnection(IConfiguration? configuration, string provider)
@@ -146,9 +146,18 @@ public static class HirayaDb
 
     private static string NeonConnection(IConfiguration? configuration)
     {
-        return Environment.GetEnvironmentVariable("HIRAYA_POSTGRES")
-               ?? configuration?["Hiraya:Neon"]
-               ?? "";
+        var postgres = Environment.GetEnvironmentVariable("HIRAYA_POSTGRES")
+                       ?? configuration?["Hiraya:Neon"]
+                       ?? "";
+        if (!string.IsNullOrWhiteSpace(postgres))
+            return postgres;
+
+        var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL") ?? "";
+        if (databaseUrl.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+            || databaseUrl.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase)
+            || databaseUrl.Contains("neon.tech", StringComparison.OrdinalIgnoreCase))
+            return databaseUrl;
+        return "";
     }
 
     public static string NormalizePostgresConnection(string value, IConfiguration? configuration = null)

@@ -16,8 +16,6 @@ services:
         value: Production
       - key: HIRAYA_PUBLIC_URL
         value: https://hirayakidslearningcenter.com
-      - key: HIRAYA_MYSQL
-        sync: false
       - key: HIRAYA_POSTGRES
         sync: false
       - key: HIRAYA_SESSION_SECRET

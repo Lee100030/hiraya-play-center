@@ -14,7 +14,7 @@ public static class DatabaseInitializer
             if (db.Database.IsSqlServer())
             {
                 await db.Database.EnsureCreatedAsync();
-                logger.LogInformation("SQL Server schema is ready (EnsureCreated). MySQL EF migrations are not applied on MSSQL.");
+                logger.LogInformation("SQL Server schema is ready (EnsureCreated). Neon PostgreSQL migrations are not applied on MSSQL.");
             }
             else if (IsPostgres(db))
             {
@@ -409,7 +409,7 @@ public static class DatabaseInitializer
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Could not ensure workflow schema. Create staff_tasks / session_packages tables in MySQL.");
+            logger.LogWarning(ex, "Could not ensure workflow schema. Confirm Neon PostgreSQL tables exist.");
         }
     }
 
@@ -458,7 +458,7 @@ public static class DatabaseInitializer
         }
         catch
         {
-            /* column already text, or table missing on a fresh local MySQL */
+            /* column already text, or table missing on a fresh database */
         }
     }
 

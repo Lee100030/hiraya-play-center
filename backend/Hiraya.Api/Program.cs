@@ -16,10 +16,8 @@ var dbProvider = HirayaDb.ResolveProvider(builder.Configuration);
 var connection = HirayaDb.ApplyPassword(HirayaDb.ResolveConnection(builder.Configuration, dbProvider), builder.Configuration);
 if (builder.Environment.IsProduction())
 {
-    var fromEnv = Environment.GetEnvironmentVariable("HIRAYA_MYSQL")
+    var fromEnv = Environment.GetEnvironmentVariable("HIRAYA_POSTGRES")
                   ?? Environment.GetEnvironmentVariable("DATABASE_URL")
-                  ?? Environment.GetEnvironmentVariable("HIRAYA_SQLSERVER")
-                  ?? Environment.GetEnvironmentVariable("HIRAYA_POSTGRES")
                   ?? builder.Configuration["Hiraya:Neon"];
     if (string.IsNullOrWhiteSpace(fromEnv))
     {
@@ -685,7 +683,7 @@ try
 catch (Exception ex)
 {
     app.Logger.LogError(ex, "{Provider} initialization failed. Check the connection string and that the database server is running.",
-        dbProvider == HirayaDb.SqlServer ? "SQL Server" : dbProvider == HirayaDb.Postgres ? "PostgreSQL" : "MySQL");
+        dbProvider == HirayaDb.SqlServer ? "SQL Server" : "PostgreSQL");
 }
 
 app.Run();
@@ -696,15 +694,17 @@ static string LiveDatabaseName(IDbContextFactory<HirayaLearningCenterDbContext> 
     return DatabaseName(db.Database.GetConnectionString());
 }
 
-static string DatabaseUnavailableMessage(string provider) =>
-    string.Equals(provider, HirayaDb.Postgres, StringComparison.OrdinalIgnoreCase)
-        ? "The learning center database is not available. Confirm Neon is reachable and try again."
-        : "The learning center database is not available. Start XAMPP MySQL and confirm the connection string.";
+static string DatabaseUnavailableMessage(string provider)
+{
+    _ = provider;
+    return "The learning center database is not available. Confirm Neon PostgreSQL is reachable and try again.";
+}
 
-static string RecordsUnavailableMessage(string provider, string action) =>
-    string.Equals(provider, HirayaDb.Postgres, StringComparison.OrdinalIgnoreCase)
-        ? $"Center records could not be {action}. Confirm Neon is reachable and try again."
-        : $"Center records could not be {action}. Confirm the local database is running and try again.";
+static string RecordsUnavailableMessage(string provider, string action)
+{
+    _ = provider;
+    return $"Center records could not be {action}. Confirm Neon PostgreSQL is reachable and try again.";
+}
 
 static string DatabaseName(string? connection)
 {

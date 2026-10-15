@@ -10,8 +10,8 @@
       {
         "id": "ops-path",
         "label": "Desktop to database",
-        "focus": ["desktop", "api", "mysql"],
-        "note": "The desktop app signs in and saves through Hiraya.Api into MySQL."
+        "focus": ["desktop", "api", "neon"],
+        "note": "The desktop app signs in and saves through Hiraya.Api into Neon PostgreSQL."
       },
       {
         "id": "all-clients",
@@ -55,10 +55,10 @@
       "size": [210, 86]
     },
     {
-      "id": "mysql",
+      "id": "neon",
       "type": "database",
-      "label": "MySQL",
-      "sublabel": "hiraya_learning_center",
+      "label": "Neon",
+      "sublabel": "PostgreSQL neondb",
       "pos": [495, 470],
       "size": [210, 78]
     }
@@ -67,7 +67,7 @@
     {
       "kind": "region",
       "label": "Only the API opens the database",
-      "wraps": ["api", "mysql"]
+      "wraps": ["api", "neon"]
     }
   ],
   "connections": [
@@ -98,10 +98,10 @@
       "toSide": "top"
     },
     {
-      "id": "api-to-mysql",
+      "id": "api-to-neon",
       "from": "api",
-      "to": "mysql",
-      "label": "SQL",
+      "to": "neon",
+      "label": "PostgreSQL",
       "variant": "emphasis",
       "fromSide": "bottom",
       "toSide": "top",
@@ -131,8 +131,8 @@
       "dot": "amber",
       "title": "Database",
       "items": [
-        "MySQL 8 holds the center records",
-        "The website does not open MySQL itself"
+        "Neon PostgreSQL holds the center records",
+        "The website does not open Neon itself"
       ]
     }
   ]
