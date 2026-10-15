@@ -12,18 +12,15 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
+var useFirestore = FirestoreHirayaRepository.IsConfigured();
 var dbProvider = HirayaDb.ResolveProvider(builder.Configuration);
-var connection = HirayaDb.ApplyPassword(HirayaDb.ResolveConnection(builder.Configuration, dbProvider), builder.Configuration);
-if (builder.Environment.IsProduction())
+var connection = useFirestore
+    ? ""
+    : HirayaDb.ApplyPassword(HirayaDb.ResolveConnection(builder.Configuration, dbProvider), builder.Configuration);
+if (builder.Environment.IsProduction() && !useFirestore)
 {
-    var fromEnv = Environment.GetEnvironmentVariable("HIRAYA_POSTGRES")
-                  ?? Environment.GetEnvironmentVariable("DATABASE_URL")
-                  ?? builder.Configuration["Hiraya:Neon"];
-    if (string.IsNullOrWhiteSpace(fromEnv))
-    {
-        throw new InvalidOperationException(
-            "Set HIRAYA_POSTGRES to the Neon connection before running the API in Production. The local empty-password default must not be used.");
-    }
+    throw new InvalidOperationException(
+        "Set FIREBASE_SERVICE_ACCOUNT (Firebase service-account JSON) so Hiraya.Api can use Cloud Firestore.");
 }
 var listenPort = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrWhiteSpace(listenPort))
@@ -43,8 +40,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     options.SerializerOptions.PropertyNameCaseInsensitive = true;
 });
-builder.Services.AddDbContextFactory<HirayaLearningCenterDbContext>(options =>
-    HirayaDb.Configure(options, dbProvider, connection));
+if (!useFirestore)
+{
+    builder.Services.AddDbContextFactory<HirayaLearningCenterDbContext>(options =>
+        HirayaDb.Configure(options, dbProvider, connection));
+}
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = 100L * 1024 * 1024;
@@ -83,7 +83,10 @@ builder.Services.AddSingleton<IRevokedSessionStore, RevokedSessionStore>();
 builder.Services.AddSingleton<SessionGate>();
 builder.Services.AddSingleton<PublicRequestThrottle>();
 builder.Services.AddSingleton<SensitiveActionCodes>();
-builder.Services.AddSingleton<IHirayaRepository, EfHirayaRepository>();
+if (useFirestore)
+    builder.Services.AddSingleton<IHirayaRepository, FirestoreHirayaRepository>();
+else
+    builder.Services.AddSingleton<IHirayaRepository, EfHirayaRepository>();
 builder.Services.AddSingleton<PortalAuthService>();
 builder.Services.AddSingleton<AccountService>();
 builder.Services.AddSingleton<ProfilePhotoService>();
@@ -151,27 +154,43 @@ app.UseExceptionHandler(err =>
     });
 });
 
-app.MapGet("/api", (IDbContextFactory<HirayaLearningCenterDbContext> factory) =>
-    Results.Json(CentralHub.Info(LiveDatabaseName(factory)), JsonDefaults.Options));
-app.MapGet("/api/hub", (IDbContextFactory<HirayaLearningCenterDbContext> factory) =>
-    Results.Json(CentralHub.Info(LiveDatabaseName(factory)), JsonDefaults.Options));
+app.MapGet("/api", (IHirayaRepository repo) =>
+    Results.Json(CentralHub.Info(repo.UsingFirebase ? "firestore" : "neondb"), JsonDefaults.Options));
+app.MapGet("/api/hub", (IHirayaRepository repo) =>
+    Results.Json(CentralHub.Info(repo.UsingFirebase ? "firestore" : "neondb"), JsonDefaults.Options));
 
-app.MapGet("/api/health", async (IDbContextFactory<HirayaLearningCenterDbContext> factory) =>
+app.MapGet("/api/health", async (IHirayaRepository repo, IServiceProvider services) =>
 {
     try
     {
-        await using var db = await factory.CreateDbContextAsync();
-        var ok = await db.Database.CanConnectAsync();
-        var payload = new
+        if (repo.UsingFirebase)
         {
-            status = ok ? "ok" : "down",
+            var ok = repo is FirestoreHirayaRepository fs && await fs.PingAsync();
+            var payload = new
+            {
+                status = ok ? "ok" : "down",
+                hub = "hiraya-central",
+                database = "firestore",
+                store = "firebase-firestore",
+                enroll = "2026-10-15-text",
+                clients = CentralHub.Clients,
+            };
+            return ok ? Results.Ok(payload) : Results.Json(payload, statusCode: 503);
+        }
+
+        var factory = services.GetRequiredService<IDbContextFactory<HirayaLearningCenterDbContext>>();
+        await using var db = await factory.CreateDbContextAsync();
+        var connected = await db.Database.CanConnectAsync();
+        var neon = new
+        {
+            status = connected ? "ok" : "down",
             hub = "hiraya-central",
             database = DatabaseName(db.Database.GetConnectionString()),
             store = "neon-postgres",
             enroll = "2026-10-15-text",
             clients = CentralHub.Clients,
         };
-        return ok ? Results.Ok(payload) : Results.Json(payload, statusCode: 503);
+        return connected ? Results.Ok(neon) : Results.Json(neon, statusCode: 503);
     }
     catch (Exception ex)
     {
@@ -673,37 +692,41 @@ EnrollmentApi.Map(app);
 PaymentApi.Map(app);
 FeedbackApi.Map(app);
 
-try
+if (!useFirestore)
 {
-    await using var scope = app.Services.CreateAsyncScope();
-    var db = scope.ServiceProvider.GetRequiredService<IDbContextFactory<HirayaLearningCenterDbContext>>();
-    await using var context = await db.CreateDbContextAsync();
-    await DatabaseInitializer.InitializeAsync(context, app.Logger);
+    try
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<IDbContextFactory<HirayaLearningCenterDbContext>>();
+        await using var context = await db.CreateDbContextAsync();
+        await DatabaseInitializer.InitializeAsync(context, app.Logger);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "{Provider} initialization failed. Check the connection string and that the database server is running.",
+            dbProvider == HirayaDb.SqlServer ? "SQL Server" : "PostgreSQL");
+    }
 }
-catch (Exception ex)
+else
 {
-    app.Logger.LogError(ex, "{Provider} initialization failed. Check the connection string and that the database server is running.",
-        dbProvider == HirayaDb.SqlServer ? "SQL Server" : "PostgreSQL");
+    app.Logger.LogInformation("Hiraya.Api is using Cloud Firestore project hiraya-kids-learning.");
 }
 
 app.Run();
 
-static string LiveDatabaseName(IDbContextFactory<HirayaLearningCenterDbContext> factory)
-{
-    using var db = factory.CreateDbContext();
-    return DatabaseName(db.Database.GetConnectionString());
-}
-
 static string DatabaseUnavailableMessage(string provider)
 {
     _ = provider;
-    return "The learning center database is not available. Confirm Neon PostgreSQL is reachable and try again.";
+    return FirestoreHirayaRepository.IsConfigured()
+        ? "The learning center database is not available. Confirm Cloud Firestore is reachable and try again."
+        : "The learning center database is not available. Confirm Neon PostgreSQL is reachable and try again.";
 }
 
 static string RecordsUnavailableMessage(string provider, string action)
 {
     _ = provider;
-    return $"Center records could not be {action}. Confirm Neon PostgreSQL is reachable and try again.";
+    var store = FirestoreHirayaRepository.IsConfigured() ? "Cloud Firestore" : "Neon PostgreSQL";
+    return $"Center records could not be {action}. Confirm {store} is reachable and try again.";
 }
 
 static string DatabaseName(string? connection)

@@ -25,3 +25,15 @@ apps/desktop/release
 *.tsbuildinfo
 .pnpm-store
 .vercel
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+firebase/functions/lib
+firebase/functions/node_modules
+firebase/scripts/node_modules
+firebase-adminsdk.json
+**/firebase-adminsdk*.json
+google-services.json
+GoogleService-Info.plist
+vendor/brag
+brag-output/work

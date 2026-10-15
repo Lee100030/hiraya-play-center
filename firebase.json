@@ -1,0 +1,17 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "firebase/functions",
+      "codebase": "hiraya",
+      "ignore": ["node_modules", ".git", "lib", "*.local"],
+      "predeploy": ["npm --prefix firebase/functions run build"]
+    }
+  ],
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

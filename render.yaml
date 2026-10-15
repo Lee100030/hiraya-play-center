@@ -17,7 +17,9 @@ services:
         value: Production
       - key: HIRAYA_PUBLIC_URL
         value: https://hirayakidslearningcenter.com
-      - key: HIRAYA_POSTGRES
+      - key: HIRAYA_FIRESTORE_PROJECT
+        value: hiraya-kids-learning
+      - key: FIREBASE_SERVICE_ACCOUNT
         sync: false
       - key: HIRAYA_SESSION_SECRET
         sync: false

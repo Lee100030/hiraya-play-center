@@ -1,0 +1,189 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function profile() {
+      return get(/databases/$(database)/documents/authIndex/$(request.auth.uid)).data;
+    }
+    function role() {
+      return signedIn() && exists(/databases/$(database)/documents/authIndex/$(request.auth.uid))
+        ? profile().role
+        : '';
+    }
+    function isAdmin() {
+      return role() == 'admin' || role() == 'super_admin';
+    }
+    function isTeacher() {
+      return role() == 'teacher' || role() == 'staff' || isAdmin();
+    }
+    function isParent() {
+      return role() == 'parent';
+    }
+    function myUserId() {
+      return profile().userId;
+    }
+
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /programs/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /websiteGallery/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /site/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /emails/{email} {
+      allow get: if true;
+      allow create: if !exists(/databases/$(database)/documents/emails/$(email))
+        && request.resource.data.role in ['parent', 'teacher'];
+      allow read, write: if isAdmin();
+    }
+    match /authIndex/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if isAdmin();
+    }
+    match /users/{id} {
+      allow read: if isAdmin() || isTeacher() || (signedIn() && resource.data.userId == myUserId());
+      allow create: if request.resource.data.role == 'parent'
+        && request.resource.data.status == 'pending_activation';
+      allow update, delete: if isAdmin() || (signedIn() && resource.data.userId == myUserId());
+    }
+    match /students/{id} {
+      allow read: if isAdmin() || isTeacher() || (isParent() && resource.data.parentId == myUserId());
+      allow create: if request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin() || isTeacher();
+    }
+    match /parentStudents/{id} {
+      allow read: if isAdmin() || isTeacher() || (isParent() && resource.data.parentId == myUserId());
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+    match /enrollmentApplications/{id} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.status == 'pending_review'
+        && request.resource.data.applicationKind in ['student', 'teacher'];
+      allow update, delete: if isAdmin();
+    }
+    match /teacherProfiles/{id} {
+      allow read: if isTeacher();
+      allow write: if isAdmin();
+    }
+    match /classes/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /rooms/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /enrollments/{id} {
+      allow read: if isAdmin() || isTeacher() || isParent();
+      allow write: if isAdmin();
+    }
+    match /attendance/{id} {
+      allow read: if isAdmin() || isTeacher();
+      allow write: if isAdmin() || isTeacher();
+    }
+    match /reports/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isTeacher();
+    }
+    match /schedules/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isTeacher();
+    }
+    match /payments/{id} {
+      allow read: if isAdmin() || isParent();
+      allow write: if isAdmin();
+    }
+    match /centerExpenses/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /openingBalances/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /alerts/{id} {
+      allow read: if isAdmin() || (signedIn() && resource.data.recipientId == myUserId());
+      allow write: if signedIn();
+    }
+    match /auditLogs/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /news/{id} {
+      allow read: if signedIn() || true;
+      allow write: if isAdmin();
+    }
+    match /leaveRequests/{id} {
+      allow read, write: if isTeacher();
+    }
+    match /roles/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+    match /rolePermissions/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /learningModules/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isTeacher();
+    }
+    match /learningModuleVersions/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isTeacher();
+    }
+    match /studentOps/{id} {
+      allow read: if isAdmin() || isTeacher();
+      allow write: if isAdmin() || isTeacher();
+    }
+    match /centerHolidays/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /teacherDuties/{id} {
+      allow read, write: if isTeacher();
+    }
+    match /staffTasks/{id} {
+      allow read, write: if isTeacher();
+    }
+    match /sessionPackages/{id} {
+      allow read, write: if isAdmin() || isTeacher();
+    }
+    match /sessionHistory/{id} {
+      allow read, write: if isAdmin() || isTeacher();
+    }
+    match /teacherComments/{id} {
+      allow read, write: if isTeacher();
+    }
+    match /teacherNotes/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /studentDocuments/{id} {
+      allow read, write: if isAdmin() || isTeacher();
+    }
+    match /chatGroups/{id} {
+      allow read, write: if signedIn();
+    }
+    match /teacherWorkShifts/{id} {
+      allow read, write: if isTeacher();
+    }
+    match /teacherRoleOptions/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /accountInvitations/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /meta/{id} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
