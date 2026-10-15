@@ -46,6 +46,27 @@ export function hirayaApiUnavailable() {
   );
 }
 
+const WAKING_MESSAGE =
+  'The center is waking up. Keep this window open for about a minute, then tap Apply now again.';
+
+function wakingJson(status = 503) {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  applyApiCors(headers);
+  headers.set('Cache-Control', 'no-store');
+  return NextResponse.json({ error: WAKING_MESSAGE }, { status, headers });
+}
+
+function looksLikeColdStart(status: number, type: string, body: ArrayBuffer) {
+  if ([502, 503, 504, 520, 521, 522, 524].includes(status)) return true;
+  if (type.includes('json')) return false;
+  const text = new TextDecoder().decode(body).slice(0, 2500);
+  return /service waking up|application loading|incoming http request detected/i.test(text);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function proxyToHirayaApi(request: Request, path: string) {
   if (request.method === 'OPTIONS') return apiCorsPreflight();
   const base = backendBase();
@@ -59,45 +80,56 @@ export async function proxyToHirayaApi(request: Request, path: string) {
   if (session) headers.set(SESSION_HEADER, session);
   const phone = request.headers.get('x-hiraya-client');
   if (phone) headers.set('X-Hiraya-Client', phone);
-  const init: RequestInit = { method: request.method, headers };
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    init.body = await request.arrayBuffer();
-  }
-  try {
-    const res = await fetch(target, {
-      ...init,
-      signal: AbortSignal.timeout(50_000),
-    });
-    let body = await res.arrayBuffer();
-    const type = res.headers.get('content-type') || '';
-    if (type.includes('json') && body.byteLength) {
-      try {
-        const parsed = JSON.parse(new TextDecoder().decode(body)) as { error?: string };
-        if (typeof parsed?.error === 'string' && /mysql/i.test(parsed.error)) {
-          parsed.error = 'This email is already used at this center. Use a different parent email.';
-          body = new TextEncoder().encode(JSON.stringify(parsed)).buffer as ArrayBuffer;
-        }
-      } catch {
-        /* leave the original body */
+  const payload =
+    request.method !== 'GET' && request.method !== 'HEAD' ? await request.arrayBuffer() : null;
+  const attempts = 5;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetch(target, {
+        method: request.method,
+        headers,
+        body: payload ? payload.slice(0) : undefined,
+        signal: AbortSignal.timeout(25_000),
+      });
+      let body = await res.arrayBuffer();
+      const type = res.headers.get('content-type') || '';
+      const cold = looksLikeColdStart(res.status, type, body);
+      if (cold && attempt < attempts) {
+        await sleep(8000);
+        continue;
       }
+      if (cold) return wakingJson(503);
+      if (type.includes('json') && body.byteLength) {
+        try {
+          const parsed = JSON.parse(new TextDecoder().decode(body)) as { error?: string };
+          if (typeof parsed?.error === 'string' && /mysql/i.test(parsed.error)) {
+            parsed.error = 'This email is already used at this center. Use a different parent email.';
+            body = new TextEncoder().encode(JSON.stringify(parsed)).buffer as ArrayBuffer;
+          }
+        } catch {
+          /* leave the original body */
+        }
+      }
+      const out = new Headers();
+      if (type) out.set('Content-Type', type);
+      out.set('Cache-Control', 'no-store');
+      out.set('X-Hiraya-Hub', 'hiraya-central');
+      applyApiCors(out);
+      return new NextResponse(body.byteLength ? body : null, { status: res.status, headers: out });
+    } catch (err) {
+      const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+      console.error(`Hiraya.Api proxy failed (${target}):`, err instanceof Error ? err.message : err);
+      if (attempt < attempts && timedOut) {
+        await sleep(8000);
+        continue;
+      }
+      if (timedOut) return wakingJson(503);
+      if (attempt < attempts) {
+        await sleep(8000);
+        continue;
+      }
+      return wakingJson(503);
     }
-    const out = new Headers();
-    if (type) out.set('Content-Type', type);
-    out.set('Cache-Control', 'no-store');
-    out.set('X-Hiraya-Hub', 'hiraya-central');
-    applyApiCors(out);
-    return new NextResponse(body.byteLength ? body : null, { status: res.status, headers: out });
-  } catch (err) {
-    const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-    console.error(`Hiraya.Api proxy failed (${target}):`, err instanceof Error ? err.message : err);
-    if (timedOut) {
-      const headers = new Headers({ 'Content-Type': 'application/json' });
-      applyApiCors(headers);
-      return NextResponse.json(
-        { error: 'The center is still waking up. Wait a moment and try again.' },
-        { status: 503, headers },
-      );
-    }
-    return null;
   }
+  return wakingJson(503);
 }

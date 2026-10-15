@@ -43,7 +43,11 @@ export class HirayaApi {
         data = JSON.parse(text);
       } catch {
         throw new ApiError(
-          res.ok ? 'The server returned an invalid response.' : `Request failed (${res.status})`,
+          res.ok
+            ? 'The server returned an invalid response.'
+            : res.status === 502 || res.status === 503 || res.status === 504
+              ? 'The center is waking up. Wait about a minute, then tap Apply now again.'
+              : `Request failed (${res.status})`,
           res.status,
         );
       }
@@ -54,7 +58,9 @@ export class HirayaApi {
           ? 'Username or password is incorrect.'
           : res.status === 404
             ? 'The parent API route was not found. Confirm Hiraya.Api is running on port 5188.'
-            : `Request failed (${res.status})`;
+            : res.status === 502 || res.status === 503 || res.status === 504
+              ? 'The center is waking up. Wait about a minute, then tap Apply now again.'
+              : `Request failed (${res.status})`;
       const message = (data && (data.error || data.message || data.title)) || fallback;
       throw new ApiError(String(message), res.status, data);
     }
@@ -667,14 +673,7 @@ export class HirayaApi {
   }
 
   async applyEnrollment(input: EnrollmentApplyInput): Promise<{ submitted?: boolean; applicationId?: string }> {
-    const res = await fetch(this.url('/api/public/enrollment?v=20261015'), {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
-    });
-    return this.parse(res);
+    return this.postPublic('/api/public/enrollment?v=20261015', input);
   }
 
   async submitInquiry(input: {
@@ -693,13 +692,39 @@ export class HirayaApi {
   }
 
   async applyTeacher(input: TeacherApplyInput): Promise<{ submitted?: boolean; applicationId?: string }> {
-    const res = await fetch(this.url('/api/public/teacher-application'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(20000) : undefined,
-    });
-    return this.parse(res);
+    return this.postPublic('/api/public/teacher-application', input);
+  }
+
+  private async postPublic<T>(path: string, input: unknown): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(this.url(path), {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+          signal:
+            typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+              ? AbortSignal.timeout(90_000)
+              : undefined,
+        });
+        if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 8000));
+          continue;
+        }
+        return this.parse<T>(res);
+      } catch (err) {
+        lastError = err;
+        const status = err instanceof ApiError ? err.status : 0;
+        if ((status === 502 || status === 503 || status === 504) && attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 8000));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new ApiError('The center is waking up. Wait about a minute, then tap Apply now again.', 503);
   }
 
   async parentProfile(): Promise<HirayaUser> {

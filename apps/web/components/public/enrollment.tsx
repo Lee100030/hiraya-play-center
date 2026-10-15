@@ -577,7 +577,7 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
                 Cancel
               </button>
               <button type="submit" className="enroll-modal-submit" disabled={saving}>
-                {saving ? 'Sending application…' : 'Apply now'}
+                {saving ? 'Waking the center…' : 'Apply now'}
               </button>
             </div>
           </form>
