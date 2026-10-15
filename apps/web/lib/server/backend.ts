@@ -68,12 +68,23 @@ export async function proxyToHirayaApi(request: Request, path: string) {
       ...init,
       signal: AbortSignal.timeout(50_000),
     });
-    const body = await res.arrayBuffer();
+    let body = await res.arrayBuffer();
+    const type = res.headers.get('content-type') || '';
+    if (type.includes('json') && body.byteLength) {
+      try {
+        const parsed = JSON.parse(new TextDecoder().decode(body)) as { error?: string };
+        if (typeof parsed?.error === 'string' && /mysql/i.test(parsed.error)) {
+          parsed.error =
+            'The center could not save this on Neon PostgreSQL. Close the form, press Ctrl+Shift+R, and submit once more.';
+          body = new TextEncoder().encode(JSON.stringify(parsed)).buffer as ArrayBuffer;
+        }
+      } catch {
+        /* leave the original body */
+      }
+    }
     const out = new Headers();
-    const type = res.headers.get('content-type');
     if (type) out.set('Content-Type', type);
-    const cache = res.headers.get('cache-control');
-    if (cache) out.set('Cache-Control', cache);
+    out.set('Cache-Control', 'no-store');
     out.set('X-Hiraya-Hub', 'hiraya-central');
     applyApiCors(out);
     return new NextResponse(body.byteLength ? body : null, { status: res.status, headers: out });
