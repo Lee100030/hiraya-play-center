@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
 using Hiraya.Shared.Models;
+using Hiraya.Shared.Security;
 using Hiraya.Shared.Services;
 using Hiraya.Shared.Services.Firebase;
 using Microsoft.Extensions.Logging;
@@ -101,6 +102,33 @@ public class FirestoreHirayaRepository : IHirayaRepository
     {
         var snap = await _db.Collection("settings").Document("center").GetSnapshotAsync(ct);
         return snap.Exists;
+    }
+
+    public async Task<HirayaUser?> FindUserAsync(string? userId, string? login, CancellationToken ct = default)
+    {
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            var snap = await _db.Collection("users").Document(userId.Trim()).GetSnapshotAsync(ct);
+            if (snap.Exists)
+            {
+                try
+                {
+                    var found = FromDoc<HirayaUser>(snap);
+                    if (found is not null)
+                        return found;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not read Firestore user {UserId}.", userId);
+                }
+            }
+        }
+
+        var key = (login ?? "").Trim();
+        if (key.Length == 0)
+            return null;
+        var users = await LoadList<HirayaUser>("users", ct);
+        return users.FirstOrDefault(u => LoginIdentity.Matches(u, key));
     }
 
     private async Task<HirayaDatabase> LoadUnlockedAsync(CancellationToken ct)

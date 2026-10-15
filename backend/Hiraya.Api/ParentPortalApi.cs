@@ -282,9 +282,24 @@ public static class ParentPortalApi
         var ticket = tokens is null ? null : SessionTokens.TryRead(packed, tokens.Secret);
         if (ticket is null)
             return null;
-        var gate = request.HttpContext.RequestServices.GetService<SessionGate>();
-        if (gate is not null && await gate.IsRevokedAsync(ticket.Jti, request.HttpContext.RequestAborted))
-            return null;
+        SessionGate? gate = null;
+        try
+        {
+            gate = request.HttpContext.RequestServices.GetService<SessionGate>();
+        }
+        catch
+        {
+            gate = null;
+        }
+        try
+        {
+            if (gate is not null && await gate.IsRevokedAsync(ticket.Jti, request.HttpContext.RequestAborted))
+                return null;
+        }
+        catch
+        {
+            // Firestore has no Neon revoke table; a failed check must not block a valid session.
+        }
         var user = await repo.FindUserAsync(ticket.UserId, null);
         if (user is null || !AccountStatuses.AllowsPortalLogin(user.Status))
             return null;

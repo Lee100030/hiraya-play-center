@@ -83,7 +83,17 @@ if (useFirestore)
     builder.Services.AddSingleton<IRevokedSessionStore, MemoryRevokedSessionStore>();
 else
     builder.Services.AddSingleton<IRevokedSessionStore, RevokedSessionStore>();
-builder.Services.AddSingleton<SessionGate>();
+builder.Services.AddSingleton(sp =>
+{
+    try
+    {
+        return new SessionGate(sp.GetService<IRevokedSessionStore>());
+    }
+    catch
+    {
+        return new SessionGate();
+    }
+});
 builder.Services.AddSingleton<PublicRequestThrottle>();
 builder.Services.AddSingleton<SensitiveActionCodes>();
 if (useFirestore)
@@ -176,6 +186,7 @@ app.MapGet("/api/health", async (IHirayaRepository repo, IServiceProvider servic
                 database = "firestore",
                 store = "firebase-firestore",
                 enroll = "2026-10-15-text",
+                rev = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? "local",
                 clients = CentralHub.Clients,
             };
             return ok ? Results.Ok(payload) : Results.Json(payload, statusCode: 503);
@@ -282,12 +293,20 @@ app.MapPost("/api/auth/login", async (LoginRequest body, HttpRequest request, Po
     }
 });
 
-app.MapGet("/api/auth/me", async (HttpRequest request, IHirayaRepository repo) =>
+app.MapGet("/api/auth/me", async (HttpRequest request, IHirayaRepository repo, ILoggerFactory logs) =>
 {
-    var actor = await ParentPortalApi.ActorAsync(request, repo);
-    if (actor is null)
-        return Results.Unauthorized();
-    return Results.Json(AccountService.ClonePublic(actor), JsonDefaults.Options);
+    try
+    {
+        var actor = await ParentPortalApi.ActorAsync(request, repo);
+        if (actor is null)
+            return Results.Unauthorized();
+        return Results.Json(AccountService.ClonePublic(actor), JsonDefaults.Options);
+    }
+    catch (Exception ex)
+    {
+        logs.CreateLogger("Hiraya.Api").LogError(ex, "Failed resolving the signed-in HIRAYA account.");
+        return Results.Json(new { error = "Could not load this account from Firestore. Sign in again." }, statusCode: StatusCodes.Status500InternalServerError);
+    }
 });
 
 app.MapPost("/api/auth/logout", async (HttpRequest request, SessionTokenOptions tokens, SessionGate gate, CancellationToken ct) =>
