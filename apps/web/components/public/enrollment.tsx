@@ -148,6 +148,7 @@ function EnrollmentModal({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [ok, setOk] = useState(false);
   const [applicationId, setApplicationId] = useState('');
+  const [receiptSchedule, setReceiptSchedule] = useState('');
   const [saving, setSaving] = useState(false);
   const [age, setAge] = useState('');
   const year = new Date().getFullYear();
@@ -163,6 +164,7 @@ function EnrollmentModal({
       setFieldErrors({});
       setOk(false);
       setApplicationId('');
+      setReceiptSchedule('');
       setSaving(false);
       setAge('');
       return;
@@ -212,6 +214,7 @@ function EnrollmentModal({
     try {
       const result = await api.applyEnrollment(payload);
       setApplicationId(result.applicationId || '');
+      setReceiptSchedule(payload.preferredSchedule || '');
       setOk(true);
       form.reset();
     } catch (err) {
@@ -265,9 +268,10 @@ function EnrollmentModal({
         {ok ? (
           <div className="enroll-modal-success">
             <Alert kind="success">
-              Your application was received. The parent is now in Parent management and the child is in Students, already
-              linked as a family. The admissions office will still review class placement.
-              {applicationId ? ` Reference number: ${applicationId}` : ''}
+              Your application was received. The next process will be sent to the parent or guardian email on file.
+              {receiptSchedule ? ` Preferred schedule: ${receiptSchedule}.` : ''}
+              {` Location: Hiraya Kids Learning Center, ${site.address || 'Rodriguez (Montalban), Rizal, Philippines'}.`}
+              {applicationId ? ` Reference number: ${applicationId}.` : ''}
             </Alert>
             {error ? <Alert>{error}</Alert> : null}
             <button type="button" className="enroll-modal-submit" onClick={onClose}>

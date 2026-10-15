@@ -129,11 +129,12 @@ public class EnrollmentService
             await Task.CompletedTask;
         });
 
+        var schedule = string.IsNullOrWhiteSpace(preferredSchedule) ? "to be confirmed" : preferredSchedule.Trim();
         QueueReceipt(
             guardianEmail,
             guardianName,
             "we received your enrollment application",
-            $"We received the enrollment application for {childName} ({program}). The parent and the child are now on file at the center and linked together. Class placement still waits for review.");
+            $"We received the enrollment application for {childName} ({program}). The next process will be sent to this email. Preferred schedule: {schedule}. Location: Hiraya Kids Learning Center, Rodriguez (Montalban), Rizal, Philippines.");
         return applicationId;
     }
 
