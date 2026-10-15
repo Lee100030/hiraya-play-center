@@ -169,6 +169,8 @@ app.MapGet("/api/health", async (IDbContextFactory<HirayaLearningCenterDbContext
             status = ok ? "ok" : "down",
             hub = "hiraya-central",
             database = DatabaseName(db.Database.GetConnectionString()),
+            store = "neon-postgres",
+            enroll = "2026-10-15-text",
             clients = CentralHub.Clients,
         };
         return ok ? Results.Ok(payload) : Results.Json(payload, statusCode: 503);
@@ -389,6 +391,7 @@ app.MapGet("/api/public/site", async (HttpContext http, IHirayaRepository repo, 
 
 app.MapPost("/api/public/enrollment", async (HttpRequest request, PublicEnrollmentRequest body, EnrollmentService enroll, PublicRequestThrottle throttle) =>
 {
+    request.HttpContext.Response.Headers.CacheControl = "no-store";
     if (!throttle.Allow($"enroll:{ParentPortalApi.ClientHost(request)}", 8, TimeSpan.FromMinutes(15)))
         return Results.Json(new { error = "Too many enrollment submissions. Please wait and try again." }, statusCode: StatusCodes.Status429TooManyRequests);
     try
@@ -701,7 +704,7 @@ static string DatabaseUnavailableMessage(string provider) =>
 static string RecordsUnavailableMessage(string provider, string action) =>
     string.Equals(provider, HirayaDb.Postgres, StringComparison.OrdinalIgnoreCase)
         ? $"Center records could not be {action}. Confirm Neon is reachable and try again."
-        : $"Center records could not be {action}. Confirm MySQL is running and try again.";
+        : $"Center records could not be {action}. Confirm the local database is running and try again.";
 
 static string DatabaseName(string? connection)
 {

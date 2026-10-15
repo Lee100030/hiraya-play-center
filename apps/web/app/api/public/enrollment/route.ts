@@ -5,6 +5,9 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   const proxied = await proxyToHirayaApi(request, '/api/public/enrollment');
-  if (proxied) return proxied;
+  if (proxied) {
+    proxied.headers.set('Cache-Control', 'no-store');
+    return proxied;
+  }
   return hirayaApiUnavailable();
 }

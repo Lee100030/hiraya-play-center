@@ -35,10 +35,11 @@ public class EfHirayaRepository : IHirayaRepository
         await _gate.WaitAsync(ct);
         try
         {
-            var db = await LoadUnlockedAsync(ct);
-            await mutator(db);
-            await SaveUnlockedAsync(db, ct);
-            Remember(db);
+            var current = await LoadUnlockedAsync(ct);
+            var next = Clone(current);
+            await mutator(next);
+            await SaveChangedAsync(current, next, ct);
+            Remember(next);
         }
         finally
         {

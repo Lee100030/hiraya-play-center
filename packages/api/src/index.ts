@@ -667,7 +667,7 @@ export class HirayaApi {
   }
 
   async applyEnrollment(input: EnrollmentApplyInput): Promise<{ submitted?: boolean; applicationId?: string }> {
-    const res = await fetch(this.url('/api/public/enrollment'), {
+    const res = await fetch(this.url('/api/public/enrollment?v=20261015'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
