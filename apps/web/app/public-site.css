@@ -1269,6 +1269,34 @@
   padding: 14px 22px 18px;
 }
 
+.enroll-next-steps {
+  margin: 12px 0 16px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.enroll-next-steps li {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #eadfb8;
+  border-radius: 12px;
+  background: #fffdf6;
+  color: var(--hk-ink);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.enroll-next-steps strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hk-green-mid);
+}
+
 .enroll-modal-section {
   margin: 10px 0 8px;
   font-size: 0.7rem;

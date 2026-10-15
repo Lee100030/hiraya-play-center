@@ -268,11 +268,28 @@ function EnrollmentModal({
         {ok ? (
           <div className="enroll-modal-success">
             <Alert kind="success">
-              Your application was received. The next process will be sent to the parent or guardian email on file.
-              {receiptSchedule ? ` Preferred schedule: ${receiptSchedule}.` : ''}
-              {` Location: Hiraya Kids Learning Center, ${site.address || 'Rodriguez (Montalban), Rizal, Philippines'}.`}
-              {applicationId ? ` Reference number: ${applicationId}.` : ''}
+              Your application was received. We will notify you by email for the next process.
             </Alert>
+            <ul className="enroll-next-steps">
+              <li>
+                <strong>Email</strong>
+                The next process will be sent to the parent or guardian email on file.
+              </li>
+              <li>
+                <strong>Schedule</strong>
+                {receiptSchedule || selected?.description || site.businessHours || 'The office will confirm your class schedule.'}
+              </li>
+              <li>
+                <strong>Location</strong>
+                Hiraya Kids Learning Center, {site.address || 'Rodriguez (Montalban), Rizal, Philippines'}
+              </li>
+              {applicationId ? (
+                <li>
+                  <strong>Reference</strong>
+                  {applicationId}
+                </li>
+              ) : null}
+            </ul>
             {error ? <Alert>{error}</Alert> : null}
             <button type="button" className="enroll-modal-submit" onClick={onClose}>
               Close
