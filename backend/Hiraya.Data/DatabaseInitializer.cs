@@ -399,6 +399,12 @@ public static class DatabaseInitializer
                   PRIMARY KEY (GroupId)
                 );
                 """);
+            await TryWidenText(db, "enrollment_applications", "Notes");
+            await TryWidenText(db, "notifications", "Message");
+            await TryWidenText(db, "students", "Address");
+            await TryWidenText(db, "students", "Notes");
+            await TryWidenText(db, "users", "Address");
+            await TryWidenText(db, "users", "Notes");
             logger.LogInformation("Workflow schema is ready (tasks, sessions, teacher workspace notes).");
         }
         catch (Exception ex)
@@ -432,7 +438,28 @@ public static class DatabaseInitializer
         await TryAddColumn(db, "payments", "IncomeBucket", "varchar(32) NOT NULL DEFAULT ''");
         await TryAddColumn(db, "enrollment_applications", "ApplicationKind", "varchar(32) NOT NULL DEFAULT 'student'");
         await TryAddColumn(db, "center_expenses", "Kind", "varchar(16) NOT NULL DEFAULT 'expense'");
+        await TryWidenText(db, "enrollment_applications", "Notes");
+        await TryWidenText(db, "notifications", "Message");
+        await TryWidenText(db, "students", "Address");
+        await TryWidenText(db, "students", "Notes");
+        await TryWidenText(db, "users", "Address");
+        await TryWidenText(db, "users", "Notes");
         logger.LogInformation("PostgreSQL workflow columns are ready. Tables come from the Neon baseline migration.");
+    }
+
+    private static async Task TryWidenText(HirayaLearningCenterDbContext db, string table, string column)
+    {
+        try
+        {
+            if (IsPostgres(db))
+                await db.Database.ExecuteSqlRawAsync($"ALTER TABLE {table} ALTER COLUMN \"{column}\" TYPE text;");
+            else
+                await db.Database.ExecuteSqlRawAsync($"ALTER TABLE `{table}` MODIFY `{column}` text NOT NULL;");
+        }
+        catch
+        {
+            /* column already text, or table missing on a fresh local MySQL */
+        }
     }
 
     private static async Task TryAddColumn(HirayaLearningCenterDbContext db, string table, string column, string definition)

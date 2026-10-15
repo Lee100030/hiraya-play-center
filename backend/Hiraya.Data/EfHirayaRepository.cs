@@ -348,8 +348,8 @@ public class EfHirayaRepository : IHirayaRepository
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed saving HLCMS store to MySQL.");
-            throw new InvalidOperationException("The database could not save those changes. Check that MySQL is running and try again.");
+            _logger.LogError(ex, "Failed saving HLCMS store.");
+            throw new InvalidOperationException("The center could not save those changes. Please try again in a moment.");
         }
     }
 
@@ -425,8 +425,8 @@ public class EfHirayaRepository : IHirayaRepository
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed saving HLCMS store patch to MySQL.");
-            throw new InvalidOperationException("The database could not save those changes. Check that MySQL is running and try again.");
+            _logger.LogError(ex, "Failed saving HLCMS store patch.");
+            throw new InvalidOperationException("The center could not save those changes. Please try again in a moment.");
         }
     }
 

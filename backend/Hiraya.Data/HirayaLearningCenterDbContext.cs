@@ -71,7 +71,8 @@ public class HirayaLearningCenterDbContext : DbContext
             e.HasIndex(x => x.Email).IsUnique();
             e.HasIndex(x => x.Username);
             e.HasIndex(x => x.Status);
-            e.Property(x => x.Notes).HasMaxLength(191);
+            e.Property(x => x.Notes).HasColumnType("text");
+            e.Property(x => x.Address).HasColumnType("text");
         });
 
         Key<AppRole>(modelBuilder, "roles", x => x.RoleId);
@@ -88,6 +89,8 @@ public class HirayaLearningCenterDbContext : DbContext
         modelBuilder.Entity<Student>(e =>
         {
             e.Property(x => x.ProfileImagePath).HasMaxLength(512);
+            e.Property(x => x.Address).HasColumnType("text");
+            e.Property(x => x.Notes).HasColumnType("text");
             e.HasIndex(x => x.ParentId);
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.QrCode);
@@ -117,7 +120,11 @@ public class HirayaLearningCenterDbContext : DbContext
         });
 
         Key<EnrollmentApplication>(modelBuilder, "enrollment_applications", x => x.ApplicationId);
-        modelBuilder.Entity<EnrollmentApplication>().Property(x => x.ApplicationKind).HasMaxLength(32);
+        modelBuilder.Entity<EnrollmentApplication>(e =>
+        {
+            e.Property(x => x.ApplicationKind).HasMaxLength(32);
+            e.Property(x => x.Notes).HasColumnType("text");
+        });
 
         Key<AttendanceRecord>(modelBuilder, "attendance", x => x.AttendanceId);
         modelBuilder.Entity<AttendanceRecord>(e =>
@@ -191,7 +198,11 @@ public class HirayaLearningCenterDbContext : DbContext
         });
 
         Key<SystemAlert>(modelBuilder, "notifications", x => x.AlertId);
-        modelBuilder.Entity<SystemAlert>().HasIndex(x => x.RecipientId);
+        modelBuilder.Entity<SystemAlert>(e =>
+        {
+            e.HasIndex(x => x.RecipientId);
+            e.Property(x => x.Message).HasColumnType("text");
+        });
 
         Key<AuditLogEntry>(modelBuilder, "audit_logs", x => x.AuditId);
         modelBuilder.Entity<AuditLogEntry>().HasIndex(x => x.CreatedAt);
