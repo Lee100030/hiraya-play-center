@@ -79,7 +79,10 @@ builder.Services.AddSingleton(new SessionTokenOptions
 {
     Secret = string.IsNullOrWhiteSpace(sessionSecret) ? SessionTokens.DevelopmentSecret : sessionSecret
 });
-builder.Services.AddSingleton<IRevokedSessionStore, RevokedSessionStore>();
+if (useFirestore)
+    builder.Services.AddSingleton<IRevokedSessionStore, MemoryRevokedSessionStore>();
+else
+    builder.Services.AddSingleton<IRevokedSessionStore, RevokedSessionStore>();
 builder.Services.AddSingleton<SessionGate>();
 builder.Services.AddSingleton<PublicRequestThrottle>();
 builder.Services.AddSingleton<SensitiveActionCodes>();

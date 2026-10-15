@@ -94,6 +94,28 @@ public interface IRevokedSessionStore
     Task<bool> IsRevokedAsync(string jti, CancellationToken ct = default);
 }
 
+public sealed class MemoryRevokedSessionStore : IRevokedSessionStore
+{
+    private readonly ConcurrentDictionary<string, long> _revoked = new(StringComparer.Ordinal);
+
+    public Task RevokeAsync(string jti, long expiresUnix, CancellationToken ct = default)
+    {
+        var id = (jti ?? "").Trim();
+        if (id.Length > 0)
+            _revoked[id] = expiresUnix;
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> IsRevokedAsync(string jti, CancellationToken ct = default)
+    {
+        var id = (jti ?? "").Trim();
+        if (id.Length == 0)
+            return Task.FromResult(true);
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        return Task.FromResult(_revoked.TryGetValue(id, out var expires) && expires > now);
+    }
+}
+
 public sealed class SessionGate
 {
     private readonly ConcurrentDictionary<string, long> _revoked = new(StringComparer.Ordinal);
@@ -161,7 +183,14 @@ public sealed class SessionGate
             return true;
         if (_store is null)
             return false;
-        return await _store.IsRevokedAsync(jti, ct);
+        try
+        {
+            return await _store.IsRevokedAsync(jti, ct);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void Prune()

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
 using Hiraya.Shared.Models;
@@ -12,7 +13,14 @@ public class FirestoreHirayaRepository : IHirayaRepository
 {
     public const string ProjectId = "hiraya-kids-learning";
 
-    private static readonly JsonSerializerOptions Json = JsonDefaults.Options;
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+        WriteIndented = false,
+    };
     private readonly FirestoreDb _db;
     private readonly ILogger<FirestoreHirayaRepository> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -195,9 +203,16 @@ public class FirestoreHirayaRepository : IHirayaRepository
         var list = new List<T>(snap.Count);
         foreach (var doc in snap.Documents)
         {
-            var item = FromDoc<T>(doc);
-            if (item is not null)
-                list.Add(item);
+            try
+            {
+                var item = FromDoc<T>(doc);
+                if (item is not null)
+                    list.Add(item);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Skipped unreadable Firestore document {Collection}/{DocumentId}.", collection, doc.Id);
+            }
         }
         return list;
     }
@@ -245,7 +260,10 @@ public class FirestoreHirayaRepository : IHirayaRepository
 
     private static T? FromDoc<T>(DocumentSnapshot doc)
     {
-        var json = JsonSerializer.Serialize(ToPlain(doc.ToDictionary()));
+        var plain = ToPlain(doc.ToDictionary()) as Dictionary<string, object> ?? new Dictionary<string, object>();
+        if (plain.TryGetValue("passwordHash", out var hash) && hash is string stored && stored.Length > 0)
+            plain.TryAdd("password", stored);
+        var json = JsonSerializer.Serialize(plain);
         return JsonSerializer.Deserialize<T>(json, Json);
     }
 
@@ -259,6 +277,24 @@ public class FirestoreHirayaRepository : IHirayaRepository
     {
         if (value is JsonElement el)
             return ToPlain(el);
+        if (value is string text)
+        {
+            var trimmed = text.Trim();
+            if ((trimmed.StartsWith('[') && trimmed.EndsWith(']')) ||
+                (trimmed.StartsWith('{') && trimmed.EndsWith('}')))
+            {
+                try
+                {
+                    using var nested = JsonDocument.Parse(trimmed);
+                    return ToPlain(nested.RootElement);
+                }
+                catch (JsonException)
+                {
+                    return text;
+                }
+            }
+            return text;
+        }
         if (value is Dictionary<string, object> dict)
         {
             var copy = new Dictionary<string, object>();
@@ -289,7 +325,25 @@ public class FirestoreHirayaRepository : IHirayaRepository
             case JsonValueKind.Array:
                 return el.EnumerateArray().Select(ToPlain).Where(x => x is not null).Cast<object>().ToList();
             case JsonValueKind.String:
-                return el.GetString();
+                var text = el.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    var trimmed = text.Trim();
+                    if ((trimmed.StartsWith('[') && trimmed.EndsWith(']')) ||
+                        (trimmed.StartsWith('{') && trimmed.EndsWith('}')))
+                    {
+                        try
+                        {
+                            using var nested = JsonDocument.Parse(trimmed);
+                            return ToPlain(nested.RootElement);
+                        }
+                        catch (JsonException)
+                        {
+                            return text;
+                        }
+                    }
+                }
+                return text;
             case JsonValueKind.Number:
                 if (el.TryGetInt64(out var i))
                     return i;
