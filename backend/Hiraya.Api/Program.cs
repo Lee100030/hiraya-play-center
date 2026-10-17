@@ -732,6 +732,20 @@ if (!useFirestore)
 else
 {
     app.Logger.LogInformation("Hiraya.Api is using Cloud Firestore project hiraya-kids-learning.");
+    var warmRepo = app.Services.GetRequiredService<IHirayaRepository>();
+    app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
+    {
+        var started = DateTime.UtcNow;
+        try
+        {
+            await warmRepo.LoadAsync();
+            app.Logger.LogInformation("Warmed the Firestore store cache in {Seconds:F1}s.", (DateTime.UtcNow - started).TotalSeconds);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Could not warm the Firestore store cache; the first request will load it.");
+        }
+    }));
 }
 
 app.Run();
