@@ -692,7 +692,38 @@ export class HirayaApi {
   }
 
   async applyTeacher(input: TeacherApplyInput): Promise<{ submitted?: boolean; applicationId?: string }> {
-    return this.postPublic('/api/public/teacher-application', input);
+    if (!input.resume) return this.postPublic('/api/public/teacher-application', input);
+    const body = new FormData();
+    body.append('fullname', input.fullname);
+    body.append('email', input.email);
+    body.append('phone', input.phone);
+    body.append('position', input.position);
+    body.append('notes', input.notes || '');
+    body.append('resume', input.resume, input.resumeName || 'resume.pdf');
+    const res = await fetch(this.url('/api/public/teacher-application'), {
+      method: 'POST',
+      cache: 'no-store',
+      body,
+      signal:
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(90_000)
+          : undefined,
+    });
+    return this.parse(res);
+  }
+
+  async openTeacherResume(applicationId: string): Promise<void> {
+    const res = await fetch(this.url(`/api/enrollment-applications/${encodeURIComponent(applicationId)}/resume`), {
+      headers: await this.headers(false),
+    });
+    if (!res.ok) {
+      await this.parse(res);
+      return;
+    }
+    const blob = await res.blob();
+    const href = URL.createObjectURL(blob);
+    window.open(href, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
   }
 
   private async postPublic<T>(path: string, input: unknown): Promise<T> {

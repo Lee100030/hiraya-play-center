@@ -310,6 +310,9 @@ public class EnrollmentApplication
     public string? StudentNumber { get; set; }
     public string Notes { get; set; } = "";
     public string ApplicationKind { get; set; } = "student";
+    public string ResumeFileName { get; set; } = "";
+    public string ResumeContentType { get; set; } = "";
+    public long ResumeSizeBytes { get; set; }
 }
 
 public class AttendanceRecord

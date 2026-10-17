@@ -473,13 +473,30 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
     if (saving) return;
     setError(null);
     const form = event.currentTarget;
-    const parsed = teacherApplySchema.safeParse(Object.fromEntries(new FormData(form).entries()));
+    const data = new FormData(form);
+    const resume = data.get('resume');
+    const parsed = teacherApplySchema.safeParse({
+      fullname: data.get('fullname'),
+      email: data.get('email'),
+      phone: data.get('phone'),
+      position: data.get('position'),
+      notes: data.get('notes'),
+    });
+    const next: Record<string, string> = {};
     if (!parsed.success) {
-      const next: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         const key = String(issue.path[0] || '');
         if (key && !next[key]) next[key] = issue.message;
       }
+    }
+    if (!(resume instanceof File) || resume.size <= 0) {
+      next.resume = 'Upload your resume as a PDF or Word file.';
+    } else if (!/\.(pdf|doc|docx)$/i.test(resume.name)) {
+      next.resume = 'Resume must be a PDF or Word file.';
+    } else if (resume.size > 5 * 1024 * 1024) {
+      next.resume = 'Resume must be 5 MB or smaller.';
+    }
+    if (!parsed.success || !(resume instanceof File) || next.resume) {
       setFieldErrors(next);
       setError('Please complete the required fields.');
       return;
@@ -493,6 +510,8 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
         phone: parsed.data.phone,
         position: parsed.data.position,
         notes: parsed.data.notes || '',
+        resume,
+        resumeName: resume.name,
       });
       setApplicationId(result.applicationId || '');
       setOk(true);
@@ -571,13 +590,28 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
               <Field label="Experience and message" error={fieldErrors.notes}>
                 <Textarea name="notes" rows={4} />
               </Field>
+              <div className="enroll-file">
+                <Field
+                  label="Resume"
+                  required
+                  error={fieldErrors.resume}
+                  hint="PDF or Word, up to 5 MB. The administrator can open this file."
+                >
+                  <input
+                    name="resume"
+                    type="file"
+                    accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    required
+                  />
+                </Field>
+              </div>
             </div>
             <div className="enroll-modal-actions">
               <button type="button" className="enroll-modal-cancel" onClick={onClose} disabled={saving}>
                 Cancel
               </button>
               <button type="submit" className="enroll-modal-submit" disabled={saving}>
-                {saving ? 'Waking the center…' : 'Apply now'}
+                {saving ? 'Sending application…' : 'Apply now'}
               </button>
             </div>
           </form>

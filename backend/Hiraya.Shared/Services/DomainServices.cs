@@ -138,7 +138,16 @@ public class EnrollmentService
         return applicationId;
     }
 
-    public async Task<string> SubmitTeacherApplicationAsync(string fullname, string email, string phone, string position, string? notes)
+    public async Task<string> SubmitTeacherApplicationAsync(
+        string fullname,
+        string email,
+        string phone,
+        string position,
+        string? notes,
+        string? applicationId = null,
+        string? resumeFileName = null,
+        string? resumeContentType = null,
+        long resumeSizeBytes = 0)
     {
         var name = (fullname ?? "").Trim();
         var mail = (email ?? "").Trim();
@@ -154,7 +163,9 @@ public class EnrollmentService
         if (string.IsNullOrWhiteSpace(role))
             throw new InvalidOperationException("Please choose the role you want to teach.");
 
-        var applicationId = $"tch_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid().ToString("N")[..6]}";
+        applicationId = string.IsNullOrWhiteSpace(applicationId)
+            ? $"tch_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid().ToString("N")[..6]}"
+            : applicationId.Trim();
         await _repository.MutateAsync(async db =>
         {
             var duplicate = db.EnrollmentApplications.Any(a =>
@@ -174,7 +185,10 @@ public class EnrollmentService
                 PreferredProgram = role,
                 SubmittedAt = DateTime.UtcNow.ToString("o"),
                 Status = "pending_review",
-                Notes = (notes ?? "").Trim()
+                Notes = (notes ?? "").Trim(),
+                ResumeFileName = (resumeFileName ?? "").Trim(),
+                ResumeContentType = (resumeContentType ?? "").Trim(),
+                ResumeSizeBytes = resumeSizeBytes
             });
             NotificationService.PushToUsers(
                 db,

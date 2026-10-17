@@ -30,6 +30,7 @@ export default function AdminEnrollmentsPage() {
   const [kind, setKind] = useState(pathname.includes('teacher-applications') ? 'teacher' : 'student');
   const [tab, setTab] = useState('all');
   const [selected, setSelected] = useState<EnrollmentApplication | null>(null);
+  const [resumeError, setResumeError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [interviewWhen, setInterviewWhen] = useState('');
   const [interviewPlace, setInterviewPlace] = useState('');
@@ -51,6 +52,15 @@ export default function AdminEnrollmentsPage() {
     return isTeacherApplication(row)
       ? teacherApplicationOpen(row.status)
       : row.status === 'pending_review' || row.status === 'pending';
+  }
+
+  async function openResume(row: EnrollmentApplication) {
+    setResumeError(null);
+    try {
+      await api.openTeacherResume(row.applicationId);
+    } catch (err) {
+      setResumeError(err instanceof Error ? err.message : 'Could not open that resume.');
+    }
   }
 
   async function setStatusFor(id: string, next: string) {
@@ -144,6 +154,19 @@ export default function AdminEnrollmentsPage() {
                   sortValue: (row: EnrollmentApplication) => row.parentEmail,
                   render: (row: EnrollmentApplication) => emptyCell(row.parentEmail),
                 },
+                {
+                  key: 'resume',
+                  header: 'Resume',
+                  sortValue: (row: EnrollmentApplication) => row.resumeFileName || '',
+                  render: (row: EnrollmentApplication) =>
+                    row.resumeFileName ? (
+                      <button type="button" className="icon-btn" aria-label={`Open resume for ${row.studentFullname}`} onClick={() => void openResume(row)}>
+                        Open
+                      </button>
+                    ) : (
+                      emptyCell('')
+                    ),
+                },
               ]
             : []),
           {
@@ -220,9 +243,26 @@ export default function AdminEnrollmentsPage() {
           }
         >
           {isTeacherApplication(selected) ? (
-            <p>
-              <strong>Teacher application.</strong> Approving this adds the person to Teacher management. It does not create a student.
-            </p>
+            <>
+              <p>
+                <strong>Teacher application.</strong> Approving this adds the person to Teacher management. It does not create a student.
+              </p>
+              <p>
+                <strong>Resume:</strong>{' '}
+                {selected.resumeFileName ? (
+                  <>
+                    {selected.resumeFileName}
+                    {selected.resumeSizeBytes ? ` · ${Math.max(1, Math.round(selected.resumeSizeBytes / 1024))} KB` : ''}{' '}
+                    <Button type="button" variant="ghost" onClick={() => void openResume(selected)}>
+                      Open resume
+                    </Button>
+                  </>
+                ) : (
+                  'No file uploaded'
+                )}
+              </p>
+              {resumeError ? <Alert>{resumeError}</Alert> : null}
+            </>
           ) : (
             <>
               <p>

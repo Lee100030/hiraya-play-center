@@ -214,6 +214,30 @@ export function EnrollmentPage({
           { key: 'program', header: kind === 'teacher' ? 'Role' : 'Program', render: (row) => row.preferredProgram },
           { key: 'parent', header: kind === 'teacher' ? 'Email' : 'Parent', render: (row) => (kind === 'teacher' ? row.parentEmail : row.parentFullname) },
           { key: 'contact', header: 'Contact', render: (row) => row.parentPhone || row.parentEmail },
+          ...(kind === 'teacher'
+            ? [
+                {
+                  key: 'resume',
+                  header: 'Resume',
+                  render: (row: EnrollmentApplication) =>
+                    row.resumeFileName ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() =>
+                          void api.openTeacherResume(row.applicationId).catch((err) => {
+                            window.alert(err instanceof Error ? err.message : 'Could not open that resume.');
+                          })
+                        }
+                      >
+                        Open {row.resumeFileName}
+                      </Button>
+                    ) : (
+                      '—'
+                    ),
+                },
+              ]
+            : []),
           { key: 'status', header: 'Status', render: (row) => <StatusCell value={row.status} /> },
           { key: 'date', header: 'Submitted', render: (row) => formatDate(row.submittedAt) },
           {

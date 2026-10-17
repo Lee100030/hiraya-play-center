@@ -226,6 +226,9 @@ export interface EnrollmentApplication {
   notes?: string | null;
   /** student applications stay empty or "student". "teacher" is a job application, not a child enrollment. */
   applicationKind?: string;
+  resumeFileName?: string;
+  resumeContentType?: string;
+  resumeSizeBytes?: number;
 }
 
 export interface AttendanceRecord {
@@ -677,6 +680,8 @@ export interface TeacherApplyInput {
   phone: string;
   position: string;
   notes?: string;
+  resume?: Blob;
+  resumeName?: string;
 }
 
 export interface EnrollmentApplyInput {

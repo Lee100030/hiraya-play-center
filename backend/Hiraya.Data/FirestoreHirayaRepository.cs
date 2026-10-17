@@ -35,6 +35,8 @@ public class FirestoreHirayaRepository : IHirayaRepository
 
     public bool UsingFirebase => true;
 
+    internal FirestoreDb Database => _db;
+
     public static bool IsConfigured()
     {
         if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FIREBASE_SERVICE_ACCOUNT")))

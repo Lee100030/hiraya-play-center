@@ -104,6 +104,7 @@ builder.Services.AddSingleton<PortalAuthService>();
 builder.Services.AddSingleton<AccountService>();
 builder.Services.AddSingleton<ProfilePhotoService>();
 builder.Services.AddSingleton<StudentDocumentService>();
+builder.Services.AddSingleton<TeacherResumeStore>();
 builder.Services.AddSingleton<EnrollmentService>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.Configure<HirayaSmtpOptions>(builder.Configuration.GetSection(HirayaSmtpOptions.SectionName));
@@ -551,19 +552,107 @@ app.MapPost("/api/public/inquiries", async (
     return Results.Json(new PublicInquiryResult { Submitted = true, Emailed = emailed }, JsonDefaults.Options);
 });
 
-app.MapPost("/api/public/teacher-application", async (HttpRequest request, TeacherApplyRequest body, EnrollmentService enroll, PublicRequestThrottle throttle) =>
+app.MapPost("/api/public/teacher-application", async (HttpRequest request, EnrollmentService enroll, TeacherResumeStore resumes, PublicRequestThrottle throttle) =>
 {
     if (!throttle.Allow($"teacher:{ParentPortalApi.ClientHost(request)}", 8, TimeSpan.FromMinutes(15)))
         return Results.Json(new { error = "Too many applications. Please wait and try again." }, statusCode: StatusCodes.Status429TooManyRequests);
+
+    string fullname;
+    string email;
+    string phone;
+    string position;
+    string notes;
+    string resumeName = "";
+    string resumeType = "";
+    byte[]? resumeBytes = null;
+    if (request.HasFormContentType)
+    {
+        var form = await request.ReadFormAsync();
+        fullname = form["fullname"].ToString();
+        email = form["email"].ToString();
+        phone = form["phone"].ToString();
+        position = form["position"].ToString();
+        notes = form["notes"].ToString();
+        var file = form.Files.GetFile("resume") ?? form.Files.FirstOrDefault();
+        if (file is null || file.Length == 0)
+            return Results.Json(new { error = "Upload your resume as a PDF or Word file." }, statusCode: StatusCodes.Status400BadRequest);
+        if (file.Length > TeacherResumeStore.MaxBytes)
+            return Results.Json(new { error = "Resume must be 5 MB or smaller." }, statusCode: StatusCodes.Status400BadRequest);
+        resumeName = TeacherResumeStore.SafeName(file.FileName);
+        if (!TeacherResumeStore.AllowedExtension(resumeName))
+            return Results.Json(new { error = "Resume must be a PDF or Word file." }, statusCode: StatusCodes.Status400BadRequest);
+        resumeType = LearningModuleRules.ContentType(Path.GetExtension(resumeName));
+        await using var stream = file.OpenReadStream();
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        resumeBytes = buffer.ToArray();
+    }
+    else
+    {
+        var body = await request.ReadFromJsonAsync<TeacherApplyRequest>(JsonDefaults.Options) ?? new TeacherApplyRequest();
+        fullname = body.Fullname;
+        email = body.Email;
+        phone = body.Phone;
+        position = body.Position;
+        notes = body.Notes;
+    }
+
+    var applicationId = $"tch_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid().ToString("N")[..6]}";
+    if (resumeBytes is not null)
+    {
+        try
+        {
+            await resumes.SaveAsync(applicationId, resumeBytes, request.HttpContext.RequestAborted);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Could not store the teacher resume for {ApplicationId}.", applicationId);
+            return Results.Json(new { error = "The resume could not be stored. Please try again." }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
+
     try
     {
-        var applicationId = await enroll.SubmitTeacherApplicationAsync(body.Fullname, body.Email, body.Phone, body.Position, body.Notes);
+        applicationId = await enroll.SubmitTeacherApplicationAsync(
+            fullname,
+            email,
+            phone,
+            position,
+            notes,
+            applicationId,
+            resumeName,
+            resumeType,
+            resumeBytes?.LongLength ?? 0);
         return Results.Json(new PublicEnrollmentResult { Submitted = true, ApplicationId = applicationId }, JsonDefaults.Options);
     }
     catch (InvalidOperationException ex)
     {
+        if (resumeBytes is not null)
+            await resumes.DeleteAsync(applicationId);
         return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
     }
+}).DisableAntiforgery();
+
+app.MapGet("/api/enrollment-applications/{applicationId}/resume", async (
+    string applicationId,
+    HttpRequest request,
+    IHirayaRepository repo,
+    TeacherResumeStore resumes) =>
+{
+    var actor = await ParentPortalApi.ActorAsync(request, repo);
+    if (actor is null)
+        return Results.Unauthorized();
+    if (!Navigation.CanManageEnrollment(actor.Role))
+        return Results.Json(new { error = "Only an administrator can open a teacher resume." }, statusCode: StatusCodes.Status403Forbidden);
+    var db = await repo.LoadAsync();
+    var application = db.EnrollmentApplications.FirstOrDefault(item => item.ApplicationId == applicationId);
+    if (application is null || string.IsNullOrWhiteSpace(application.ResumeFileName))
+        return Results.NotFound();
+    var bytes = await resumes.ReadAsync(applicationId, request.HttpContext.RequestAborted);
+    if (bytes is null || bytes.Length == 0)
+        return Results.NotFound();
+    var mime = string.IsNullOrWhiteSpace(application.ResumeContentType) ? "application/octet-stream" : application.ResumeContentType;
+    return Results.File(bytes, mime);
 });
 
 app.MapPost("/api/messages", SendDirect);

@@ -315,6 +315,9 @@ public static class DatabaseInitializer
             await TryAddColumn(db, "programs", "PackageSessions", "int NOT NULL DEFAULT 0");
             await TryAddColumn(db, "payments", "IncomeBucket", "varchar(32) NOT NULL DEFAULT ''");
             await TryAddColumn(db, "enrollment_applications", "ApplicationKind", "varchar(32) NOT NULL DEFAULT 'student'");
+            await TryAddColumn(db, "enrollment_applications", "ResumeFileName", "varchar(180) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "enrollment_applications", "ResumeContentType", "varchar(128) NOT NULL DEFAULT ''");
+            await TryAddColumn(db, "enrollment_applications", "ResumeSizeBytes", "bigint NOT NULL DEFAULT 0");
             await TryAddColumn(db, "center_expenses", "Kind", "varchar(16) NOT NULL DEFAULT 'expense'");
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS center_expenses (
@@ -437,6 +440,9 @@ public static class DatabaseInitializer
         await TryAddColumn(db, "programs", "PackageSessions", "int NOT NULL DEFAULT 0");
         await TryAddColumn(db, "payments", "IncomeBucket", "varchar(32) NOT NULL DEFAULT ''");
         await TryAddColumn(db, "enrollment_applications", "ApplicationKind", "varchar(32) NOT NULL DEFAULT 'student'");
+        await TryAddColumn(db, "enrollment_applications", "ResumeFileName", "varchar(180) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "enrollment_applications", "ResumeContentType", "varchar(128) NOT NULL DEFAULT ''");
+        await TryAddColumn(db, "enrollment_applications", "ResumeSizeBytes", "bigint NOT NULL DEFAULT 0");
         await TryAddColumn(db, "center_expenses", "Kind", "varchar(16) NOT NULL DEFAULT 'expense'");
         await TryWidenText(db, "enrollment_applications", "Notes");
         await TryWidenText(db, "notifications", "Message");

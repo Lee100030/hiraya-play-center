@@ -124,6 +124,8 @@ public class HirayaLearningCenterDbContext : DbContext
         {
             e.Property(x => x.ApplicationKind).HasMaxLength(32);
             e.Property(x => x.Notes).HasColumnType("text");
+            e.Property(x => x.ResumeFileName).HasMaxLength(180);
+            e.Property(x => x.ResumeContentType).HasMaxLength(128);
         });
 
         Key<AttendanceRecord>(modelBuilder, "attendance", x => x.AttendanceId);
