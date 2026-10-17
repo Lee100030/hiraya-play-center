@@ -748,6 +748,40 @@ else
     }));
 }
 
+var keepAwakeUrls = (Environment.GetEnvironmentVariable("KEEP_AWAKE_URLS")
+        ?? (Environment.GetEnvironmentVariable("RENDER") is null ? "" : "https://hirayakidslearningcenter.com/api/health"))
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+if (keepAwakeUrls.Length > 0)
+{
+    var keepAwakeClients = app.Services.GetRequiredService<IHttpClientFactory>();
+    app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
+    {
+        // Render free web services sleep after 15 idle minutes.
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(10));
+        do
+        {
+            foreach (var url in keepAwakeUrls)
+            {
+                try
+                {
+                    using var client = keepAwakeClients.CreateClient("hiraya-api");
+                    client.Timeout = TimeSpan.FromSeconds(90);
+                    using var response = await client.GetAsync(url, app.Lifetime.ApplicationStopping);
+                    app.Logger.LogInformation("Keep-awake ping {Url} returned {Status}.", url, (int)response.StatusCode);
+                }
+                catch (OperationCanceledException) when (app.Lifetime.ApplicationStopping.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    app.Logger.LogWarning("Keep-awake ping {Url} failed: {Message}", url, ex.Message);
+                }
+            }
+        } while (await timer.WaitForNextTickAsync(app.Lifetime.ApplicationStopping).AsTask().ContinueWith(t => t.IsCompletedSuccessfully && t.Result));
+    }));
+}
+
 app.Run();
 
 static string DatabaseUnavailableMessage(string provider)
