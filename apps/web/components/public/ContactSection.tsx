@@ -1,6 +1,7 @@
 import type { PublicSite } from '@hiraya/types';
 import { facebookHref, isUnsetPublicValue } from '@/lib/publicSite';
 import { ClockIcon, FacebookIcon, MailIcon, PhoneIcon, PinIcon } from '@/components/public/icons';
+import { RouteMap } from '@/components/public/RouteMap';
 import { ReactNode } from 'react';
 
 function DetailRow({
@@ -36,7 +37,6 @@ export function ContactSection({ site, standalone = false }: { site: PublicSite;
   const addressReady = !isUnsetPublicValue(site.address, 'address');
   const phoneReady = !isUnsetPublicValue(site.phone, 'phone');
   const emailReady = !isUnsetPublicValue(site.email, 'email');
-  const mapQuery = encodeURIComponent(addressReady ? site.address : '');
   const hours = (site.businessHours || '').trim();
 
   return (
@@ -49,22 +49,7 @@ export function ContactSection({ site, standalone = false }: { site: PublicSite;
 
       <div className="contact-layout">
         <div className="contact-aside">
-          <div className="map-embed">
-            {addressReady ? (
-              <iframe
-                title="Hiraya Kids Learning Center location"
-                src={`https://maps.google.com/maps?q=${mapQuery}&z=16&hl=en&output=embed`}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            ) : (
-              <div className="map-fallback" aria-hidden="true" />
-            )}
-            <div className="map-pin" aria-hidden="true">
-              <PinIcon width={36} height={36} />
-              <span>HIRAYA</span>
-            </div>
-          </div>
+          <RouteMap />
           <article className="info-card">
             <h3>Center details</h3>
             {addressReady ? (
