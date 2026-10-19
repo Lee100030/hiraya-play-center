@@ -7,7 +7,7 @@ import { crestSrc } from '@/lib/publicSite';
 import type { PublicSite } from '@hiraya/types';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 const GradientWaves = dynamic(() => import('@/components/public/GradientWaves'), {
   ssr: false,
@@ -17,9 +17,34 @@ function heroLines(): string[] {
   return ['Growing minds.', 'Building\u00A0futures.'];
 }
 
+const HERO_LABEL = 'Growing minds. Building futures.';
+
 export function Hero({ site }: { site: PublicSite }) {
   const src = crestSrc(site);
+  const heroRef = useRef<HTMLDivElement>(null);
   const [tour, setTour] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const lines = heroLines();
+
+  useEffect(() => {
+    const node = heroRef.current;
+    if (!node) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setRevealed(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setRevealed(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section className="home-stage">
@@ -49,7 +74,7 @@ export function Hero({ site }: { site: PublicSite }) {
         />
       </div>
       <div className="home-stage-glow" aria-hidden="true" />
-      <div className="home-hero">
+      <div ref={heroRef} className={revealed ? 'home-hero is-revealed' : 'home-hero'} style={{ '--hero-lines': lines.length } as CSSProperties}>
         {src.startsWith('/') ? (
           <Image
             className="home-hero-logo"
@@ -64,11 +89,10 @@ export function Hero({ site }: { site: PublicSite }) {
           <img className="home-hero-logo" src={src} alt="Hiraya Kids Learning Center crest" />
         )}
         <p className="home-kicker">{site.centerName}</p>
-        <h1>
-          {heroLines().map((line, index) => (
-            <span key={`${index}-${line}`}>
-              {index > 0 ? <br /> : null}
-              {line}
+        <h1 aria-label={HERO_LABEL}>
+          {lines.map((line, index) => (
+            <span className="hero-line" key={line} style={{ '--i': index } as CSSProperties}>
+              <span>{line}</span>
             </span>
           ))}
         </h1>

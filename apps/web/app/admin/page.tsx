@@ -7,7 +7,7 @@ import { FinanceCategoryChart, FinanceColumnChart, FinanceLegend } from '@hiraya
 import { cashFlowLines, centerTuitionTotals, currentMonthKey, financeMonth, formatDate, formatPeso, isAdmin, isTeacherApplication, operationsStats, removeCashFlowLine, scrubLeftoverCenterRecords } from '@hiraya/utils';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
+import { DeskHero } from '@/components/admin/DeskHero';
 
 function monthKey(iso: string) {
   const date = new Date(iso);
@@ -100,10 +100,13 @@ export default function AdminDashboardPage() {
 
   return (
     <>
-      <AdminPageHeader
+      <DeskHero
         kicker="Overview"
         title="Dashboard"
         description={user?.fullname ? `Welcome back, ${user.fullname}.` : 'Welcome back.'}
+        students={stats.totalStudents}
+        pending={stats.pendingEnrollments}
+        paid={collected.paid}
       />
       {error ? <p className="field-error">{error}</p> : null}
 

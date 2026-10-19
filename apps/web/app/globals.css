@@ -3336,6 +3336,256 @@ select.teacher-att-select.hlc-select {
   background: #cfd3d6;
 }
 
+.bp-hero {
+  --bp-ink: rgba(166, 132, 42, 0.5);
+  --bp-ink-strong: rgba(122, 94, 24, 0.78);
+  --bp-step: 110ms;
+  --bp-after: calc(10 * var(--bp-step) + 860ms);
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: 280px;
+  margin: 0 0 18px;
+  padding: 64px 36px 56px;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #f4f1e8;
+}
+
+.bp-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bp-line {
+  position: absolute;
+  background: var(--bp-ink);
+}
+
+.bp-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: scaleY(0);
+  transform-origin: 50% 0;
+}
+
+.bp-h {
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+
+.bp-v.bp-inset {
+  top: 10px;
+  bottom: 10px;
+  background: var(--bp-ink-strong);
+}
+
+.bp-h.bp-inset {
+  left: 10px;
+  right: 10px;
+  background: var(--bp-ink-strong);
+}
+
+.bp-hero.is-drawn .bp-v {
+  animation: bp-draw-y 720ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation-delay: calc(var(--i) * var(--bp-step));
+}
+
+.bp-hero.is-drawn .bp-h {
+  animation: bp-draw-x 840ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation-delay: calc(var(--i) * var(--bp-step));
+}
+
+.bp-mark {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  margin: -6px 0 0 -6px;
+  transform: scale(0);
+  transform-origin: center;
+}
+
+.bp-mark::before,
+.bp-mark::after {
+  content: '';
+  position: absolute;
+  background: var(--bp-ink-strong);
+}
+
+.bp-mark::before {
+  left: 6px;
+  top: 0;
+  width: 1px;
+  height: 13px;
+}
+
+.bp-mark::after {
+  top: 6px;
+  left: 0;
+  width: 13px;
+  height: 1px;
+}
+
+.bp-hero.is-drawn .bp-mark {
+  animation: bp-pop 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation-delay: calc(var(--bp-after) + var(--m) * 24ms);
+}
+
+.bp-spec {
+  position: absolute;
+  font-family: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(120, 92, 28, 0.82);
+  opacity: 0;
+}
+
+.bp-spec-tl { top: 16px; left: 16px; }
+.bp-spec-tr { top: 16px; right: 16px; }
+.bp-spec-bl { bottom: 16px; left: 16px; }
+.bp-spec-br { bottom: 16px; right: 16px; }
+
+.bp-hero.is-drawn .bp-spec {
+  animation: bp-fade 520ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation-delay: calc(var(--bp-after) + 160ms);
+}
+
+.bp-sheet {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 28px;
+  width: min(100%, 980px);
+  padding: 18px 22px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(168, 132, 40, 0.2);
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.bp-hero:not(.is-drawn) .bp-sheet {
+  pointer-events: none;
+}
+
+.bp-hero.is-drawn .bp-sheet {
+  animation: bp-settle 680ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation-delay: calc(var(--bp-after) + 160ms);
+}
+
+.bp-sheet-copy {
+  min-width: min(100%, 280px);
+  flex: 1 1 280px;
+}
+
+.bp-kicker {
+  margin: 0 0 6px;
+  font-family: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Consolas, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8a6d28;
+}
+
+.bp-sheet h1 {
+  margin: 0;
+  font-size: clamp(1.7rem, 3vw, 2.35rem);
+  line-height: 1.12;
+}
+
+.bp-lead {
+  margin: 8px 0 0;
+  max-width: 40rem;
+  color: #3e5148;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.bp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@keyframes bp-draw-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes bp-draw-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes bp-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+@keyframes bp-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bp-settle {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 720px) {
+  .bp-hero {
+    padding: 56px 16px 48px;
+  }
+
+  .bp-sheet {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-hero .bp-v,
+  .bp-hero.is-drawn .bp-v {
+    transform: scaleY(1);
+    animation: none;
+  }
+
+  .bp-hero .bp-h,
+  .bp-hero.is-drawn .bp-h {
+    transform: scaleX(1);
+    animation: none;
+  }
+
+  .bp-hero .bp-mark,
+  .bp-hero.is-drawn .bp-mark {
+    transform: scale(1);
+    animation: none;
+  }
+
+  .bp-hero .bp-spec,
+  .bp-hero.is-drawn .bp-spec,
+  .bp-hero .bp-sheet,
+  .bp-hero.is-drawn .bp-sheet {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+
+  .bp-hero .bp-sheet {
+    pointer-events: auto;
+  }
+}
+
 .aba-cell.is-prep,
 .aba-cell.is-session {
   background: #fff;
@@ -3357,4 +3607,220 @@ select.teacher-att-select.hlc-select {
   background: #f4f1e9;
   color: #5c6b63;
   font-size: 0.8rem;
+}
+
+.desk-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(240px, 0.95fr);
+  gap: 28px 36px;
+  align-items: center;
+  margin: 0 0 22px;
+}
+
+.desk-hero-copy h1 {
+  margin: 0;
+  max-width: 14ch;
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  line-height: 1.05;
+}
+
+.desk-hero-copy .admin-page-lead {
+  max-width: 36ch;
+}
+
+.mock-stage {
+  position: relative;
+  min-height: 280px;
+  padding: 18px 12px 28px;
+}
+
+.mock-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  width: 58%;
+  height: 16px;
+  margin-left: -29%;
+  border-radius: 50%;
+  background: rgba(11, 31, 20, 0.45);
+  filter: blur(10px);
+  transform-origin: center;
+  pointer-events: none;
+  animation: mock-shadow 4.5s ease-in-out infinite;
+}
+
+.mock-parallax {
+  position: relative;
+  z-index: 1;
+  transition: transform 0.7s cubic-bezier(0.22, 1.2, 0.36, 1);
+  will-change: transform;
+}
+
+.mock-float {
+  animation: mock-float 4.5s ease-in-out infinite;
+  transform-origin: 50% 60%;
+}
+
+.mock-frame {
+  border-radius: 16px;
+  border: 1px solid rgba(20, 48, 31, 0.22);
+  background: #fffef8;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 10px 24px rgba(11, 31, 20, 0.1),
+    0 24px 40px rgba(11, 31, 20, 0.08);
+  overflow: hidden;
+}
+
+.mock-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 12px;
+  background: #0b1f14;
+  color: #f4f1e9;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.mock-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.mock-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c9a227;
+  display: block;
+}
+
+.mock-dots i:first-child {
+  background: #e7d7a1;
+}
+
+.mock-body {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  min-height: 196px;
+}
+
+.mock-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 8px;
+  background: #f4f1e9;
+  border-right: 1px solid #e6dcb8;
+}
+
+.mock-side span {
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: #5c6b63;
+  font-size: 0.68rem;
+}
+
+.mock-side span.is-on {
+  background: #14301f;
+  color: #f4f1e9;
+}
+
+.mock-main {
+  padding: 12px;
+}
+
+.mock-main p {
+  margin: 0 0 10px;
+  color: #14301f;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.mock-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mock-stats article {
+  padding: 8px;
+  border: 1px solid #e6dcb8;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.mock-stats small {
+  display: block;
+  color: #5c6b63;
+  font-size: 0.62rem;
+}
+
+.mock-stats b {
+  display: block;
+  margin-top: 2px;
+  color: #0b1f14;
+  font-size: 0.95rem;
+}
+
+.mock-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.mock-bars span {
+  display: block;
+  height: 8px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #14301f, #c9a227);
+}
+
+@keyframes mock-float {
+  0%,
+  100% {
+    transform: translateY(5px) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(1deg);
+  }
+}
+
+@keyframes mock-shadow {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scaleX(0.78);
+    opacity: 0.28;
+  }
+}
+
+@media (max-width: 860px) {
+  .desk-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .mock-stage {
+    max-width: 440px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mock-float,
+  .mock-shadow,
+  .mock-parallax {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+
+  .mock-shadow {
+    opacity: 0.45;
+  }
 }

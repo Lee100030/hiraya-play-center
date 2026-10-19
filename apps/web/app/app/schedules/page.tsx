@@ -1,7 +1,7 @@
 'use client';
 
 import { AdminModal } from '@/components/admin/AdminModal';
-import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
+import { BlueprintHero } from '@/components/admin/BlueprintHero';
 import { useAuth } from '@/components/AuthProvider';
 import { useStore } from '@/components/StoreProvider';
 import { api } from '@/lib/api';
@@ -164,7 +164,7 @@ export default function SchedulesPage() {
 
   return (
     <>
-      <AdminPageHeader
+      <BlueprintHero
         kicker="HIRAYA calendar"
         title="Center calendar"
         description="One calendar for everyone. Assign a class schedule or a teacher task to one or more teachers; they are notified on mobile."
