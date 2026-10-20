@@ -37,6 +37,7 @@ export default function AdminEnrollmentsPage() {
   const [interviewNote, setInterviewNote] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     return store.enrollmentApplications.filter((row) => {
@@ -64,6 +65,7 @@ export default function AdminEnrollmentsPage() {
   }
 
   async function setStatusFor(id: string, next: string) {
+    setActionError(null);
     try {
       if (next === 'approved') {
         await api.approveEnrollment(id);
@@ -88,8 +90,10 @@ export default function AdminEnrollmentsPage() {
       );
       setConfirm(null);
     } catch (err) {
+      const text = err instanceof Error ? err.message : 'Could not update the application.';
       setOk(false);
-      setMessage(err instanceof Error ? err.message : 'Could not update the application.');
+      setActionError(text);
+      setMessage(text);
     }
   }
 
@@ -293,10 +297,20 @@ export default function AdminEnrollmentsPage() {
         <AdminModal
           title={`${enrollmentStatusLabel(confirm)} application`}
           description={`This will mark ${selected.studentFullname} as ${enrollmentStatusLabel(confirm).toLowerCase()}.`}
-          onClose={() => setConfirm(null)}
+          onClose={() => {
+            setConfirm(null);
+            setActionError(null);
+          }}
           footer={
             <>
-              <Button type="button" variant="ghost" onClick={() => setConfirm(null)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setConfirm(null);
+                  setActionError(null);
+                }}
+              >
                 Cancel
               </Button>
               <Button type="button" variant={confirm === 'rejected' ? 'danger' : 'primary'} onClick={() => void setStatusFor(selected.applicationId, confirm)}>
@@ -327,6 +341,7 @@ export default function AdminEnrollmentsPage() {
                 : 'The family record stays in Student enrollment with the updated status badge.'}
             </p>
           )}
+          {actionError ? <Alert>{actionError}</Alert> : null}
         </AdminModal>
       ) : null}
     </>
