@@ -297,7 +297,7 @@ public class EnrollmentService
                 var teacher = StaffService.EnsureTeacherFromApplication(db, app, actor);
                 if (teacher is null)
                 {
-                    app.Status = "removed";
+                    db.EnrollmentApplications.Remove(app);
                     continue;
                 }
                 app.StudentNumber = teacher.UserId;
@@ -412,6 +412,30 @@ public class EnrollmentService
             app.Status = "cancelled";
             AuditService.Append(db, actor.UserId, "", AuditModules.Enrollment, "cancel",
                 "application", applicationId, $"Cancelled application for {app.StudentFullname}.");
+            await Task.CompletedTask;
+        });
+    }
+
+    public async Task DeleteApplicationsAsync(IReadOnlyCollection<string> applicationIds, HirayaUser actor)
+    {
+        if (!Navigation.CanManageEnrollment(actor.Role) && !Navigation.CanManageStaff(actor.Role))
+            throw new UnauthorizedAccessException("Only administrators can delete applications.");
+        var ids = new HashSet<string>(
+            (applicationIds ?? []).Select(id => (id ?? "").Trim()).Where(id => id.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+        if (ids.Count == 0)
+            throw new InvalidOperationException("Select an application to delete.");
+        await _repository.MutateAsync(async db =>
+        {
+            var matches = db.EnrollmentApplications.Where(app => ids.Contains(app.ApplicationId ?? "")).ToList();
+            if (matches.Count == 0)
+                throw new InvalidOperationException("Application not found.");
+            foreach (var app in matches)
+            {
+                db.EnrollmentApplications.Remove(app);
+                AuditService.Append(db, actor.UserId, "", AuditModules.Enrollment, "delete",
+                    "application", app.ApplicationId, $"Deleted application for {app.StudentFullname}.");
+            }
             await Task.CompletedTask;
         });
     }

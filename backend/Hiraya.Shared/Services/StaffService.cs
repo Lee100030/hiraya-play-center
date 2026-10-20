@@ -475,20 +475,13 @@ public class StaffService
 
     /// <summary>
     /// An approved teacher application is what puts the person back on the teacher list.
-    /// Closing it here keeps a permanent delete from being imported again.
+    /// Removing it here keeps a permanent delete from being imported again.
     /// </summary>
     static void RetireApprovedApplications(HirayaDatabase db, HirayaUser user)
     {
-        foreach (var app in db.EnrollmentApplications)
-        {
-            if (!string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (!string.Equals(app.Status, "approved", StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (!ApplicationMatchesStaff(app, user))
-                continue;
-            app.Status = "removed";
-        }
+        db.EnrollmentApplications.RemoveAll(app =>
+            string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase) &&
+            ApplicationMatchesStaff(app, user));
     }
 
     static bool ApplicationMatchesStaff(EnrollmentApplication app, HirayaUser user)

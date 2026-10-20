@@ -1,7 +1,7 @@
 import type { HirayaDatabase, HirayaUser } from '@hiraya/types';
-import { displayName, laneLabel, openTaskCountForTeacher, specialtyLaneLabel, staffDisplayRole, teacherInLane, type ManagementLaneId } from '@hiraya/utils';
+import { applicationMatchesStaff, displayName, laneLabel, openTaskCountForTeacher, specialtyLaneLabel, staffDisplayRole, teacherInLane, type ManagementLaneId } from '@hiraya/utils';
 import { Button, assignedCount } from '@hiraya/ui';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AdminPasswordModal } from '../components/AdminPasswordModal';
 import { DirectMessageModal } from '../components/DirectMessageModal';
 import { CertificateModal } from '../components/CertificateModal';
@@ -54,13 +54,16 @@ export function TeachersPage({
     return `${program} · ${open} open tasks · ${kids} assigned students`;
   }
 
+  const importTicket = useRef(0);
+
   useEffect(() => {
     let cancelled = false;
+    const ticket = ++importTicket.current;
     const before = store.users.filter((item) => item.role === 'teacher').length;
     void api
       .importApprovedTeachers()
       .then((next) => {
-        if (cancelled) return;
+        if (cancelled || ticket !== importTicket.current) return;
         onStore(next);
         const added = next.users.filter((item) => item.role === 'teacher').length - before;
         if (added > 0) {
@@ -193,9 +196,27 @@ export function TeachersPage({
     ) {
       return false;
     }
+    importTicket.current += 1;
     let next = store;
     for (const row of picked) {
       next = await api.deleteStaff(row.userId);
+    }
+    const drop = (next.enrollmentApplications || [])
+      .filter((app) => picked.some((user) => applicationMatchesStaff(app, user)))
+      .map((app) => app.applicationId);
+    if (drop.length) {
+      try {
+        next = await api.deleteEnrollmentApplications(drop);
+      } catch (err) {
+        if (!(err instanceof Error) || err.message !== 'delete-applications-unavailable') throw err;
+        const gone = new Set(drop);
+        await saveStore({
+          ...next,
+          enrollmentApplications: next.enrollmentApplications.filter((app) => !gone.has(app.applicationId)),
+        });
+        setNotice(picked.length === 1 ? 'Teacher deleted.' : `${picked.length} teachers deleted.`);
+        return;
+      }
     }
     onStore(next);
     setNotice(picked.length === 1 ? 'Teacher deleted.' : `${picked.length} teachers deleted.`);

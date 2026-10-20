@@ -1,7 +1,7 @@
 import type { Enrollment, EnrollmentApplication, HirayaDatabase, HirayaUser } from '@hiraya/types';
 import { formatDate, isTeacherApplication, newId, studentDisplay, teacherApplicationOpen } from '@hiraya/utils';
 import { Button, Field, Input, Select } from '@hiraya/ui';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { EditorModal, FormSection } from '../components/EditorModal';
 import { RecordTable, StatusCell } from '../components/RecordTable';
 import { api } from '../lib/api';
@@ -13,12 +13,14 @@ export function EnrollmentPage({
   user,
   saveStore,
   onStore,
+  onRefresh,
   initialKind = 'student',
 }: {
   store: HirayaDatabase;
   user: HirayaUser;
   saveStore: (next: HirayaDatabase) => Promise<void>;
   onStore: (next: HirayaDatabase) => void;
+  onRefresh?: () => Promise<void> | void;
   initialKind?: 'student' | 'teacher';
 }) {
   const [kind, setKind] = useState<'student' | 'teacher'>(initialKind);
@@ -28,6 +30,10 @@ export function EnrollmentPage({
   const [interviewing, setInterviewing] = useState<EnrollmentApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void onRefresh?.();
+  }, [onRefresh]);
 
   async function onApply(event: FormEvent<HTMLFormElement>) {
     const form = new FormData(event.currentTarget);
@@ -114,16 +120,24 @@ export function EnrollmentPage({
     onStore(kind === 'reject' ? await api.rejectEnrollment(id) : await api.cancelEnrollment(id));
   }
 
-  async function removeApplication(row: EnrollmentApplication) {
-    if (row.status === 'approved') {
-      window.alert('Approved applications stay in history. Remove the class enrollment instead if needed.');
-      return;
+  async function removeApplications(rows: EnrollmentApplication[]) {
+    if (!rows.length) return false;
+    const label = rows.length === 1 ? rows[0].studentFullname || 'this application' : `${rows.length} applications`;
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return false;
+    const ids = rows.map((row) => row.applicationId).filter(Boolean);
+    try {
+      onStore(await api.deleteEnrollmentApplications(ids));
+    } catch (err) {
+      if (!(err instanceof Error) || err.message !== 'delete-applications-unavailable') throw err;
+      await saveStore({
+        ...store,
+        enrollmentApplications: store.enrollmentApplications.filter((item) => !ids.includes(item.applicationId)),
+      });
     }
-    if (!window.confirm('Delete this application from the records?')) return;
-    await saveStore({
-      ...store,
-      enrollmentApplications: store.enrollmentApplications.filter((item) => item.applicationId !== row.applicationId),
-    });
+  }
+
+  async function removeApplication(row: EnrollmentApplication) {
+    await removeApplications([row]);
   }
 
   async function onSeat(event: FormEvent<HTMLFormElement>) {
@@ -173,7 +187,7 @@ export function EnrollmentPage({
         title={kind === 'teacher' ? 'Teacher applications' : PAGE_COPY.enrollment.title}
         description={
           kind === 'teacher'
-            ? 'Teacher applications from the public website. Approve adds the person to Teacher management. It does not create a student.'
+            ? 'Teacher applications from the public website. Select the rows you want, then Delete. Removing an approved application stops that person from being added to Teacher management again.'
             : 'Student applications from the website or this desk. Approve creates the student and parent; then assign the learner to a class.'
         }
         rows={store.enrollmentApplications.filter((row) =>
@@ -183,7 +197,7 @@ export function EnrollmentPage({
         search={(row, q) =>
           `${row.studentFullname} ${row.parentFullname} ${row.parentEmail} ${row.preferredProgram}`.toLowerCase().includes(q)
         }
-        searchPlaceholder="Search applications"
+        searchPlaceholder="Filter this list of applications"
         emptyTitle={kind === 'teacher' ? 'No teacher applications' : 'No enrollments found'}
         emptyHint={
           kind === 'teacher'
@@ -191,24 +205,29 @@ export function EnrollmentPage({
             : 'Submit an application here or from the public website.'
         }
         statusOf={(row) => row.status}
-        actions={
-          <div className="row-actions">
-            <Button type="button" variant={kind === 'student' ? 'primary' : 'ghost'} onClick={() => setKind('student')}>
-              Student enrollment
-            </Button>
-            <Button type="button" variant={kind === 'teacher' ? 'primary' : 'ghost'} onClick={() => setKind('teacher')}>
-              Teacher applications
-            </Button>
-            {kind === 'student' ? (
-              <Button type="button" onClick={() => setAppForm(true)}>
-                New application
+        crud={{
+          deleteLabel: 'Delete',
+          onDelete: removeApplications,
+          onRefresh,
+          extra: (
+            <div className="row-actions">
+              <Button type="button" variant={kind === 'student' ? 'primary' : 'ghost'} onClick={() => setKind('student')}>
+                Student enrollment
               </Button>
-            ) : null}
-            <Button type="button" variant="ghost" onClick={() => setSeatForm(true)}>
-              Assign to class
-            </Button>
-          </div>
-        }
+              <Button type="button" variant={kind === 'teacher' ? 'primary' : 'ghost'} onClick={() => setKind('teacher')}>
+                Teacher applications
+              </Button>
+              {kind === 'student' ? (
+                <Button type="button" onClick={() => setAppForm(true)}>
+                  New application
+                </Button>
+              ) : null}
+              <Button type="button" variant="ghost" onClick={() => setSeatForm(true)}>
+                Assign to class
+              </Button>
+            </div>
+          ),
+        }}
         columns={[
           { key: 'student', header: kind === 'teacher' ? 'Applicant' : 'Student', render: (row) => row.studentFullname },
           { key: 'program', header: kind === 'teacher' ? 'Role' : 'Program', render: (row) => row.preferredProgram },

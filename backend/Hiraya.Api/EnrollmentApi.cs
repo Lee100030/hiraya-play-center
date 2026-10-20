@@ -105,6 +105,30 @@ public static class EnrollmentApi
             }
         });
 
+        app.MapPost("/api/enrollment/applications/delete", async (
+            DeleteApplicationsBody? body,
+            HttpRequest request,
+            IHirayaRepository repo,
+            EnrollmentService enroll) =>
+        {
+            var actor = await ParentPortalApi.ActorAsync(request, repo);
+            if (actor is null) return Results.Unauthorized();
+            try
+            {
+                await enroll.DeleteApplicationsAsync(body?.Ids ?? [], actor);
+                var data = await repo.LoadAsync();
+                return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Results.Json(new { error = "You are not allowed to delete applications." }, statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+
         app.MapPost("/api/enrollment/applications/{id}/cancel", async (
             string id,
             HttpRequest request,
@@ -141,4 +165,9 @@ public sealed class InterviewBody
     public string When { get; set; } = "";
     public string Place { get; set; } = "";
     public string? Instructions { get; set; }
+}
+
+public sealed class DeleteApplicationsBody
+{
+    public List<string> Ids { get; set; } = new();
 }

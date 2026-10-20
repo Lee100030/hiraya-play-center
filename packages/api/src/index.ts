@@ -310,6 +310,18 @@ export class HirayaApi {
     return this.parse<HirayaDatabase>(res);
   }
 
+  async deleteEnrollmentApplications(ids: string[]): Promise<HirayaDatabase> {
+    const res = await fetch(this.url('/api/enrollment/applications/delete'), {
+      method: 'POST',
+      headers: await this.headers(),
+      body: JSON.stringify({ ids }),
+    });
+    if (res.status === 404 || res.status === 405) {
+      throw new Error('delete-applications-unavailable');
+    }
+    return this.parse<HirayaDatabase>(res);
+  }
+
   async getPublicSite(): Promise<PublicSite> {
     const res = await fetch(this.url('/api/public/site'), { signal: AbortSignal.timeout(12000) });
     const data = await this.parse<PublicSite>(res);

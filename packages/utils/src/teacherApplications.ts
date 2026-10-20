@@ -1,4 +1,4 @@
-import type { EnrollmentApplication, HirayaDatabase } from '@hiraya/types';
+import type { EnrollmentApplication, HirayaDatabase, HirayaUser } from '@hiraya/types';
 import { isTeacherApplication } from './operationsStats';
 import { normalizeStaffEmail, normalizeStaffName, staffDisplayName } from './staffDedupe';
 
@@ -52,6 +52,24 @@ export function unusedTeacherLogin(store: HirayaDatabase, preferred?: string | n
     if (!taken.has(candidate)) return candidate;
     n += 1;
   }
+}
+
+export function applicationMatchesStaff(app: EnrollmentApplication, user: Pick<HirayaUser, 'userId' | 'email' | 'personalEmail' | 'fullname' | 'notes'>) {
+  if (!isTeacherApplication(app)) return false;
+  const linked = (app.studentNumber || '').trim();
+  if (linked && linked.toLowerCase() === (user.userId || '').trim().toLowerCase()) return true;
+  const mail = normalizeStaffEmail(app.parentEmail);
+  if (
+    mail &&
+    (mail === normalizeStaffEmail(user.email) || mail === normalizeStaffEmail(user.personalEmail))
+  ) {
+    return true;
+  }
+  const applicationId = (app.applicationId || '').trim();
+  if (applicationId && (user.notes || '').toLowerCase().includes(applicationId.toLowerCase())) return true;
+  const applied = normalizeStaffName((app.studentFullname || '').replace(/,/g, ' '));
+  const current = normalizeStaffName((user.fullname || '').replace(/,/g, ' '));
+  return applied.length > 1 && applied === current;
 }
 
 export function approvedTeacherApplicationsWithoutAccount(store: HirayaDatabase): EnrollmentApplication[] {

@@ -82,6 +82,9 @@ public static class RemovedAccounts
                 gone.Add(id);
         }
         gone.Remove("");
+        db.EnrollmentApplications.RemoveAll(app =>
+            string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase) &&
+            BlocksImport(db, app.StudentNumber, app.ParentEmail, app.StudentFullname));
         if (gone.Count == 0)
             return;
         db.Users.RemoveAll(user => gone.Contains(user.UserId ?? ""));

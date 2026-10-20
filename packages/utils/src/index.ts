@@ -289,7 +289,7 @@ export {
 export { normalizePersonalEmail, ownedPersonalEmail, personalEmailError, personalEmailOwnerError } from './personalEmail';
 export { scrubLeftoverPaymentData } from './paymentCleanup';
 export { downloadStudentRecord } from './studentRecordSheet';
-export { nextStudentNumber, studentNumber, studentNumberTaken, studentQrFromNumber } from './studentNumber';
+export { compareStudentNumbers, nextStudentNumber, studentNumber, studentNumberTaken, studentQrFromNumber } from './studentNumber';
 export { applyStorePatch, diffStore, STORE_ROW_IDS, type StorePatchBody } from './storePatch';
 export {
   teacherPaymentRows,
@@ -311,6 +311,7 @@ export {
 } from './certificateOfEmployment';
 export { isTeacherApplication, operationsStats } from './operationsStats';
 export {
+  applicationMatchesStaff,
   approvedTeacherApplicationsWithoutAccount,
   matchingTeacherForApplication,
   teacherApplicationOpen,
@@ -322,6 +323,8 @@ export {
   teachersForStudents,
   openTaskCountForTeacher,
   packedTeacherIds,
+  collapseDuplicateStaffTasks,
+  staffTaskKey,
   programsForTeacher,
   scheduleAssignedTo,
   studentPlacement,
