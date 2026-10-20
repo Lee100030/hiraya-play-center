@@ -705,40 +705,44 @@ export class HirayaApi {
 
   async applyTeacher(input: TeacherApplyInput): Promise<{ submitted?: boolean; applicationId?: string }> {
     if (!input.resume) return this.postPublic('/api/public/teacher-application', input);
-    const body = new FormData();
-    body.append('fullname', input.fullname);
-    body.append('email', input.email);
-    body.append('phone', input.phone);
-    body.append('position', input.position);
-    body.append('notes', input.notes || '');
-    body.append('resume', input.resume, input.resumeName || 'resume.pdf');
+    const sameOrigin = this.url('/api/public/teacher-application');
+    const direct = 'https://hiraya-play-center.onrender.com/api/public/teacher-application';
+    const onLiveSite =
+      typeof window !== 'undefined' && /(^|\.)hirayakidslearningcenter\.com$/i.test(window.location.hostname);
+    const targets = !onLiveSite || sameOrigin === direct ? [sameOrigin] : [direct, sameOrigin];
     let lastError: unknown;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const res = await fetch(this.url('/api/public/teacher-application'), {
-          method: 'POST',
-          body,
-        });
-        if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 4000));
-          continue;
+    for (const target of targets) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const body = new FormData();
+        body.append('fullname', input.fullname);
+        body.append('email', input.email);
+        body.append('phone', input.phone);
+        body.append('position', input.position);
+        body.append('notes', input.notes || '');
+        body.append('resume', input.resume, input.resumeName || 'resume.pdf');
+        try {
+          const res = await fetch(target, { method: 'POST', body });
+          if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+            continue;
+          }
+          return this.parse(res);
+        } catch (err) {
+          lastError = err;
+          if (err instanceof TypeError && attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 2500));
+            continue;
+          }
+          if (err instanceof TypeError) break;
+          throw err;
         }
-        return this.parse(res);
-      } catch (err) {
-        lastError = err;
-        const network = err instanceof TypeError;
-        if (network && attempt < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 2500));
-          continue;
-        }
-        if (network) {
-          throw new ApiError(
-            'The application did not reach the center. Check your internet connection, then tap Apply now again.',
-            0,
-          );
-        }
-        throw err;
       }
+    }
+    if (lastError instanceof TypeError) {
+      throw new ApiError(
+        'The application did not reach the center. Check your internet connection, then tap Apply now again.',
+        0,
+      );
     }
     throw lastError instanceof Error
       ? lastError

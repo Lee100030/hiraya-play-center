@@ -18,6 +18,13 @@ export function nextStudentNumber() {
   return `STU-${day}-${tag}`;
 }
 
+export function compareStudentNumbers(
+  a?: Pick<Student, 'qrCode' | 'studentId'> | null,
+  b?: Pick<Student, 'qrCode' | 'studentId'> | null,
+) {
+  return studentNumber(a).localeCompare(studentNumber(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
 export function studentNumberTaken(store: HirayaDatabase, value: string, exceptStudentId?: string) {
   const want = studentNumber({ qrCode: studentQrFromNumber(value), studentId: value }).toLowerCase();
   if (!want) return false;

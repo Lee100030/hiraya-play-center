@@ -1,4 +1,4 @@
-import type { HirayaDatabase } from '@hiraya/types';
+import type { HirayaDatabase, StaffTask } from '@hiraya/types';
 
 function personName(user?: { fullname?: string; firstName?: string; lastName?: string } | null) {
   if (!user) return '';
@@ -33,6 +33,32 @@ function hasTeacher(packed: string | null | undefined, teacherId: string) {
 export function scheduleAssignedTo(schedule: { teacherId?: string }, teacherId?: string) {
   if (!teacherId) return false;
   return packedTeacherIds(schedule.teacherId).some((id) => sameId(id, teacherId));
+}
+
+export function staffTaskKey(task: Pick<StaffTask, 'title' | 'teacherIds' | 'dueAt' | 'status'>) {
+  const title = (task.title || '').trim().toLowerCase();
+  const teachers = packedTeacherIds(task.teacherIds)
+    .map((id) => id.toLowerCase())
+    .sort()
+    .join(',');
+  const due = (task.dueAt || '').slice(0, 10);
+  const status = (task.status || '').trim().toLowerCase();
+  return `${title}|${teachers}|${due}|${status}`;
+}
+
+/** Keep the first open copy when a double-click assigned the same task twice. */
+export function collapseDuplicateStaffTasks(tasks: StaffTask[]) {
+  const seen = new Set<string>();
+  const kept: StaffTask[] = [];
+  const sorted = [...tasks].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  for (const task of sorted) {
+    const closed = ['completed', 'cancelled'].includes((task.status || '').toLowerCase());
+    const key = staffTaskKey(task);
+    if (!closed && seen.has(key)) continue;
+    if (!closed) seen.add(key);
+    kept.push(task);
+  }
+  return kept;
 }
 
 export function openTaskCountForTeacher(store: HirayaDatabase, teacherId: string) {
