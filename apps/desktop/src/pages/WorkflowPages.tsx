@@ -1,5 +1,5 @@
 import type { HirayaDatabase, HirayaUser, NewsItem, Schedule, SessionPackage, StaffTask, SystemAlert } from '@hiraya/types';
-import { displayName, dropStudentSessionPackage, feedbackLaneLabel, formatDate, formatDateTime, isAdmin, laneLabel, newId, parseFeedbackLane, scrubLeftoverSessionPackages, sessionLeftFor, staffDisplayRole, studentDisplay, studentInLane, compareStudentNames, completeOneSession, normalizeSessionPackage, placeStudentSessionPackage, studentSessionPackage, type ManagementLaneId } from '@hiraya/utils';
+import { collapseDuplicateStaffTasks, compareStudentNames, completeOneSession, displayName, dropStudentSessionPackage, feedbackLaneLabel, formatDate, formatDateTime, isAdmin, laneLabel, newId, normalizeSessionPackage, parseFeedbackLane, placeStudentSessionPackage, programForStudent, scrubLeftoverSessionPackages, sessionLeftFor, staffDisplayRole, staffTaskKey, studentDisplay, studentInLane, studentSessionPackage, type ManagementLaneId } from '@hiraya/utils';
 import { Button, Field, Input, PhotoCardPicker, Select, Textarea } from '@hiraya/ui';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { DeskModal } from '../components/DeskModal';
@@ -262,6 +262,11 @@ export function TasksManagePage({
     };
     if (!next.title || !next.teacherIds) {
       setError('Title and at least one teacher are required.');
+      return;
+    }
+    if (busy) return;
+    if (!current && rows.some((row) => staffTaskKey(row) === staffTaskKey(next) && !['completed', 'cancelled'].includes((row.status || '').toLowerCase()))) {
+      setError('That task is already assigned. A second click does not add another copy.');
       return;
     }
     setBusy(true);
@@ -538,6 +543,8 @@ export function SessionsManagePage({
   lane?: ManagementLaneId | null;
 }) {
   const [editing, setEditing] = useState<SessionPackage | 'new' | null>(null);
+  const [packageStudentId, setPackageStudentId] = useState('');
+  const [packageProgramId, setPackageProgramId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const scrubbedPackages = useRef(false);
@@ -552,6 +559,24 @@ export function SessionsManagePage({
   }, [store, saveStore]);
   const current = editing && editing !== 'new' ? editing : null;
   const studentOptions = store.students.filter((item) => studentInLane(store, item, lane)).sort(compareStudentNames);
+  const enrolledProgram = programForStudent(store, packageStudentId);
+
+  function choosePackageStudent(studentId: string) {
+    setPackageStudentId(studentId);
+    setPackageProgramId(programForStudent(store, studentId)?.programId || '');
+  }
+
+  function openPackage(studentId: string, existing?: SessionPackage | null) {
+    if (existing) {
+      setPackageStudentId(existing.studentId || '');
+      setPackageProgramId(existing.programId || programForStudent(store, existing.studentId)?.programId || '');
+      setEditing(existing);
+      return;
+    }
+    setPackageStudentId(studentId);
+    setPackageProgramId(programForStudent(store, studentId)?.programId || '');
+    setEditing('new');
+  }
   const rows = studentOptions.map((student) => {
     const pack = sessionLeftFor(store, student.studentId);
     const latest = studentSessionPackage(store, student.studentId);
@@ -604,11 +629,7 @@ export function SessionsManagePage({
   }
 
   function openEdit(row: (typeof rows)[number]) {
-    if (row.latest) {
-      setEditing(row.latest);
-      return;
-    }
-    setEditing('new');
+    openPackage(row.student.studentId, row.latest);
   }
 
   return (
@@ -632,7 +653,7 @@ export function SessionsManagePage({
         statusOf={(row) => row.latest?.status || (row.pack.hasPackage ? 'active' : 'none')}
           crud={{
           addLabel: '+ Add Package',
-          onAdd: () => setEditing('new'),
+          onAdd: () => openPackage(''),
           onEdit: (row) => openEdit(row),
           onDelete: async (selected) => {
             const withPack = selected.filter((row) => row.latest);
@@ -714,7 +735,12 @@ export function SessionsManagePage({
         >
           <FormSection title="Session package">
           <Field label="Student" required>
-            <Select name="studentId" defaultValue={current?.studentId || ''} required>
+            <Select
+              name="studentId"
+              value={packageStudentId}
+              required
+              onChange={(event) => choosePackageStudent(event.target.value)}
+            >
               <option value="">Select student</option>
               {studentOptions.map((item) => {
                 const left = sessionLeftFor(store, item.studentId);
@@ -739,8 +765,15 @@ export function SessionsManagePage({
                 : null}
             </Select>
           </Field>
-          <Field label="Program">
-            <Select name="programId" defaultValue={current?.programId || ''}>
+          <Field
+            label="Program"
+            hint={
+              enrolledProgram && packageProgramId === enrolledProgram.programId
+                ? `Filled from the program this child enrolled in: ${enrolledProgram.name}.`
+                : 'Choose the child and this fills with the program their parent enrolled.'
+            }
+          >
+            <Select name="programId" value={packageProgramId} onChange={(event) => setPackageProgramId(event.target.value)}>
               <option value="">None</option>
               {store.programs.map((item) => (
                 <option key={item.programId} value={item.programId}>

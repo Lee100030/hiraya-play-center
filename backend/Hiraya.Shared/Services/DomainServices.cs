@@ -630,6 +630,11 @@ public class EnrollmentService
         var programName = learningClass == null
             ? app.PreferredProgram
             : ClassService.ProgramName(db, learningClass.ProgramId);
+        if (string.IsNullOrWhiteSpace(programName))
+            programName = app.PreferredProgram;
+        var programId = learningClass?.ProgramId ?? "";
+        if (string.IsNullOrWhiteSpace(programId))
+            programId = ProgramIdForName(db, programName);
         student.Status = "active";
         student.Program = programName;
         student.GradeLevel = programName;
@@ -646,7 +651,7 @@ public class EnrollmentService
                 EnrollmentId = IdFactory.New("enr"),
                 StudentId = student.StudentId,
                 ClassId = classKey,
-                ProgramId = learningClass?.ProgramId ?? "",
+                ProgramId = programId,
                 TeacherId = learningClass?.TeacherId ?? "",
                 Period = DefaultPeriod(),
                 Status = EnrollmentStatuses.Active,
@@ -676,6 +681,14 @@ public class EnrollmentService
             return string.Equals(c.Name, preferredProgram, StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(program, preferredProgram, StringComparison.OrdinalIgnoreCase);
         });
+    }
+
+    static string ProgramIdForName(HirayaDatabase db, string? name)
+    {
+        var wanted = (name ?? "").Trim();
+        if (wanted.Length == 0)
+            return "";
+        return db.Programs.FirstOrDefault(p => string.Equals(p.Name, wanted, StringComparison.OrdinalIgnoreCase))?.ProgramId ?? "";
     }
 
     private static string DefaultPeriod()

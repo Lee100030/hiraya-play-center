@@ -66,6 +66,13 @@ export function programForStudent(store: HirayaDatabase, studentId: string): Lea
   const cls = enrollment?.classId
     ? (store.classes || []).find((row) => row.classId === enrollment.classId)
     : undefined;
+  const byId = (programId?: string | null) =>
+    (store.programs || []).find(
+      (program) =>
+        program.programId === (programId || '').trim() && (program.status || '').toLowerCase() !== 'archived',
+    );
+  const enrolled = byId(enrollment?.programId) || byId(cls?.programId);
+  if (enrolled) return enrolled;
   const enrolledName = enrollment?.programId
     ? (store.programs || []).find((row) => row.programId === enrollment.programId)?.name
     : '';
@@ -74,6 +81,12 @@ export function programForStudent(store: HirayaDatabase, studentId: string): Lea
     : '';
   const labels = [student?.program, student?.gradeLevel, cls?.name, classProgramName, enrolledName];
   for (const label of labels) {
+    const named = (store.programs || []).find(
+      (program) =>
+        (program.status || '').toLowerCase() !== 'archived' &&
+        (program.name || '').trim().toLowerCase() === (label || '').trim().toLowerCase(),
+    );
+    if (named) return named;
     const program = programFromLabel(store, label);
     if (program) return program;
   }

@@ -16,6 +16,7 @@ import {
   normalizeSessionPackage,
   parsePeopleLane,
   placeStudentSessionPackage,
+  programForStudent,
   scrubLeftoverSessionPackages,
   sessionLeftFor,
   studentDisplay,
@@ -37,6 +38,8 @@ export default function AdminSessionsPage() {
   const { store, loading, save } = useStore();
   const lane = parsePeopleLane(useSearchParams().get('lane'), store);
   const [editing, setEditing] = useState<SessionPackage | 'new' | null>(null);
+  const [packageStudentId, setPackageStudentId] = useState('');
+  const [packageProgramId, setPackageProgramId] = useState('');
   const [error, setError] = useState('');
   const scrubbedPackages = useRef(false);
   useEffect(() => {
@@ -121,12 +124,27 @@ export default function AdminSessionsPage() {
     }
   }
 
-  function openEdit(row: SessionRow) {
-    if (row.latest) {
-      setEditing(row.latest);
+  function openPackage(studentId: string, existing?: SessionPackage | null) {
+    if (existing) {
+      setPackageStudentId(existing.studentId || '');
+      setPackageProgramId(existing.programId || programForStudent(store, existing.studentId)?.programId || '');
+      setEditing(existing);
       return;
     }
+    setPackageStudentId(studentId);
+    setPackageProgramId(programForStudent(store, studentId)?.programId || '');
     setEditing('new');
+  }
+
+  function choosePackageStudent(studentId: string) {
+    setPackageStudentId(studentId);
+    setPackageProgramId(programForStudent(store, studentId)?.programId || '');
+  }
+
+  const enrolledProgram = programForStudent(store, packageStudentId);
+
+  function openEdit(row: SessionRow) {
+    openPackage(row.student.studentId, row.latest);
   }
 
   if (loading) return <Loading />;
@@ -141,7 +159,7 @@ export default function AdminSessionsPage() {
             : 'See how many sessions each student has left. Remaining = total − used, never below zero.'
         }
         actions={
-          <button type="button" className="dash-action dash-action-primary" onClick={() => setEditing('new')}>
+          <button type="button" className="dash-action dash-action-primary" onClick={() => openPackage('')}>
             + Add Package
           </button>
         }
@@ -236,7 +254,12 @@ export default function AdminSessionsPage() {
           <form className="form-grid" onSubmit={onSubmit}>
             {error ? <p className="hlc-field-error">{error}</p> : null}
             <Field label="Student" required>
-              <Select name="studentId" defaultValue={current?.studentId || ''} required>
+              <Select
+                name="studentId"
+                value={packageStudentId}
+                required
+                onChange={(event) => choosePackageStudent(event.target.value)}
+              >
                 <option value="">Select</option>
                 {studentOptions.map((item) => {
                   const left = sessionLeftFor(store, item.studentId);
@@ -261,8 +284,15 @@ export default function AdminSessionsPage() {
                   : null}
               </Select>
             </Field>
-            <Field label="Program">
-              <Select name="programId" defaultValue={current?.programId || ''}>
+            <Field
+              label="Program"
+              hint={
+                enrolledProgram && packageProgramId === enrolledProgram.programId
+                  ? `Filled from the program this child enrolled in: ${enrolledProgram.name}.`
+                  : 'Choose the child and this fills with the program their parent enrolled.'
+              }
+            >
+              <Select name="programId" value={packageProgramId} onChange={(event) => setPackageProgramId(event.target.value)}>
                 <option value="">None</option>
                 {store.programs.map((item) => (
                   <option key={item.programId} value={item.programId}>
