@@ -806,6 +806,8 @@ public class CenterSettings
     public string ModuleAllowedExtensions { get; set; } = "";
     public int ModuleMaxFileMb { get; set; }
     public string UpdatedAt { get; set; } = "";
+    /// <summary>User ids that were permanently deleted. A later save must not put these accounts back.</summary>
+    public string RemovedUserIds { get; set; } = "";
 }
 
 public static class WebsitePublishStatuses

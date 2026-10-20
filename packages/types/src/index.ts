@@ -509,6 +509,8 @@ export interface CenterSettings {
   moduleAllowedExtensions: string;
   moduleMaxFileMb: number;
   updatedAt: string;
+  /** Permanently deleted account ids, plus mail: and name: marks. A later save must not restore them. */
+  removedUserIds?: string;
 }
 
 export interface WebsiteGalleryItem {
@@ -768,5 +770,6 @@ export const emptyStore = (): HirayaDatabase => ({
     moduleAllowedExtensions: '',
     moduleMaxFileMb: 0,
     updatedAt: '',
+    removedUserIds: '',
   },
 });

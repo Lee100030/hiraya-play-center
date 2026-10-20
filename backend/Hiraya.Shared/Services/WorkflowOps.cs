@@ -20,6 +20,31 @@ public static class WorkflowOps
         db.Schedules ??= [];
     }
 
+    public static void CollapseDuplicateTasks(HirayaDatabase db)
+    {
+        EnsureLists(db);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var kept = new List<StaffTask>();
+        foreach (var task in db.StaffTasks.OrderBy(t => t.CreatedAt ?? ""))
+        {
+            var status = (task.Status ?? "").Trim();
+            var closed = status.Equals("completed", StringComparison.OrdinalIgnoreCase)
+                         || status.Equals("cancelled", StringComparison.OrdinalIgnoreCase);
+            var teachers = string.Join(",",
+                (task.TeacherIds ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(id => id.ToLowerInvariant())
+                    .OrderBy(id => id, StringComparer.Ordinal));
+            var due = (task.DueAt ?? "").Trim();
+            if (due.Length >= 10)
+                due = due[..10];
+            var key = $"{(task.Title ?? "").Trim().ToLowerInvariant()}|{teachers}|{due}|{status.ToLowerInvariant()}";
+            if (!closed && !seen.Add(key))
+                continue;
+            kept.Add(task);
+        }
+        db.StaffTasks = kept;
+    }
+
     public static IEnumerable<string> TeacherIdList(string? packed) =>
         (packed ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

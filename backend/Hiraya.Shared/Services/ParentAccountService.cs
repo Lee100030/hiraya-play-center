@@ -194,6 +194,7 @@ public class ParentAccountService
             db.ParentStudents.RemoveAll(l => l.ParentId == user.UserId);
             db.AccountInvitations.RemoveAll(i => i.UserId == user.UserId);
             db.Alerts.RemoveAll(a => a.RecipientId == user.UserId);
+            RemovedAccounts.Remember(db, user);
             db.Users.RemoveAll(u => u.UserId == user.UserId);
             AuditService.Append(db, actor, AuditModules.Parents, "delete", "user", parentUserId,
                 $"{actor.Fullname} deleted parent account {name}.");

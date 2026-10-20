@@ -277,6 +277,9 @@ public static class StoreSanitizer
         }
         WorkflowOps.AfterAdminSave(previous, incoming, actor);
         StudentTuition.Enforce(previous, incoming);
+        RemovedAccounts.Preserve(previous.Settings, incoming.Settings);
+        RemovedAccounts.Strip(incoming);
+        WorkflowOps.CollapseDuplicateTasks(incoming);
         return incoming;
     }
 
@@ -320,6 +323,7 @@ public static class StoreSanitizer
             .Concat(incoming.StaffTasks.Where(t => WorkflowOps.TaskAssignedTo(t, actor.UserId)))
             .ToList();
         OverlayStudentSessions(current, incoming, allowed);
+        WorkflowOps.CollapseDuplicateTasks(current);
         WorkflowOps.AfterTeacherSave(previous, current, actor);
         return current;
     }
@@ -352,6 +356,7 @@ public static class StoreSanitizer
         current.Alerts = current.Alerts.Where(a => a.RecipientId != actor.UserId)
             .Concat(incoming.Alerts.Where(a => a.RecipientId == actor.UserId))
             .ToList();
+        WorkflowOps.CollapseDuplicateTasks(current);
         return current;
     }
 

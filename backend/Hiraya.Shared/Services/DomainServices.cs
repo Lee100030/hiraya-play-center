@@ -230,7 +230,8 @@ public class EnrollmentService
 
             if (isTeacher)
             {
-                var teacher = StaffService.EnsureTeacherFromApplication(db, app, actor);
+                var teacher = StaffService.EnsureTeacherFromApplication(db, app, actor)
+                    ?? throw new InvalidOperationException("This teacher was permanently deleted. Create a new staff account if they should come back.");
                 app.Status = "approved";
                 app.StudentNumber = teacher.UserId;
                 AuditService.Append(db, adminUserId, "", AuditModules.Enrollment, "approve-teacher",
@@ -294,6 +295,11 @@ public class EnrollmentService
                 .ToList())
             {
                 var teacher = StaffService.EnsureTeacherFromApplication(db, app, actor);
+                if (teacher is null)
+                {
+                    app.Status = "removed";
+                    continue;
+                }
                 app.StudentNumber = teacher.UserId;
             }
             await Task.CompletedTask;

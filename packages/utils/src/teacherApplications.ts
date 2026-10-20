@@ -55,12 +55,23 @@ export function unusedTeacherLogin(store: HirayaDatabase, preferred?: string | n
 }
 
 export function approvedTeacherApplicationsWithoutAccount(store: HirayaDatabase): EnrollmentApplication[] {
-  return (store.enrollmentApplications || []).filter(
-    (row) =>
-      isTeacherApplication(row) &&
-      (row.status || '').toLowerCase() === 'approved' &&
-      !matchingTeacherForApplication(store, row),
+  const removed = new Set(
+    (store.settings?.removedUserIds || '')
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
   );
+  return (store.enrollmentApplications || []).filter((row) => {
+    if (!isTeacherApplication(row) || (row.status || '').toLowerCase() !== 'approved') return false;
+    if (matchingTeacherForApplication(store, row)) return false;
+    const linked = (row.studentNumber || '').trim().toLowerCase();
+    const mail = normalizeStaffEmail(row.parentEmail);
+    const name = normalizeStaffName((row.studentFullname || '').replace(/,/g, ' '));
+    if (linked && removed.has(linked)) return false;
+    if (mail && removed.has(`mail:${mail}`)) return false;
+    if (name.length > 1 && removed.has(`name:${name}`)) return false;
+    return true;
+  });
 }
 
 export function teacherHireDraft(store: HirayaDatabase, app: EnrollmentApplication, password: string) {

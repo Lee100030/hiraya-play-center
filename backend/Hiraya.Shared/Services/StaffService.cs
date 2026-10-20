@@ -231,6 +231,9 @@ public class StaffService
         var profileId = string.IsNullOrWhiteSpace(input.ProfileId) ? IdFactory.New("tprof") : input.ProfileId.Trim();
         var existing = db.Users.FirstOrDefault(u => u.UserId == userId);
 
+        if (RemovedAccounts.BlocksIdentity(db, userId, email, input.PersonalEmail ?? existing?.PersonalEmail))
+            throw new InvalidOperationException("That account was permanently deleted.");
+
         if (db.Users.Any(u =>
                 u.UserId != userId &&
                 string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)))
@@ -333,7 +336,7 @@ public class StaffService
         return userId;
     }
 
-    public static HirayaUser EnsureTeacherFromApplication(HirayaDatabase db, EnrollmentApplication app, HirayaUser? actor)
+    public static HirayaUser? EnsureTeacherFromApplication(HirayaDatabase db, EnrollmentApplication app, HirayaUser? actor)
     {
         var mail = (app.ParentEmail ?? "").Trim();
         var name = (app.StudentFullname ?? "").Trim();
@@ -354,6 +357,8 @@ public class StaffService
                     StringComparison.Ordinal));
         if (existing != null)
         {
+            if (RemovedAccounts.BlocksIdentity(db, existing.UserId, existing.Email, existing.PersonalEmail))
+                return null;
             if (string.IsNullOrWhiteSpace(existing.Phone))
                 existing.Phone = (app.ParentPhone ?? "").Trim();
             if (string.IsNullOrWhiteSpace(existing.PersonalEmail) && mail.Contains('@') && !mail.EndsWith("@hiraya.local", StringComparison.OrdinalIgnoreCase))
@@ -366,6 +371,9 @@ public class StaffService
                 existing.Position = roleWanted;
             return existing;
         }
+
+        if (RemovedAccounts.BlocksImport(db, linked, mail, name))
+            return null;
 
         var password = InvitationTokens.NewToken();
         if (password.Length < PasswordRules.MinimumLength)
@@ -448,6 +456,8 @@ public class StaffService
             throw new InvalidOperationException("You cannot delete the account you are signed in with.");
 
         var name = user.Fullname;
+        RetireApprovedApplications(db, user);
+        RemovedAccounts.Remember(db, user);
         db.Users.RemoveAll(u => u.UserId == userId);
         db.TeacherProfiles.RemoveAll(p => p.UserId == userId);
         db.TeacherWorkShifts.RemoveAll(s => s.TeacherId == userId);
@@ -461,6 +471,42 @@ public class StaffService
             schedule.TeacherId = "";
         db.Alerts.RemoveAll(a => a.RecipientId == userId);
         AuditService.Append(db, actor, AuditModules.Staff, "delete", "user", userId, $"Deleted {name}.");
+    }
+
+    /// <summary>
+    /// An approved teacher application is what puts the person back on the teacher list.
+    /// Closing it here keeps a permanent delete from being imported again.
+    /// </summary>
+    static void RetireApprovedApplications(HirayaDatabase db, HirayaUser user)
+    {
+        foreach (var app in db.EnrollmentApplications)
+        {
+            if (!string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!string.Equals(app.Status, "approved", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!ApplicationMatchesStaff(app, user))
+                continue;
+            app.Status = "removed";
+        }
+    }
+
+    static bool ApplicationMatchesStaff(EnrollmentApplication app, HirayaUser user)
+    {
+        var linked = (app.StudentNumber ?? "").Trim();
+        if (linked.Length > 0 && string.Equals(linked, user.UserId, StringComparison.OrdinalIgnoreCase))
+            return true;
+        var mail = (app.ParentEmail ?? "").Trim();
+        if (mail.Length > 0 &&
+            (string.Equals(mail, user.Email, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(mail, user.PersonalEmail, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        if (!string.IsNullOrWhiteSpace(app.ApplicationId) &&
+            (user.Notes ?? "").Contains(app.ApplicationId, StringComparison.OrdinalIgnoreCase))
+            return true;
+        var applied = Regex.Replace((app.StudentFullname ?? "").Trim().ToLowerInvariant(), @"\s+", " ");
+        var current = Regex.Replace((user.Fullname ?? "").Trim().ToLowerInvariant(), @"\s+", " ");
+        return applied.Length > 1 && applied == current;
     }
 
     internal static void ApplyArchive(HirayaDatabase db, string userId, HirayaUser? actor)

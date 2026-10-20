@@ -41,7 +41,9 @@ public static class StorePatch
                 continue;
             if (name == "settings")
             {
+                var previous = target.Settings;
                 target.Settings = patch.Upserts.Settings ?? target.Settings;
+                RemovedAccounts.Preserve(previous, target.Settings);
                 if (string.IsNullOrWhiteSpace(target.Settings.SettingsId))
                     target.Settings.SettingsId = "center";
                 continue;
@@ -88,6 +90,7 @@ public static class StorePatch
                 case "chatgroups": ApplyRows(target.ChatGroups, patch.Upserts.ChatGroups, deletes, x => x.GroupId); break;
             }
         }
+        RemovedAccounts.Strip(target);
     }
 
     private static List<string> Deletes(StorePatchRequest patch, string name)
