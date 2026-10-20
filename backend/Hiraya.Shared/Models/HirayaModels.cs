@@ -181,9 +181,11 @@ public static class AccountStatuses
     public const string Deactivated = "deactivated";
     public const string Archived = "archived";
 
-    public static bool AllowsPortalLogin(string? status) =>
-        string.IsNullOrWhiteSpace(status) ||
-        string.Equals(status, Active, StringComparison.OrdinalIgnoreCase);
+    public static bool AllowsPortalLogin(string? status)
+    {
+        var value = (status ?? "").Trim();
+        return value.Length == 0 || string.Equals(value, Active, StringComparison.OrdinalIgnoreCase);
+    }
 
     public static string Label(string? status) => status switch
     {

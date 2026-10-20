@@ -116,7 +116,19 @@ public class PortalAuthService
     {
         var user = await repository.FindUserAsync(null, key);
         if (user is not null && !AccountStatuses.AllowsPortalLogin(user.Status))
-            throw new InvalidOperationException("This account is not active yet. Ask the center to activate it on HIRAYA Desktop.");
+        {
+            if (!PasswordHasher.Verify(password, user.Password))
+            {
+                RegisterFailure(key);
+                if (IsLocked(key))
+                    throw new InvalidOperationException(LockoutMessage);
+                return null;
+            }
+
+            if (!await ReviveSoleDirectorAsync(repository, user))
+                throw new InvalidOperationException(InactiveMessage(user));
+            user.Status = AccountStatuses.Active;
+        }
 
         var passwordOk = user != null && PasswordHasher.Verify(password, user.Password);
 
@@ -153,6 +165,43 @@ public class PortalAuthService
         }
 
         return AccountService.ClonePublic(user);
+    }
+
+    /// <summary>
+    /// The last Super Administrator cannot be unlocked from the desktop if that account itself is turned off.
+    /// A correct password turns that one account back on.
+    /// </summary>
+    private static async Task<bool> ReviveSoleDirectorAsync(IHirayaRepository repository, HirayaUser user)
+    {
+        if (!UserRoles.Is(user.Role, UserRoles.SuperAdmin))
+            return false;
+        var db = await repository.LoadAsync();
+        var anotherDirector = db.Users.Any(other =>
+            !string.Equals(other.UserId, user.UserId, StringComparison.OrdinalIgnoreCase) &&
+            UserRoles.Is(other.Role, UserRoles.SuperAdmin) &&
+            AccountStatuses.AllowsPortalLogin(other.Status));
+        if (anotherDirector)
+            return false;
+
+        await repository.MutateAsync(async data =>
+        {
+            var live = data.Users.FirstOrDefault(row =>
+                string.Equals(row.UserId, user.UserId, StringComparison.OrdinalIgnoreCase));
+            if (live is null)
+                return;
+            live.Status = AccountStatuses.Active;
+            live.UpdatedAt = DateTime.UtcNow.ToString("o");
+            await Task.CompletedTask;
+        });
+        return true;
+    }
+
+    private static string InactiveMessage(HirayaUser user)
+    {
+        var status = (user.Status ?? "").Trim();
+        if (string.Equals(status, AccountStatuses.PendingActivation, StringComparison.OrdinalIgnoreCase))
+            return "This account is not active yet. A Super Administrator needs to activate it.";
+        return "This account is turned off. A Super Administrator needs to turn it back on.";
     }
 
     public const string LockoutMessage = "Too many failed sign-ins. Wait a few minutes and try again, or use the correct password.";

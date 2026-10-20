@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Hiraya.Shared.Models;
+using Hiraya.Shared.Security;
 using Hiraya.Shared.Services;
 using Hiraya.Shared.Services.Firebase;
 using Microsoft.EntityFrameworkCore;
@@ -133,14 +134,15 @@ public class EfHirayaRepository : IHirayaRepository
         var at = lower.IndexOf('@');
         var local = at > 0 ? lower[..at] : lower;
         var emailDot = at > 0 ? lower + "." : "";
-        return await db.Users.AsNoTracking().FirstOrDefaultAsync(u =>
+        var candidates = await db.Users.AsNoTracking().Where(u =>
             (u.Email != null && u.Email.ToLower() == lower) ||
             (u.Username != null && u.Username.ToLower() == lower) ||
             (u.Fullname != null && u.Fullname.ToLower() == lower) ||
             (u.PersonalEmail != null && u.PersonalEmail.ToLower() == lower) ||
             (at > 0 && u.Username != null && u.Username.ToLower() == local) ||
             (at > 0 && u.Email != null && u.Email.ToLower().StartsWith(emailDot)) ||
-            (at > 0 && u.PersonalEmail != null && u.PersonalEmail.ToLower().StartsWith(emailDot)), ct);
+            (at > 0 && u.PersonalEmail != null && u.PersonalEmail.ToLower().StartsWith(emailDot))).ToListAsync(ct);
+        return LoginIdentity.Choose(candidates, key);
     }
 
     private async Task<HirayaDatabase> LoadUnlockedAsync(CancellationToken ct)

@@ -131,7 +131,7 @@ public class FirestoreHirayaRepository : IHirayaRepository
         if (key.Length == 0)
             return null;
         var users = await LoadList<HirayaUser>("users", ct);
-        return users.FirstOrDefault(u => LoginIdentity.Matches(u, key));
+        return LoginIdentity.Choose(users, key);
     }
 
     private async Task<HirayaDatabase> LoadUnlockedAsync(CancellationToken ct)

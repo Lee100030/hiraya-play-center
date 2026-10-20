@@ -32,7 +32,7 @@ public interface IHirayaRepository
             return db.Users.FirstOrDefault(u => string.Equals(u.UserId, userId, StringComparison.OrdinalIgnoreCase));
         var key = (login ?? "").Trim();
         if (key.Length == 0) return null;
-        return db.Users.FirstOrDefault(u => LoginIdentity.Matches(u, key));
+        return LoginIdentity.Choose(db.Users, key);
     }
 }
 
