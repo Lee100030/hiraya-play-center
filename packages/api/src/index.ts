@@ -712,16 +712,37 @@ export class HirayaApi {
     body.append('position', input.position);
     body.append('notes', input.notes || '');
     body.append('resume', input.resume, input.resumeName || 'resume.pdf');
-    const res = await fetch(this.url('/api/public/teacher-application'), {
-      method: 'POST',
-      cache: 'no-store',
-      body,
-      signal:
-        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-          ? AbortSignal.timeout(90_000)
-          : undefined,
-    });
-    return this.parse(res);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(this.url('/api/public/teacher-application'), {
+          method: 'POST',
+          body,
+        });
+        if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+          continue;
+        }
+        return this.parse(res);
+      } catch (err) {
+        lastError = err;
+        const network = err instanceof TypeError;
+        if (network && attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+          continue;
+        }
+        if (network) {
+          throw new ApiError(
+            'The application did not reach the center. Check your internet connection, then tap Apply now again.',
+            0,
+          );
+        }
+        throw err;
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new ApiError('The application did not reach the center. Check your internet connection, then tap Apply now again.', 0);
   }
 
   async openTeacherResume(applicationId: string): Promise<void> {

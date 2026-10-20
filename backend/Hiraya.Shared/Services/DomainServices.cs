@@ -168,12 +168,15 @@ public class EnrollmentService
             : applicationId.Trim();
         await _repository.MutateAsync(async db =>
         {
-            var duplicate = db.EnrollmentApplications.Any(a =>
+            var duplicate = db.EnrollmentApplications.FirstOrDefault(a =>
                 string.Equals(a.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase) &&
                 a.Status == "pending_review" &&
                 string.Equals(a.ParentEmail, mail, StringComparison.OrdinalIgnoreCase));
-            if (duplicate)
-                throw new InvalidOperationException("A teacher application for this email is already waiting for review.");
+            if (duplicate != null)
+                db.EnrollmentApplications.Remove(duplicate);
+            var resumeName = string.IsNullOrWhiteSpace(resumeFileName) ? duplicate?.ResumeFileName ?? "" : resumeFileName.Trim();
+            var resumeType = string.IsNullOrWhiteSpace(resumeFileName) ? duplicate?.ResumeContentType ?? "" : (resumeContentType ?? "").Trim();
+            var resumeSize = string.IsNullOrWhiteSpace(resumeFileName) ? duplicate?.ResumeSizeBytes ?? 0 : resumeSizeBytes;
             db.EnrollmentApplications.Add(new EnrollmentApplication
             {
                 ApplicationId = applicationId,
@@ -186,9 +189,9 @@ public class EnrollmentService
                 SubmittedAt = DateTime.UtcNow.ToString("o"),
                 Status = "pending_review",
                 Notes = (notes ?? "").Trim(),
-                ResumeFileName = (resumeFileName ?? "").Trim(),
-                ResumeContentType = (resumeContentType ?? "").Trim(),
-                ResumeSizeBytes = resumeSizeBytes
+                ResumeFileName = resumeName,
+                ResumeContentType = resumeType,
+                ResumeSizeBytes = resumeSize
             });
             NotificationService.PushToUsers(
                 db,
