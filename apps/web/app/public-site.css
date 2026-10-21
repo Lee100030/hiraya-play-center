@@ -1048,6 +1048,132 @@
   background: #fffef8;
 }
 
+.otp-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7, 20, 13, 0.66);
+  backdrop-filter: blur(8px);
+}
+
+.otp-card {
+  width: min(440px, 100%);
+  padding: 28px 24px 22px;
+  border-radius: 28px;
+  border: 1px solid rgba(201, 162, 39, 0.65);
+  background:
+    radial-gradient(circle at top, rgba(201, 162, 39, 0.18), transparent 42%),
+    #f7f3e8;
+  box-shadow: 0 28px 70px rgba(4, 16, 9, 0.45);
+  text-align: center;
+  color: var(--hk-ink);
+  animation: fade-up 0.28s ease;
+}
+
+.otp-card img {
+  width: 72px;
+  height: auto;
+  margin: 0 auto 8px;
+}
+
+.otp-kicker {
+  margin: 0;
+  color: #8a6d12;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.otp-card h2 {
+  margin: 6px 0 8px;
+  color: var(--hk-green-mid);
+  font-family: var(--hk-serif);
+  font-size: 1.8rem;
+}
+
+.otp-card p {
+  margin: 0 auto;
+  max-width: 34ch;
+  color: #5d6b64;
+}
+
+.otp-mail {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(201, 162, 39, 0.16);
+  color: var(--hk-green-mid);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.otp-digits {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 22px 0 8px;
+}
+
+.otp-digit {
+  width: 48px;
+  height: 58px;
+  padding: 0;
+  border-radius: 14px;
+  border: 1px solid #d9c98a;
+  background: #fff;
+  color: var(--hk-green);
+  font-size: 1.55rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.otp-digit:focus {
+  outline: none;
+  border-color: var(--hk-gold);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.4);
+}
+
+@media (max-width: 420px) {
+  .otp-digits {
+    gap: 6px;
+  }
+
+  .otp-digit {
+    width: 40px;
+    height: 52px;
+    font-size: 1.35rem;
+  }
+}
+
+.otp-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 16px;
+}
+
+.otp-actions button {
+  border: 0;
+  background: none;
+  color: var(--hk-green-mid);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.otp-card .login-alert {
+  margin: 12px 0 0;
+  text-align: left;
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;
