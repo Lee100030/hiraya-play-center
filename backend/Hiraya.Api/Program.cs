@@ -96,6 +96,7 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddSingleton<PublicRequestThrottle>();
 builder.Services.AddSingleton<SensitiveActionCodes>();
+builder.Services.AddSingleton<LoginOtpChallenges>();
 if (useFirestore)
     builder.Services.AddSingleton<IHirayaRepository, FirestoreHirayaRepository>();
 else
@@ -237,7 +238,7 @@ app.MapGet("/api/store", async (HttpRequest request, IHirayaRepository repo, ILo
     }
 });
 
-app.MapPost("/api/auth/login", async (LoginRequest body, HttpRequest request, PortalAuthService auth, SessionTokenOptions tokens, IHirayaRepository repo, PublicRequestThrottle throttle) =>
+app.MapPost("/api/auth/login", async (LoginRequest body, HttpRequest request, PortalAuthService auth, SessionTokenOptions tokens, IHirayaRepository repo, PublicRequestThrottle throttle, IEmailSender email, LoginOtpChallenges otps, ILoggerFactory logs) =>
 {
     try
     {
@@ -251,32 +252,12 @@ app.MapPost("/api/auth/login", async (LoginRequest body, HttpRequest request, Po
             return Results.Json(new { error = "Username or password is incorrect." }, statusCode: StatusCodes.Status401Unauthorized);
         var live = await repo.FindUserAsync(session.User.UserId, null)
                    ?? session.User;
+        if (UserRoles.IsAdmin(live.Role))
+            return await AdminLoginGate.BeginAsync(live, email, otps, logs.CreateLogger("Hiraya.Api"));
         var fromPhone = string.Equals(body.Client, "mobile", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(request.Headers["X-Hiraya-Client"], "mobile", StringComparison.OrdinalIgnoreCase);
         if (fromPhone)
-        {
-            var whoUser = live;
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await repo.MutateAsync(async db =>
-                    {
-                        var name = string.IsNullOrWhiteSpace(whoUser.Fullname) ? whoUser.Username : whoUser.Fullname.Trim();
-                        var who = string.IsNullOrWhiteSpace(whoUser.Email) ? name : $"{name} ({whoUser.Email})";
-                        var message = $"{who} signed in on the phone.";
-                        AuditService.Append(db, whoUser, AuditModules.Auth, "login", "user", whoUser.UserId, message);
-                        var admins = NotificationService.Recipients(db, NotificationAudiences.Admins);
-                        NotificationService.PushToUsers(db, admins.Select(admin => admin.UserId), message, "mobile-login", "Phone sign-in");
-                        await Task.CompletedTask;
-                    });
-                }
-                catch
-                {
-                    // Phone sign-in must not wait on a full store rewrite.
-                }
-            });
-        }
+            AdminLoginGate.NotePhoneSignIn(repo, live);
         var token = SessionTokens.Issue(
             session.User.UserId,
             tokens.Secret,
@@ -793,6 +774,7 @@ app.MapPut("/api/store", async (HttpRequest request, HirayaDatabase incoming, IH
     }
 });
 
+AdminLoginGate.Map(app);
 LearningModuleApi.Map(app);
 ParentPortalApi.Map(app);
 WebsiteApi.Map(app);

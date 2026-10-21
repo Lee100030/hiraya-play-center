@@ -2,6 +2,20 @@ import { resolveApiBaseUrl, SESSION_HEADER } from '@hiraya/config';
 import { emptyStore, type AuthSession, type EnrollmentApplyInput, type HirayaDatabase, type HirayaUser, type PublicSite, type TeacherApplyInput } from '@hiraya/types';
 import { approvedTeacherApplicationsWithoutAccount, diffStore, teacherHireDraft } from '@hiraya/utils';
 
+export type AdminLoginChallenge = {
+  otpRequired: true;
+  challenge: string;
+  sentTo: string;
+};
+
+export type LoginResult = AuthSession | AdminLoginChallenge;
+
+export function isAdminLoginChallenge(value: object | null | undefined): value is AdminLoginChallenge {
+  if (!value || !('otpRequired' in value)) return false;
+  const row = value as Partial<AdminLoginChallenge>;
+  return row.otpRequired === true && typeof row.challenge === 'string';
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -96,7 +110,7 @@ export class HirayaApi {
     return this.parse(res);
   }
 
-  async login(login: string, password: string, client?: string): Promise<AuthSession> {
+  async login(login: string, password: string, client?: string): Promise<LoginResult> {
     await this.tokenStore.setToken?.(null);
     const res = await fetch(this.url('/api/auth/login'), {
       method: 'POST',
@@ -107,10 +121,37 @@ export class HirayaApi {
       body: JSON.stringify({ login, password, ...(client ? { client } : {}) }),
       signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
     });
+    const result = await this.parse<LoginResult>(res);
+    if (isAdminLoginChallenge(result)) return result;
+    await this.tokenStore.setToken?.(result.token);
+    if (result.token) this.cachedToken = result.token;
+    return result;
+  }
+
+  async confirmAdminLogin(challenge: string, code: string, client?: string): Promise<AuthSession> {
+    const res = await fetch(this.url('/api/auth/login/otp'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(client ? { 'X-Hiraya-Client': client } : {}),
+      },
+      body: JSON.stringify({ challenge, code, ...(client ? { client } : {}) }),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
+    });
     const session = await this.parse<AuthSession>(res);
     await this.tokenStore.setToken?.(session.token);
     if (session.token) this.cachedToken = session.token;
     return session;
+  }
+
+  async resendAdminLogin(challenge: string): Promise<AdminLoginChallenge> {
+    const res = await fetch(this.url('/api/auth/login/otp/resend'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challenge }),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
+    });
+    return this.parse<AdminLoginChallenge>(res);
   }
 
   async logout(): Promise<void> {

@@ -965,10 +965,16 @@
   font-size: 0.85rem;
 }
 
-.login-row a {
+.login-row a,
+.login-row button {
   color: var(--hk-green-mid);
   text-decoration: underline;
   text-underline-offset: 3px;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
 }
 
 .remember {
