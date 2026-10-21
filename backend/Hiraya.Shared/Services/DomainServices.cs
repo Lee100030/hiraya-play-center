@@ -1,3 +1,4 @@
+using Hiraya.Shared;
 using Hiraya.Shared.Models;
 using Hiraya.Shared.Security;
 using Hiraya.Shared.Services.Firebase;
@@ -13,6 +14,18 @@ public sealed class EnrollmentApprovalNotice
     public string StudentName { get; init; } = "";
     public string Program { get; init; } = "";
     public bool ParentNeedsActivation { get; init; }
+}
+
+public sealed class PortalReadyNotice
+{
+    public string To { get; init; } = "";
+    public string Name { get; init; } = "";
+    public string LoginEmail { get; init; } = "";
+    public string? Password { get; init; }
+    public string ApkUrl { get; init; } = "";
+    public bool Teacher { get; init; }
+    public string StudentName { get; init; } = "";
+    public string Program { get; init; } = "";
 }
 
 public class EnrollmentService
@@ -212,16 +225,26 @@ public class EnrollmentService
         return applicationId;
     }
 
-    public async Task ApproveApplicationAsync(string applicationId, HirayaUser actor, string? classId = null)
+    public async Task<string?> ApproveApplicationAsync(
+        string applicationId,
+        HirayaUser actor,
+        string? classId = null,
+        string? apkUrl = null,
+        string? password = null,
+        string? email = null)
     {
         if (!Navigation.CanManageEnrollment(actor.Role))
             throw new UnauthorizedAccessException("Only administrators can approve enrollment applications.");
         var adminUserId = actor.UserId;
-        EnrollmentApprovalNotice? notice = null;
+        PortalReadyNotice? notice = null;
         await _repository.MutateAsync(async db =>
         {
             var app = db.EnrollmentApplications.FirstOrDefault(a => a.ApplicationId == applicationId)
                       ?? throw new InvalidOperationException("Application not found.");
+
+            var link = NormalizeApkUrl(apkUrl, db.Settings.MobileApkUrl);
+            var mailbox = PortalMailbox(email, app.ParentEmail);
+            db.Settings.MobileApkUrl = link;
 
             var isTeacher = string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase);
             var teacherWaiting = isTeacher &&
@@ -233,8 +256,12 @@ public class EnrollmentService
 
             if (isTeacher)
             {
+                var before = db.Users.Select(u => u.UserId).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var teacher = StaffService.EnsureTeacherFromApplication(db, app, actor)
                     ?? throw new InvalidOperationException("This teacher was permanently deleted. Create a new staff account if they should come back.");
+                AssignPortalEmail(db, teacher, mailbox);
+                var issued = IssuePortalPassword(db, teacher, password, created: !before.Contains(teacher.UserId));
+                app.ParentEmail = mailbox;
                 app.Status = "approved";
                 app.StudentNumber = teacher.UserId;
                 AuditService.Append(db, adminUserId, "", AuditModules.Enrollment, "approve-teacher",
@@ -249,40 +276,120 @@ public class EnrollmentService
                 NotificationService.Push(
                     db,
                     teacher.UserId,
-                    "Your teacher application was approved. Open Teacher management to finish the profile and set a sign-in password.",
+                    "Your teacher application was approved. Sign in on the Hiraya phone app with the account we emailed you.",
                     NotificationKinds.Enrollment,
                     "Teacher application approved",
                     "teachers");
+                notice = new PortalReadyNotice
+                {
+                    To = mailbox,
+                    Name = teacher.Fullname,
+                    LoginEmail = mailbox,
+                    Password = issued,
+                    ApkUrl = link,
+                    Teacher = true,
+                    Program = app.PreferredProgram
+                };
                 await Task.CompletedTask;
                 return;
             }
 
+            var parentIds = db.Users.Select(u => u.UserId).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var parent = CreateLearnerFromApplication(db, app, actor, classId);
-            notice = new EnrollmentApprovalNotice
+            AssignPortalEmail(db, parent, mailbox);
+            app.ParentEmail = mailbox;
+            var parentPassword = IssuePortalPassword(db, parent, password, created: !parentIds.Contains(parent.UserId));
+            notice = new PortalReadyNotice
             {
-                ParentUserId = parent.UserId,
-                ParentEmail = OriginalEmail(app.ParentEmail, parent.Email),
-                ParentName = parent.Fullname,
+                To = mailbox,
+                Name = string.IsNullOrWhiteSpace(parent.Fullname) ? app.ParentFullname : parent.Fullname,
+                LoginEmail = mailbox,
+                Password = parentPassword,
+                ApkUrl = link,
+                Teacher = false,
                 StudentName = app.StudentFullname,
-                Program = app.PreferredProgram,
-                ParentNeedsActivation = string.Equals(parent.Status, AccountStatuses.PendingActivation, StringComparison.OrdinalIgnoreCase)
+                Program = app.PreferredProgram
             };
             await Task.CompletedTask;
         });
 
         if (notice is null || _parents is null)
-            return;
-        _ = Task.Run(async () =>
+            return "Approved, but the email could not be sent. The account is ready. Close this window.";
+        var sent = await _parents.NotifyPortalReadyAsync(notice);
+        return sent ? null : "Approved, but the email could not be sent. The account is ready. Close this window.";
+    }
+
+    static string PortalMailbox(string? typed, string? applicationEmail)
+    {
+        var candidate = string.IsNullOrWhiteSpace(typed) ? applicationEmail : typed;
+        if (!PersonalMailbox.TryNormalize(candidate, out var mailbox, out var mailError))
+            throw new InvalidOperationException(mailError);
+        return mailbox;
+    }
+
+    static void AssignPortalEmail(HirayaDatabase db, HirayaUser user, string mailbox)
+    {
+        var taken = db.Users.Any(other =>
+            !string.Equals(other.UserId, user.UserId, StringComparison.OrdinalIgnoreCase) &&
+            (string.Equals(other.Email, mailbox, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(other.PersonalEmail, mailbox, StringComparison.OrdinalIgnoreCase)));
+        if (taken)
+            throw new InvalidOperationException("That email is already used by another account.");
+        user.Email = mailbox;
+        user.PersonalEmail = mailbox;
+        user.UpdatedAt = DateTime.UtcNow.ToString("o");
+    }
+
+    static string? IssuePortalPassword(HirayaDatabase db, HirayaUser user, string? password, bool created)
+    {
+        var supplied = (password ?? "").Trim();
+        if (supplied.Length > 0)
         {
-            try
-            {
-                await _parents.NotifyEnrollmentAcceptedAsync(notice);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Enrollment was accepted, but the parent notice could not be prepared.");
-            }
-        });
+            var chosen = RequireIssuedPassword(supplied);
+            user.Password = PasswordHasher.Hash(chosen);
+            user.Status = AccountStatuses.Active;
+            user.UpdatedAt = DateTime.UtcNow.ToString("o");
+            foreach (var old in db.AccountInvitations.Where(i => i.UserId == user.UserId && string.IsNullOrWhiteSpace(i.UsedAt)))
+                old.UsedAt = user.UpdatedAt;
+            return chosen;
+        }
+        var deactivated = string.Equals(user.Status, AccountStatuses.Deactivated, StringComparison.OrdinalIgnoreCase);
+        var keep = !created && (deactivated || AccountStatuses.AllowsPortalLogin(user.Status));
+        if (keep)
+            return null;
+        var issued = RequireIssuedPassword(password);
+        user.Password = PasswordHasher.Hash(issued);
+        user.Status = AccountStatuses.Active;
+        user.UpdatedAt = DateTime.UtcNow.ToString("o");
+        foreach (var old in db.AccountInvitations.Where(i => i.UserId == user.UserId && string.IsNullOrWhiteSpace(i.UsedAt)))
+            old.UsedAt = user.UpdatedAt;
+        return issued;
+    }
+
+    static string RequireIssuedPassword(string? password)
+    {
+        var text = (password ?? "").Trim();
+        if (text.Length == 0)
+        {
+            text = InvitationTokens.NewToken();
+            if (text.Length < PasswordRules.MinimumLength)
+                text = text.PadRight(PasswordRules.MinimumLength, 'x');
+        }
+        var problem = PasswordRules.ValidateNew("", text, text);
+        if (problem != null)
+            throw new InvalidOperationException(problem);
+        return text;
+    }
+
+    static string NormalizeApkUrl(string? incoming, string? saved)
+    {
+        var text = (incoming ?? "").Trim();
+        if (text.Length == 0)
+            text = (saved ?? "").Trim();
+        if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+            throw new InvalidOperationException("Enter the phone app link, starting with https://.");
+        return text;
     }
 
     public async Task ImportApprovedTeachersAsync(HirayaUser actor)

@@ -19,7 +19,9 @@ public static class EnrollmentApi
             if (actor is null) return Results.Unauthorized();
             try
             {
-                await enroll.ApproveApplicationAsync(id, actor, body?.ClassId);
+                var warning = await enroll.ApproveApplicationAsync(id, actor, body?.ClassId, body?.ApkUrl, body?.Password, body?.Email);
+                if (!string.IsNullOrWhiteSpace(warning))
+                    return Results.Json(new { error = warning, approved = true }, statusCode: StatusCodes.Status409Conflict);
                 var data = await repo.LoadAsync();
                 return Results.Json(StoreSanitizer.VisibleTo(data, actor), JsonDefaults.Options);
             }
@@ -158,6 +160,9 @@ public static class EnrollmentApi
 public sealed class ApproveEnrollmentBody
 {
     public string? ClassId { get; set; }
+    public string? ApkUrl { get; set; }
+    public string? Password { get; set; }
+    public string? Email { get; set; }
 }
 
 public sealed class InterviewBody

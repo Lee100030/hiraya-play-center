@@ -383,6 +383,51 @@ public class ParentAccountService
         });
     }
 
+    public async Task<bool> NotifyPortalReadyAsync(PortalReadyNotice notice)
+    {
+        var sent = false;
+        if (CanSendMail() && !string.IsNullOrWhiteSpace(notice.To))
+        {
+            var center = await CenterNameAsync();
+            var (subject, text, html) = InvitationEmail.PortalReady(
+                center,
+                notice.Name,
+                notice.Teacher,
+                notice.LoginEmail,
+                notice.Password,
+                notice.ApkUrl,
+                notice.StudentName,
+                notice.Program,
+                await ContactAsync());
+            try
+            {
+                await _email!.SendAsync(notice.To, subject, text, html);
+                sent = true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Could not email portal access to {Email}.", notice.To);
+            }
+        }
+
+        var who = string.IsNullOrWhiteSpace(notice.Name) ? notice.To : notice.Name;
+        var adminNote = sent
+            ? $"{who} was emailed a Hiraya sign-in and the phone app link."
+            : $"{who} was approved, but the sign-in email could not be sent.";
+        await _repository.MutateAsync(db =>
+        {
+            NotificationService.PushToUsers(
+                db,
+                NotificationService.Recipients(db, NotificationAudiences.Admins).Select(u => u.UserId),
+                adminNote,
+                NotificationKinds.Enrollment,
+                sent ? "Sign-in email sent" : "Sign-in email not sent",
+                "enrollment");
+            return Task.CompletedTask;
+        });
+        return sent;
+    }
+
     public async Task NotifyTeacherInterviewAsync(string email, string name, string when, string place, string instructions)
     {
         if (!CanSendMail() || string.IsNullOrWhiteSpace(email))

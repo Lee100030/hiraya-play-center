@@ -805,6 +805,8 @@ public class CenterSettings
     public bool NotifyProgress { get; set; } = true;
     public string ModuleAllowedExtensions { get; set; } = "";
     public int ModuleMaxFileMb { get; set; }
+    /// <summary>Last phone-app install link included in approval emails.</summary>
+    public string MobileApkUrl { get; set; } = "";
     public string UpdatedAt { get; set; } = "";
     /// <summary>User ids that were permanently deleted. A later save must not put these accounts back.</summary>
     public string RemovedUserIds { get; set; } = "";

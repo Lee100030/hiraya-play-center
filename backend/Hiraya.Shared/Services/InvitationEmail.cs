@@ -86,6 +86,49 @@ public static class InvitationEmail
         return (subject, HirayaEmailLayout.Plain(message), HirayaEmailLayout.Html(message));
     }
 
+    public static (string Subject, string Text, string Html) PortalReady(
+        string centerName,
+        string recipientName,
+        bool teacher,
+        string loginEmail,
+        string? password,
+        string apkUrl,
+        string? studentName,
+        string? program,
+        HirayaEmailContact? contact = null)
+    {
+        var center = Center(centerName);
+        var name = string.IsNullOrWhiteSpace(recipientName) ? "there" : recipientName.Trim();
+        var subject = teacher
+            ? $"{center} · Your teacher account is ready"
+            : $"{center} · Enrollment accepted";
+        var intro = teacher
+            ? $"Hello {name}. Your teacher application was approved. Sign in on the Hiraya phone app with the account below, then install the app from the link."
+            : $"Hello {name}. The enrollment was accepted. This is not a payment receipt. Tuition is still paid at the learning center. Sign in on the Hiraya phone app with the account below, then install the app from the link.";
+        var rows = new List<HirayaEmailRow>
+        {
+            new(teacher ? "Teacher" : "Parent", name),
+            new("Sign-in email", loginEmail.Trim()),
+            new("Password", string.IsNullOrWhiteSpace(password) ? "Use the password you already have." : password.Trim()),
+            new("Phone app", apkUrl.Trim())
+        };
+        if (!teacher && !string.IsNullOrWhiteSpace(studentName))
+            rows.Insert(1, new HirayaEmailRow("Student", studentName.Trim()));
+        if (!string.IsNullOrWhiteSpace(program))
+            rows.Add(new HirayaEmailRow("Program", program.Trim()));
+        var message = new HirayaEmailMessage
+        {
+            CenterName = center,
+            Headline = teacher ? "Your teacher account is ready" : "Enrollment accepted",
+            Intro = intro,
+            Rows = rows,
+            ActionLabel = "Install the phone app",
+            ActionUrl = apkUrl.Trim(),
+            Contact = contact
+        };
+        return (subject, HirayaEmailLayout.Plain(message), HirayaEmailLayout.Html(message));
+    }
+
     public static (string Subject, string Text, string Html) TeacherInterview(
         string centerName,
         string applicantName,

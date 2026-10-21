@@ -18,6 +18,7 @@ public class CenterSettingsService
 
         await _repository.MutateAsync(async db =>
         {
+            var previous = db.Settings ?? new CenterSettings();
             db.Settings = new CenterSettings
             {
                 SettingsId = string.IsNullOrWhiteSpace(input.SettingsId) ? "center" : input.SettingsId,
@@ -52,6 +53,12 @@ public class CenterSettingsService
                 NotifyProgress = input.NotifyProgress,
                 ModuleAllowedExtensions = input.ModuleAllowedExtensions.Trim(),
                 ModuleMaxFileMb = input.ModuleMaxFileMb,
+                MobileApkUrl = string.IsNullOrWhiteSpace(input.MobileApkUrl)
+                    ? previous.MobileApkUrl ?? ""
+                    : input.MobileApkUrl.Trim(),
+                RemovedUserIds = string.IsNullOrWhiteSpace(input.RemovedUserIds)
+                    ? previous.RemovedUserIds ?? ""
+                    : input.RemovedUserIds,
                 UpdatedAt = DateTime.UtcNow.ToString("o")
             };
             AuditService.Append(db, actor, AuditModules.Settings, "update", "system", "settings",
