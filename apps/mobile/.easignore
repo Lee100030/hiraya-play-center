@@ -1,0 +1,11 @@
+# Monorepo extras that must not go into the Android build archive
+_livefix
+vendor
+brag-output
+apps/desktop/release-client
+apps/desktop/release
+node_modules
+**/.gradle
+**/.cxx
+*.apk
+*.aab

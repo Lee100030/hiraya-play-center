@@ -62,24 +62,72 @@ function installAppProtocol() {
   });
 }
 
+function setHeader(headers, name, value) {
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === name.toLowerCase()) delete headers[key];
+  }
+  headers[name] = Array.isArray(value) ? value : [value];
+}
+
+function headerValue(headers, name) {
+  if (!headers) return '';
+  const wanted = name.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() !== wanted) continue;
+    const value = headers[key];
+    if (Array.isArray(value)) return value[0] || '';
+    return value || '';
+  }
+  return '';
+}
+
 function installApiCors() {
-  session.defaultSession.webRequest.onHeadersReceived(
-    { urls: [`${PUBLIC_SITE}/*`, `https://www.hirayakidslearningcenter.com/*`, `${LIVE_API}/*`, `${API_CUSTOM}/*`] },
-    (details, callback) => {
-      const responseHeaders = {
-        ...(details.responseHeaders || {}),
-        'Access-Control-Allow-Origin': [APP_ORIGIN],
-        'Access-Control-Allow-Methods': ['GET, POST, PUT, PATCH, DELETE, OPTIONS'],
-        'Access-Control-Allow-Headers': ['Content-Type, X-Hiraya-Session, X-Hiraya-Client'],
-        'Access-Control-Max-Age': ['600'],
-      };
-      if (details.method === 'OPTIONS') {
-        callback({ responseHeaders, statusLine: 'HTTP/1.1 204 No Content' });
-        return;
-      }
-      callback({ responseHeaders });
-    },
-  );
+  const urls = [
+    `${PUBLIC_SITE}/*`,
+    `https://www.hirayakidslearningcenter.com/*`,
+    `${LIVE_API}/*`,
+    `${API_CUSTOM}/*`,
+  ];
+  const origins = new Map();
+
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls }, (details, callback) => {
+    const headers = details.requestHeaders || {};
+    const origin = headerValue(headers, 'origin');
+    if (origin) origins.set(details.id, origin);
+    callback({ requestHeaders: headers });
+  });
+
+  const forget = (details) => origins.delete(details.id);
+  session.defaultSession.webRequest.onCompleted({ urls }, forget);
+  session.defaultSession.webRequest.onErrorOccurred({ urls }, forget);
+
+  session.defaultSession.webRequest.onHeadersReceived({ urls }, (details, callback) => {
+    const origin = origins.get(details.id) || '';
+    origins.delete(details.id);
+    // The local window is http://127.0.0.1:5173. The live API already allows that
+    // with Access-Control-Allow-Origin: *. Replacing it with hiraya://app makes
+    // Chromium drop sign-in, which the login screen reports as port 5188.
+    // Only the packaged hiraya://app window needs the custom-scheme origin.
+    const packagedPage = origin === APP_ORIGIN || (!origin && app.isPackaged);
+    if (!packagedPage) {
+      callback({ responseHeaders: details.responseHeaders });
+      return;
+    }
+    const responseHeaders = { ...(details.responseHeaders || {}) };
+    // Render sends Access-Control-Allow-Origin: *. A second hiraya://app value
+    // makes Chromium fail the request, so replace the header instead of adding one.
+    // Sign-in is a POST and needs a successful preflight. A non-2xx OPTIONS
+    // response is what made 1.0.6 report the center as online while blocking login.
+    setHeader(responseHeaders, 'Access-Control-Allow-Origin', APP_ORIGIN);
+    setHeader(responseHeaders, 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    setHeader(responseHeaders, 'Access-Control-Allow-Headers', 'Content-Type, X-Hiraya-Session, X-Hiraya-Client');
+    setHeader(responseHeaders, 'Access-Control-Max-Age', '600');
+    if (details.method === 'OPTIONS') {
+      callback({ responseHeaders, statusLine: 'HTTP/1.1 204 No Content' });
+      return;
+    }
+    callback({ responseHeaders });
+  });
 }
 
 function createWindow() {

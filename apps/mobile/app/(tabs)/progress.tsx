@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { formatDate, studentDisplay } from '@hiraya/utils';
-import { AppHeader, Body, Caption, Card, EmptyState, ErrorState, Heading, LoadingState, ProgressBar, Screen, SectionTitle, StatusBadge } from '../../src/components/ui';
+import { AppHeader, Body, AppButton, Caption, Card, EmptyState, ErrorState, Heading, LoadingState, ProgressBar, Screen, SectionTitle, StatusBadge } from '../../src/components/ui';
 import { useAuth } from '../../src/auth';
+import { openLearningModule } from '../../src/openModule';
 import { useCenter } from '../../src/store';
 import { overallProgress, ratingScore, remainingForStudent, reportsForStudent, teacherModules } from '../../src/selectors';
 import { canViewProgress, isMobileParent, isMobileTeacher } from '../../src/rbac';
@@ -13,6 +15,21 @@ export default function ProgressTab() {
   const router = useRouter();
   const family = isMobileParent(user?.role);
   const teacher = isMobileTeacher(user?.role);
+
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  async function viewFile(moduleId: string) {
+    setOpeningId(moduleId);
+    setFileError(null);
+    try {
+      await openLearningModule(moduleId);
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : 'Could not open that file.');
+    } finally {
+      setOpeningId(null);
+    }
+  }
 
   if (teacher) {
     const rows = teacherModules(store, user?.userId);
@@ -27,6 +44,7 @@ export default function ProgressTab() {
       <Screen>
         <AppHeader title="Learning modules" subtitle="Lesson files assigned to your classes, published by the center." />
         {error ? <ErrorState message={error} onRetry={() => void refresh()} /> : null}
+        {fileError ? <ErrorState message={fileError} /> : null}
         {rows.length === 0 ? (
           <EmptyState
             icon="book-outline"
@@ -42,6 +60,13 @@ export default function ProgressTab() {
               <Heading>{item.title}</Heading>
               <Body>{item.subject || item.description || 'Learning material'}</Body>
               <Caption>{item.fileName || 'File on file at the center'}</Caption>
+              <AppButton
+                label={openingId === item.moduleId ? 'Opening…' : 'View file'}
+                onPress={() => void viewFile(item.moduleId)}
+                loading={openingId === item.moduleId}
+                disabled={openingId !== null && openingId !== item.moduleId}
+                style={{ marginTop: 12 }}
+              />
             </Card>
           ))
         )}

@@ -1,7 +1,7 @@
 {
   "name": "@hiraya/desktop",
   "description": "HIRAYA desktop app (Electron) — not a Vercel website",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": true,
   "main": "electron/main.cjs",
   "scripts": {

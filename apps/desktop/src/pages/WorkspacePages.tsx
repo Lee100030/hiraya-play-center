@@ -165,6 +165,7 @@ export function WorkspacePages({
         user={user}
         saveStore={saveStore}
         onStore={onStore}
+        onRefresh={onRefresh}
         initialKind={view === 'teacherApplications' ? 'teacher' : 'student'}
       />
     );

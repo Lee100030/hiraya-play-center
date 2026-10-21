@@ -2,12 +2,12 @@
   "expo": {
     "name": "HIRAYA",
     "slug": "hiraya-learning-center",
-    "version": "1.0.1",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/hiraya-crest.png",
     "scheme": "hiraya",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "androidStatusBar": {
       "barStyle": "light-content",
       "backgroundColor": "#00000000",
@@ -28,9 +28,9 @@
     },
     "android": {
       "package": "com.hiraya.learningcenter",
-      "versionCode": 2,
+      "versionCode": 8,
       "usesCleartextTraffic": true,
-      "softwareKeyboardLayoutMode": "resize",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/hiraya-crest.png",
         "backgroundColor": "#0B3D2E"

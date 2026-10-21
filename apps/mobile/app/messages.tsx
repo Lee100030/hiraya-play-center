@@ -13,6 +13,7 @@ import {
   threadMessages,
 } from '@hiraya/utils';
 import type { ChatGroup, HirayaUser } from '@hiraya/types';
+import { ChatHero } from '../src/components/ChatHero';
 import { AppButton, Body, Caption, EmptyState, Field, Screen } from '../src/components/ui';
 import { api, useAuth } from '../src/auth';
 import { useCenter } from '../src/store';
@@ -142,8 +143,9 @@ export default function MessagesScreen() {
   if (!active) {
     return (
       <Screen>
-        <Caption style={{ marginBottom: space.sm }}>
-          Message the center admin, other teachers, co-parents, or groups the admin created for you.
+        <ChatHero />
+        <Caption style={{ marginTop: space.md, marginBottom: space.sm }}>
+          Select a person or group to open the conversation.
         </Caption>
         {inbox.length === 0 ? (
           <EmptyState

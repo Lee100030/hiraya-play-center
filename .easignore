@@ -1,4 +1,7 @@
 _livefix
+vendor
+brag-output
+apps/desktop/release-client
 node_modules
 .turbo
 .next

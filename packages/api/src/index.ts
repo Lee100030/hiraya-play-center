@@ -306,11 +306,20 @@ export class HirayaApi {
     return this.parse<HirayaDatabase>(res);
   }
 
-  async approveEnrollment(applicationId: string, classId?: string): Promise<HirayaDatabase> {
+  async approveEnrollment(
+    applicationId: string,
+    classId?: string,
+    access?: { apkUrl?: string; password?: string; email?: string },
+  ): Promise<HirayaDatabase> {
     const res = await fetch(this.url(`/api/enrollment/applications/${applicationId}/approve`), {
       method: 'POST',
       headers: await this.headers(),
-      body: JSON.stringify({ classId: classId || '' }),
+      body: JSON.stringify({
+        classId: classId || '',
+        apkUrl: access?.apkUrl || '',
+        password: access?.password || '',
+        email: access?.email || '',
+      }),
     });
     return this.parse<HirayaDatabase>(res);
   }
@@ -911,31 +920,26 @@ export class HirayaApi {
     return this.getStore();
   }
 
-  async openModuleFile(moduleId: string, versionId?: string | null): Promise<void> {
-    const query = new URLSearchParams();
+  async moduleFileUrl(moduleId: string, versionId?: string | null): Promise<string> {
+    const res = await fetch(this.url(`/api/modules/${encodeURIComponent(moduleId)}/file-ticket`), {
+      method: 'POST',
+      headers: await this.headers(false),
+    });
+    const data = await this.parse<{ token?: string }>(res);
+    const token = data?.token || '';
+    if (!token) throw new ApiError('The file is not available.', 404);
+    const query = new URLSearchParams({ inline: 'true', file: token });
     if (versionId) query.set('versionId', versionId);
-    query.set('inline', 'true');
-    const res = await fetch(
-      this.url(`/api/modules/${encodeURIComponent(moduleId)}/file?${query.toString()}`),
-      { headers: await this.headers(false) },
-    );
-    if (!res.ok) {
-      await this.parse(res);
-      return;
+    return this.url(`/api/modules/${encodeURIComponent(moduleId)}/file?${query.toString()}`);
+  }
+
+  async openModuleFile(moduleId: string, versionId?: string | null): Promise<void> {
+    const href = await this.moduleFileUrl(moduleId, versionId);
+    if (typeof window === 'undefined') {
+      throw new ApiError('Open this file from the learning module.', 0);
     }
-    const blob = await res.blob();
-    const href = URL.createObjectURL(blob);
-    const disposition = res.headers.get('content-disposition') || '';
-    const named = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition)?.[1];
-    const name = named ? decodeURIComponent(named.replace(/"/g, '')) : '';
     const opened = window.open(href, '_blank', 'noopener,noreferrer');
-    if (!opened) {
-      const link = document.createElement('a');
-      link.href = href;
-      link.download = name || 'module';
-      link.click();
-    }
-    window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
+    if (!opened) window.location.assign(href);
   }
 
   async publishWebsite(input: {

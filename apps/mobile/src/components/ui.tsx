@@ -18,6 +18,13 @@ import { colors, fonts, radius, shadow, space } from '../theme';
 import { statusTone } from '@hiraya/utils';
 import { Body, Caption, Heading, Label } from './typography';
 
+function useFrozenBottomInset() {
+  const insets = useSafeAreaInsets();
+  const frozen = useRef(Math.max(insets.bottom, 10));
+  if (insets.bottom > frozen.current) frozen.current = insets.bottom;
+  return frozen.current;
+}
+
 export function Screen({
   children,
   padded = true,
@@ -27,19 +34,23 @@ export function Screen({
   padded?: boolean;
   scroll?: boolean;
 }) {
-  const insets = useSafeAreaInsets();
-  const bottomPad = 32 + 58 + Math.max(insets.bottom, 10);
+  const bottomPad = 32 + 58 + useFrozenBottomInset();
   const body = scroll ? (
     <ScrollView
       contentContainerStyle={[styles.scroll, padded && styles.pad, { paddingBottom: bottomPad }]}
       keyboardShouldPersistTaps="always"
-      keyboardDismissMode="on-drag"
+      keyboardDismissMode="none"
+      automaticallyAdjustKeyboardInsets={false}
+      automaticallyAdjustContentInsets={false}
       nestedScrollEnabled
+      removeClippedSubviews={false}
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.fill, padded && styles.pad, { paddingBottom: bottomPad }]}>{children}</View>
+    <View collapsable={false} style={[styles.fill, padded && styles.pad, { paddingBottom: bottomPad }]}>
+      {children}
+    </View>
   );
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -132,27 +143,42 @@ export function Field({
   onBlur,
   style,
   multiline,
+  autoCorrect,
+  spellCheck,
+  autoComplete,
+  textContentType,
+  importantForAutofill,
   ...props
 }: TextInputProps & { label: string; required?: boolean; accessory?: ReactNode }) {
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
   return (
-    <View style={{ marginBottom: space.md }}>
+    <View collapsable={false} style={{ marginBottom: space.md }}>
       <Label>
         {label}
         {required ? ' *' : ''}
       </Label>
       <View
+        collapsable={false}
         style={[styles.inputShell, multiline ? styles.inputShellMultiline : null, focused && styles.inputShellFocus]}
       >
         <TextInput
           ref={inputRef}
           placeholderTextColor={colors.placeholder}
-          showSoftInputOnFocus
           underlineColorAndroid="transparent"
+          // Android-only. The current React Native types omit it.
+          {...({ includeFontPadding: false } as Record<string, boolean>)}
           multiline={multiline}
           textAlignVertical={multiline ? 'top' : 'center'}
+          autoCorrect={autoCorrect ?? false}
+          spellCheck={spellCheck ?? false}
           {...props}
+          autoComplete={autoComplete ?? 'off'}
+          textContentType={textContentType ?? 'none'}
+          importantForAutofill={importantForAutofill ?? 'no'}
+          showSoftInputOnFocus
+          blurOnSubmit={multiline ? false : props.blurOnSubmit}
+          disableFullscreenUI
           onFocus={(event) => {
             setFocused(true);
             onFocus?.(event);
@@ -212,12 +238,12 @@ export function LoadingState({ label = 'Loading…' }: { label?: string }) {
   );
 }
 
-export function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <Card>
       <Heading>Something went wrong</Heading>
       <Body style={{ marginVertical: 8 }}>{message}</Body>
-      <AppButton label="Try again" onPress={onRetry} />
+      {onRetry ? <AppButton label="Try again" onPress={onRetry} /> : null}
     </Card>
   );
 }
@@ -318,11 +344,6 @@ const styles = StyleSheet.create({
   },
   inputShellFocus: {
     borderColor: colors.gold,
-    shadowColor: colors.gold,
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 3,
   },
   input: {
     minHeight: 52,

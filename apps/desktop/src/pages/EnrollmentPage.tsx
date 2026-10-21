@@ -1,3 +1,4 @@
+import { ApiError } from '@hiraya/api';
 import type { Enrollment, EnrollmentApplication, HirayaDatabase, HirayaUser } from '@hiraya/types';
 import { formatDate, isTeacherApplication, newId, studentDisplay, teacherApplicationOpen } from '@hiraya/utils';
 import { Button, Field, Input, Select } from '@hiraya/ui';
@@ -7,6 +8,38 @@ import { RecordTable, StatusCell } from '../components/RecordTable';
 import { api } from '../lib/api';
 import { ageFromBirthdate, todayIso } from '../lib/crud';
 import { PAGE_COPY } from '../lib/views';
+
+function mailProblem(email: string) {
+  const text = email.trim().toLowerCase();
+  const at = text.indexOf('@');
+  if (at <= 0 || text.lastIndexOf('@') !== at || text.includes(' ')) {
+    return 'Enter a valid personal email, for example name@gmail.com.';
+  }
+  const domain = text.slice(at + 1);
+  if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.') || domain.includes('..')) {
+    return 'Enter a valid personal email, for example name@gmail.com.';
+  }
+  if (domain.endsWith('.local') || domain.endsWith('.invalid') || domain.endsWith('.test') || domain.endsWith('.example') || domain === 'localhost') {
+    return 'That address cannot receive mail. Enter their personal email, such as a Gmail address.';
+  }
+  return '';
+}
+
+function validApkUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function newPortalPassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = new Uint32Array(10);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => alphabet[value % alphabet.length]).join('');
+}
 
 export function EnrollmentPage({
   store,
@@ -27,8 +60,12 @@ export function EnrollmentPage({
   const [appForm, setAppForm] = useState(false);
   const [seatForm, setSeatForm] = useState(false);
   const [approving, setApproving] = useState<EnrollmentApplication | null>(null);
+  const [issuedPassword, setIssuedPassword] = useState('');
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [apkUrl, setApkUrl] = useState('');
   const [interviewing, setInterviewing] = useState<EnrollmentApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -61,16 +98,81 @@ export function EnrollmentPage({
     }
   }
 
+  function openApprove(row: EnrollmentApplication) {
+    setError(null);
+    setApkUrl(store.settings.mobileApkUrl || '');
+    setRecipientEmail(row.parentEmail || '');
+    setIssuedPassword(newPortalPassword());
+    setApproving(row);
+  }
+
+  function placedMessage(row: EnrollmentApplication, extra = '') {
+    const teacher = isTeacherApplication(row);
+    const parentName = row.parentFullname || row.studentFullname;
+    const placed = teacher
+      ? `${row.studentFullname} is now in Teacher management.`
+      : `${parentName} is now in Parent management, and ${row.studentFullname} is in Student management.`;
+    return extra ? `${placed} ${extra}` : placed;
+  }
+
+  async function loadApprovedStore(row: EnrollmentApplication) {
+    if (!isTeacherApplication(row)) return api.getStore();
+    try {
+      return await api.importApprovedTeachers();
+    } catch {
+      return api.getStore();
+    }
+  }
+
   async function onApprove(event: FormEvent<HTMLFormElement>) {
     if (!approving) return;
     const form = new FormData(event.currentTarget);
+    const teacher = isTeacherApplication(approving);
+    const email = recipientEmail.trim();
+    const mailError = mailProblem(email);
+    if (mailError) {
+      setError(mailError);
+      return;
+    }
+    if (!validApkUrl(apkUrl)) {
+      setError('Enter the phone app link, starting with https://.');
+      return;
+    }
+    const password = issuedPassword.trim();
+    if (password.length < 8) {
+      setError('The sign-in password must be at least 8 characters.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      onStore(await api.approveEnrollment(approving.applicationId, String(form.get('classId') || '') || undefined));
+      const approved = await api.approveEnrollment(
+        approving.applicationId,
+        teacher ? undefined : String(form.get('classId') || '') || undefined,
+        { apkUrl: apkUrl.trim(), password, email },
+      );
+      onStore(await loadApprovedStore(approving).catch(() => approved));
+      setNotice(placedMessage(approving));
       setApproving(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not approve application');
+      const alreadyApproved = err instanceof ApiError && Boolean((err.body as { approved?: boolean } | undefined)?.approved);
+      if (alreadyApproved) {
+        try {
+          onStore(await loadApprovedStore(approving));
+        } catch {
+          /* The account was still created. */
+        }
+        setNotice(placedMessage(approving, err instanceof Error ? err.message : ''));
+        setApproving(null);
+        return;
+      }
+      const text = err instanceof Error ? err.message : 'Could not approve application';
+      if (/already processed/i.test(text)) {
+        setNotice(placedMessage(approving, 'That account is already in the management list.'));
+        setApproving(null);
+        return;
+      }
+      setError(text);
     } finally {
       setBusy(false);
     }
@@ -91,24 +193,6 @@ export function EnrollmentPage({
       setInterviewing(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not schedule the interview');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function approveTeacher(row: EnrollmentApplication) {
-    if (!window.confirm(`Approve ${row.studentFullname} as a teacher? This adds them to Teacher management.`)) return;
-    setBusy(true);
-    setError(null);
-    try {
-      onStore(await api.approveEnrollment(row.applicationId));
-      try {
-        onStore(await api.importApprovedTeachers());
-      } catch {
-        /* approve already created the teacher when the API supports it */
-      }
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not approve the teacher application');
     } finally {
       setBusy(false);
     }
@@ -183,12 +267,13 @@ export function EnrollmentPage({
 
   return (
     <>
+      {notice ? <p className="crud-notice">{notice}</p> : null}
       <RecordTable
         title={kind === 'teacher' ? 'Teacher applications' : PAGE_COPY.enrollment.title}
         description={
           kind === 'teacher'
             ? 'Teacher applications from the public website. Select the rows you want, then Delete. Removing an approved application stops that person from being added to Teacher management again.'
-            : 'Student applications from the website or this desk. Approve creates the student and parent; then assign the learner to a class.'
+            : 'Student applications from the website or this desk. Approve adds the parent to Parent management and the child to Student management.'
         }
         rows={store.enrollmentApplications.filter((row) =>
           kind === 'teacher' ? isTeacherApplication(row) : !isTeacherApplication(row),
@@ -262,38 +347,44 @@ export function EnrollmentPage({
           {
             key: 'actions',
             header: '',
-            render: (row) => (
-              <div className="row-actions">
-                {(isTeacherApplication(row) ? teacherApplicationOpen(row.status) : row.status === 'pending_review' || row.status === 'pending') ? (
-                  <>
-                    {isTeacherApplication(row) && (row.status === 'pending_review' || row.status === 'pending') ? (
-                      <Button type="button" variant="ghost" onClick={() => setInterviewing(row)}>
-                        Interview
+            render: (row) => {
+              const open = isTeacherApplication(row)
+                ? teacherApplicationOpen(row.status)
+                : row.status === 'pending_review' || row.status === 'pending';
+              const approved = (row.status || '').toLowerCase() === 'approved';
+              return (
+                <div className="row-actions">
+                  {open ? (
+                    <>
+                      {isTeacherApplication(row) && (row.status === 'pending_review' || row.status === 'pending') ? (
+                        <Button type="button" variant="ghost" onClick={() => setInterviewing(row)}>
+                          Interview
+                        </Button>
+                      ) : null}
+                      <Button type="button" onClick={() => openApprove(row)}>
+                        Approve
                       </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        if (isTeacherApplication(row)) void approveTeacher(row);
-                        else setApproving(row);
-                      }}
-                    >
-                      Approve
+                      <Button type="button" variant="ghost" onClick={() => void decide('reject', row.applicationId)}>
+                        Reject
+                      </Button>
+                      <Button type="button" variant="danger" onClick={() => void decide('cancel', row.applicationId)}>
+                        Cancel
+                      </Button>
+                    </>
+                  ) : null}
+                  {approved ? (
+                    <Button type="button" onClick={() => openApprove(row)}>
+                      Send account
                     </Button>
-                    <Button type="button" variant="ghost" onClick={() => void decide('reject', row.applicationId)}>
-                      Reject
+                  ) : null}
+                  {!open ? (
+                    <Button type="button" variant="ghost" onClick={() => void removeApplication(row)}>
+                      Delete
                     </Button>
-                    <Button type="button" variant="danger" onClick={() => void decide('cancel', row.applicationId)}>
-                      Cancel
-                    </Button>
-                  </>
-                ) : (
-                  <Button type="button" variant="ghost" onClick={() => void removeApplication(row)}>
-                    Delete
-                  </Button>
-                )}
-              </div>
-            ),
+                  ) : null}
+                </div>
+              );
+            },
           },
         ]}
       />
@@ -416,29 +507,74 @@ export function EnrollmentPage({
 
       {approving ? (
         <EditorModal
-          title={`Approve ${approving.studentFullname}`}
+          title={`Send account for ${approving.studentFullname}`}
           error={error}
           busy={busy}
-          submitLabel="Approve and enroll"
+          submitDisabled={
+            !validApkUrl(apkUrl) ||
+            Boolean(mailProblem(recipientEmail)) ||
+            issuedPassword.trim().length < 8
+          }
+          submitLabel="Approve and send"
           onClose={() => setApproving(null)}
           onSubmit={onApprove}
         >
-          <FormSection title="Placement">
+          <FormSection title="Message">
             <p className="form-span muted">
-              This creates the student and parent accounts, then places the child in the class you select.
+              {isTeacherApplication(approving)
+                ? 'Type the email and password to send. Approving adds the teacher to Teacher management. It does not enroll a child.'
+                : 'Type the email and password to send. Approving adds the parent to Parent management and the child to Student management.'}
             </p>
-            <Field label="Class" optional>
-              <Select name="classId" defaultValue="">
-                <option value="">Assign class later</option>
-                {store.classes
-                  .filter((item) => item.status === 'active')
-                  .map((item) => (
-                    <option key={item.classId} value={item.classId}>
-                      {item.name}
-                    </option>
-                  ))}
-              </Select>
+            <p className="form-span">
+              <strong>To:</strong>{' '}
+              {isTeacherApplication(approving) ? approving.studentFullname : approving.parentFullname || approving.studentFullname}
+            </p>
+            <Field label="Email" required>
+              <Input
+                type="email"
+                value={recipientEmail}
+                autoComplete="off"
+                onChange={(event) => setRecipientEmail(event.target.value)}
+              />
             </Field>
+            <Field label="Password" required>
+              <Input value={issuedPassword} autoComplete="off" onChange={(event) => setIssuedPassword(event.target.value)} />
+            </Field>
+            {isTeacherApplication(approving) ? (
+              approving.preferredProgram ? (
+                <p className="form-span">
+                  <strong>Role:</strong> {approving.preferredProgram}
+                </p>
+              ) : null
+            ) : (
+              <>
+                <p className="form-span">
+                  <strong>Child:</strong> {approving.studentFullname}
+                  {approving.preferredProgram ? ` · ${approving.preferredProgram}` : ''}
+                </p>
+                <Field label="Class" optional>
+                  <Select name="classId" defaultValue="">
+                    <option value="">Assign class later</option>
+                    {store.classes
+                      .filter((item) => item.status === 'active')
+                      .map((item) => (
+                        <option key={item.classId} value={item.classId}>
+                          {item.name}
+                        </option>
+                      ))}
+                  </Select>
+                </Field>
+              </>
+            )}
+            <Field label="Phone app link" required>
+              <Input
+                value={apkUrl}
+                inputMode="url"
+                placeholder="https://example.com/Hiraya.apk"
+                onChange={(event) => setApkUrl(event.target.value)}
+              />
+            </Field>
+            {mailProblem(recipientEmail) ? <p className="form-span form-error">{mailProblem(recipientEmail)}</p> : null}
           </FormSection>
         </EditorModal>
       ) : null}

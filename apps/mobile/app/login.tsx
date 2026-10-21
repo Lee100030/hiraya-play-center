@@ -2,24 +2,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Dimensions,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
-  useWindowDimensions,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppButton, Body, Caption, Field, Kicker, Title } from '../src/components/ui';
+import { isAdminLoginChallenge } from '@hiraya/api';
 import { apiBaseUrl, consumeSessionNotice, useAuth } from '../src/auth';
 import { friendlyError } from '../src/selectors';
 import { colors, fonts, space } from '../src/theme';
 
 function useLandingLayout() {
-  const { width, height } = useWindowDimensions();
+  // Capture size once. Live window metrics change with the keyboard and recast
+  // this screen, which blurs the field and makes Android pop the IME.
+  const [{ width, height }] = useState(() => Dimensions.get('window'));
   const compact = width < 380 || height < 640;
   const wide = width >= 720;
   const padX = Math.min(40, Math.max(16, width * 0.055));
@@ -30,9 +35,12 @@ function useLandingLayout() {
 }
 
 export default function LoginScreen() {
-  const { login, user, ready } = useAuth();
+  const { login, completeAdminOtp, resendAdminOtp, user, ready } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const frozenInsets = useRef({ top: insets.top, bottom: insets.bottom });
+  if (insets.top > frozenInsets.current.top) frozenInsets.current.top = insets.top;
+  if (insets.bottom > frozenInsets.current.bottom) frozenInsets.current.bottom = insets.bottom;
   const layout = useLandingLayout();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -40,6 +48,9 @@ export default function LoginScreen() {
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState('');
+  const [code, setCode] = useState('');
 
   useEffect(() => {
     const notice = consumeSessionNotice();
@@ -49,6 +60,23 @@ export default function LoginScreen() {
   if (ready && user) return <Redirect href="/(tabs)/home" />;
 
   async function onSubmit() {
+    if (challenge) {
+      if (!/^\d{6}$/.test(code.trim())) {
+        setError('Enter the 6-digit code from the email.');
+        return;
+      }
+      setError('');
+      setBusy(true);
+      try {
+        await completeAdminOtp(challenge, code.trim(), remember);
+        router.replace('/(tabs)/home');
+      } catch (err) {
+        setError(friendlyError(err, 'That sign-in code is not valid.', 'login'));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!identifier.trim() || !password) {
       setError('Enter your username or email and password.');
       return;
@@ -56,10 +84,32 @@ export default function LoginScreen() {
     setError('');
     setBusy(true);
     try {
-      await login(identifier.trim(), password, remember);
+      const result = await login(identifier.trim(), password, remember);
+      if (isAdminLoginChallenge(result)) {
+        setChallenge(result.challenge);
+        setSentTo(result.sentTo);
+        setCode('');
+        return;
+      }
       router.replace('/(tabs)/home');
     } catch (err) {
       setError(friendlyError(err, 'Could not sign in. Check your details and try again.', 'login'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onResend() {
+    if (!challenge) return;
+    setError('');
+    setBusy(true);
+    try {
+      const next = await resendAdminOtp(challenge);
+      setChallenge(next.challenge);
+      setSentTo(next.sentTo);
+      setCode('');
+    } catch (err) {
+      setError(friendlyError(err, 'The code could not be sent again.', 'login'));
     } finally {
       setBusy(false);
     }
@@ -84,15 +134,17 @@ export default function LoginScreen() {
         contentContainerStyle={[
           styles.wrap,
           {
-            paddingTop: Math.max(insets.top, 16) + 8,
-            paddingBottom: Math.max(insets.bottom, 16) + 24,
+            paddingTop: Math.max(frozenInsets.current.top, 16) + 8,
+            paddingBottom: Math.max(frozenInsets.current.bottom, 16) + 24,
             paddingHorizontal: layout.padX,
           },
           layout.wide && styles.wrapWide,
         ]}
         keyboardShouldPersistTaps="always"
         keyboardDismissMode="none"
-        automaticallyAdjustKeyboardInsets
+        automaticallyAdjustKeyboardInsets={false}
+        automaticallyAdjustContentInsets={false}
+        removeClippedSubviews={false}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.hero, layout.wide && styles.heroWide, { maxWidth: layout.wide ? layout.width * 0.42 : layout.formWidth }]}>
@@ -116,7 +168,7 @@ export default function LoginScreen() {
         </View>
 
         <View style={[styles.card, { width: layout.formWidth, maxWidth: '100%' }]}>
-          {error ? (
+          {error && !challenge ? (
             <View style={styles.errorBox} accessibilityLiveRegion="polite">
               <Body style={styles.errorText}>{error}</Body>
             </View>
@@ -129,8 +181,8 @@ export default function LoginScreen() {
             autoCorrect={false}
             keyboardType="default"
             autoComplete="off"
-            textContentType="username"
-            importantForAutofill="yes"
+            textContentType="none"
+            importantForAutofill="no"
             value={identifier}
             onChangeText={setIdentifier}
             placeholder="Email or username"
@@ -141,8 +193,8 @@ export default function LoginScreen() {
             required
             secureTextEntry={hidden}
             autoComplete="off"
-            textContentType="password"
-            importantForAutofill="yes"
+            textContentType="none"
+            importantForAutofill="no"
             value={password}
             onChangeText={setPassword}
             placeholder="Your password"
@@ -175,7 +227,7 @@ export default function LoginScreen() {
             <Body style={styles.rememberLabel}>Stay signed in on this device</Body>
           </Pressable>
 
-          <AppButton label="Sign in" onPress={() => void onSubmit()} loading={busy} disabled={busy} />
+          <AppButton label="Sign in" onPress={() => void onSubmit()} loading={busy && !challenge} disabled={busy && !challenge} />
 
           <Pressable
             onPress={() =>
@@ -191,6 +243,62 @@ export default function LoginScreen() {
             <Caption style={styles.forgotText}>Forgot password?</Caption>
           </Pressable>
         </View>
+
+        <Modal visible={Boolean(challenge)} transparent animationType="fade" onRequestClose={() => { setChallenge(null); setCode(''); setError(''); }}>
+          <View style={styles.otpBackdrop}>
+            <View style={styles.otpCard}>
+              <Image source={require('../assets/hiraya-crest.png')} style={styles.otpCrest} accessibilityIgnoresInvertColors />
+              <Kicker style={styles.otpKicker}>Super Administrator</Kicker>
+              <Title style={styles.otpTitle}>Enter your sign-in code</Title>
+              <Body style={styles.otpCopy}>We sent a 6-digit code. It expires in 10 minutes.</Body>
+              <Caption style={styles.otpMail}>{sentTo}</Caption>
+              {error ? (
+                <View style={styles.errorBox}>
+                  <Body style={styles.errorText}>{error}</Body>
+                </View>
+              ) : null}
+              <View style={styles.otpDigits}>
+                {Array.from({ length: 6 }, (_, index) => (
+                  <TextInput
+                    key={index}
+                    style={styles.otpDigit}
+                    keyboardType="number-pad"
+                    maxLength={index === 0 ? 6 : 1}
+                    value={code[index] || ''}
+                    autoFocus={index === 0}
+                    textContentType={index === 0 ? 'oneTimeCode' : 'none'}
+                    onChangeText={(value) => {
+                      const chars = value.replace(/\D/g, '');
+                      if (chars.length > 1) {
+                        setCode((code.slice(0, index) + chars).replace(/\D/g, '').slice(0, 6));
+                        return;
+                      }
+                      const slots = Array.from({ length: 6 }, (_, i) => code[i] || '');
+                      slots[index] = chars.slice(-1);
+                      setCode(slots.join('').replace(/\D/g, '').slice(0, 6));
+                    }}
+                  />
+                ))}
+              </View>
+              <AppButton label={busy ? 'Checking…' : 'Confirm code'} onPress={() => void onSubmit()} loading={busy} disabled={busy} />
+              <View style={styles.otpLinks}>
+                <Pressable onPress={() => void onResend()} accessibilityRole="button">
+                  <Caption style={styles.forgotText}>Resend code</Caption>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setChallenge(null);
+                    setCode('');
+                    setError('');
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Caption style={styles.forgotText}>Cancel</Caption>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {__DEV__ ? (
           <Caption style={styles.devNote}>
@@ -222,7 +330,7 @@ const styles = StyleSheet.create({
   wrap: {
     flexGrow: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 20,
   },
   wrapWide: {
@@ -316,6 +424,75 @@ const styles = StyleSheet.create({
     color: colors.green,
     textDecorationLine: 'underline',
     textDecorationColor: colors.gold,
+  },
+  otpBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(7, 20, 13, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: space.lg,
+  },
+  otpCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.cream,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    padding: space.lg,
+    alignItems: 'center',
+  },
+  otpCrest: {
+    width: 72,
+    height: 72,
+    marginBottom: space.sm,
+  },
+  otpKicker: {
+    color: colors.gold,
+    letterSpacing: 1.4,
+  },
+  otpTitle: {
+    color: colors.green,
+    textAlign: 'center',
+    marginTop: space.xs,
+  },
+  otpCopy: {
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: space.sm,
+  },
+  otpMail: {
+    marginTop: space.sm,
+    color: colors.green,
+    backgroundColor: colors.goldSoft,
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontWeight: '700',
+  },
+  otpDigits: {
+    flexDirection: 'row',
+    gap: 8,
+    marginVertical: space.lg,
+  },
+  otpDigit: {
+    width: 44,
+    height: 56,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    textAlign: 'center',
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.green,
+  },
+  otpLinks: {
+    width: '100%',
+    marginTop: space.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   devNote: {
     width: '100%',

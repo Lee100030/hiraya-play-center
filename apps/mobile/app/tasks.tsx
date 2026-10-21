@@ -5,7 +5,8 @@ import { api } from '../src/auth';
 import { useCenter } from '../src/store';
 import { friendlyError } from '../src/selectors';
 import { isMobileTeacher } from '../src/rbac';
-import { useState } from 'react';
+import { collapseDuplicateStaffTasks } from '@hiraya/utils';
+import { useEffect, useRef, useState } from 'react';
 import type { StaffTask } from '@hiraya/types';
 
 export default function TasksScreen() {
@@ -14,15 +15,31 @@ export default function TasksScreen() {
   const [open, setOpen] = useState<StaffTask | null>(null);
   const [remarks, setRemarks] = useState('');
   const [busy, setBusy] = useState(false);
-  const rows = (store.staffTasks || [])
-    .filter((row) =>
-      (row.teacherIds || '')
-        .split(',')
-        .map((item) => item.trim())
-        .includes(user?.userId || ''),
-    )
+  const cleaned = useRef(false);
+  const mine = (store.staffTasks || []).filter((row) =>
+    (row.teacherIds || '')
+      .split(',')
+      .map((item) => item.trim())
+      .includes(user?.userId || ''),
+  );
+  const rows = collapseDuplicateStaffTasks(mine)
     .slice()
     .sort((a, b) => (a.dueAt || '').localeCompare(b.dueAt || ''));
+
+  useEffect(() => {
+    if (cleaned.current || !user) return;
+    const tasks = store.staffTasks || [];
+    if (!tasks.length) return;
+    const nextTasks = collapseDuplicateStaffTasks(tasks);
+    if (nextTasks.length === tasks.length) return;
+    cleaned.current = true;
+    void api
+      .putStore({ ...store, staffTasks: nextTasks }, store)
+      .then(() => refresh())
+      .catch(() => {
+        cleaned.current = false;
+      });
+  }, [store, user, refresh]);
 
   if (!isMobileTeacher(user?.role)) {
     return (

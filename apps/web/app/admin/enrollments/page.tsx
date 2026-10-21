@@ -6,11 +6,44 @@ import { AdminTable } from '@/components/admin/AdminTable';
 import { useStore } from '@/components/StoreProvider';
 import { enrollmentStatusLabel } from '@/lib/enrollment';
 import { api } from '@/lib/api';
+import { ApiError } from '@hiraya/api';
 import { Alert, Button, EmptyState, Loading, StatusBadge, emptyCell } from '@hiraya/ui';
 import { formatDate, isTeacherApplication, teacherApplicationOpen } from '@hiraya/utils';
 import type { EnrollmentApplication } from '@hiraya/types';
 import { usePathname } from 'next/navigation';
 import { useMemo, useState } from 'react';
+
+function mailProblem(email: string) {
+  const text = email.trim().toLowerCase();
+  const at = text.indexOf('@');
+  if (at <= 0 || text.lastIndexOf('@') !== at || text.includes(' ')) {
+    return 'Enter a valid personal email, for example name@gmail.com.';
+  }
+  const domain = text.slice(at + 1);
+  if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.') || domain.includes('..')) {
+    return 'Enter a valid personal email, for example name@gmail.com.';
+  }
+  if (domain.endsWith('.local') || domain.endsWith('.invalid') || domain.endsWith('.test') || domain.endsWith('.example') || domain === 'localhost') {
+    return 'That address cannot receive mail. Enter their personal email, such as a Gmail address. Hiraya sends the message from its own mailbox.';
+  }
+  return '';
+}
+
+function validApkUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function newPortalPassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = new Uint32Array(10);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (n) => alphabet[n % alphabet.length]).join('');
+}
 
 const kinds = [
   { id: 'student', label: 'Student enrollment' },
@@ -38,6 +71,9 @@ export default function AdminEnrollmentsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [apkUrl, setApkUrl] = useState('');
+  const [issuedPassword, setIssuedPassword] = useState('');
+  const [recipientEmail, setRecipientEmail] = useState('');
 
   const rows = useMemo(() => {
     return store.enrollmentApplications.filter((row) => {
@@ -64,11 +100,24 @@ export default function AdminEnrollmentsPage() {
     }
   }
 
+  function openApprove(row: EnrollmentApplication) {
+    setSelected(row);
+    setActionError(null);
+    setApkUrl(store.settings.mobileApkUrl || '');
+    setRecipientEmail(row.parentEmail || '');
+    setIssuedPassword(newPortalPassword());
+    setConfirm('approved');
+  }
+
   async function setStatusFor(id: string, next: string) {
     setActionError(null);
     try {
       if (next === 'approved') {
-        await api.approveEnrollment(id);
+        await api.approveEnrollment(id, undefined, {
+          apkUrl,
+          password: issuedPassword,
+          email: recipientEmail.trim(),
+        });
         try {
           await api.importApprovedTeachers();
         } catch {
@@ -84,13 +133,15 @@ export default function AdminEnrollmentsPage() {
       setSelected((current) => (current?.applicationId === id ? { ...current, status: next } : current));
       setOk(true);
       setMessage(
-        next === 'approved' && !teacher
-          ? 'Approved for class. The parent and child were already saved and linked when they applied. Set a parent password on Desktop if they still cannot sign in on the phone.'
+        next === 'approved'
+          ? 'Approved. The sign-in email includes the Hiraya account and the phone app link.'
           : `Application ${enrollmentStatusLabel(next).toLowerCase()}.`,
       );
       setConfirm(null);
     } catch (err) {
+      const approved = err instanceof ApiError && Boolean((err.body as { approved?: boolean } | undefined)?.approved);
       const text = err instanceof Error ? err.message : 'Could not update the application.';
+      if (approved) await refresh();
       setOk(false);
       setActionError(text);
       setMessage(text);
@@ -195,7 +246,7 @@ export default function AdminEnrollmentsPage() {
                 </button>
                 {awaitingDecision(row) ? (
                   <>
-                    <button type="button" className="icon-btn" aria-label="Approve" onClick={() => { setSelected(row); setConfirm('approved'); }}>
+                    <button type="button" className="icon-btn" aria-label="Approve" onClick={() => openApprove(row)}>
                       ✓
                     </button>
                     <button type="button" className="icon-btn danger" aria-label="Reject" onClick={() => { setSelected(row); setConfirm('rejected'); }}>
@@ -220,7 +271,7 @@ export default function AdminEnrollmentsPage() {
         )}
       />
 
-      {selected ? (
+      {selected && confirm !== 'approved' ? (
         <AdminModal
           title={selected.studentFullname}
           description={selected.preferredProgram}
@@ -236,7 +287,7 @@ export default function AdminEnrollmentsPage() {
                     Interview
                   </Button>
                 ) : null}
-                <Button type="button" onClick={() => setConfirm('approved')}>
+                <Button type="button" onClick={() => openApprove(selected)}>
                   Approve
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setConfirm('rejected')}>
@@ -295,8 +346,13 @@ export default function AdminEnrollmentsPage() {
 
       {confirm && selected ? (
         <AdminModal
-          title={`${enrollmentStatusLabel(confirm)} application`}
-          description={`This will mark ${selected.studentFullname} as ${enrollmentStatusLabel(confirm).toLowerCase()}.`}
+          stacked={confirm === 'approved'}
+          title={confirm === 'approved' ? `Send account for ${selected.studentFullname}` : `${enrollmentStatusLabel(confirm)} application`}
+          description={
+            confirm === 'approved'
+              ? 'Fill this in, then send the Hiraya account.'
+              : `This will mark ${selected.studentFullname} as ${enrollmentStatusLabel(confirm).toLowerCase()}.`
+          }
           onClose={() => {
             setConfirm(null);
             setActionError(null);
@@ -313,8 +369,13 @@ export default function AdminEnrollmentsPage() {
               >
                 Cancel
               </Button>
-              <Button type="button" variant={confirm === 'rejected' ? 'danger' : 'primary'} onClick={() => void setStatusFor(selected.applicationId, confirm)}>
-                Confirm
+              <Button
+                type="button"
+                variant={confirm === 'rejected' ? 'danger' : 'primary'}
+                disabled={confirm === 'approved' && (!validApkUrl(apkUrl) || Boolean(mailProblem(recipientEmail)) || issuedPassword.trim().length < 8)}
+                onClick={() => void setStatusFor(selected.applicationId, confirm)}
+              >
+                {confirm === 'approved' ? 'Approve and send' : 'Confirm'}
               </Button>
             </>
           }
@@ -334,10 +395,49 @@ export default function AdminEnrollmentsPage() {
                 <input value={interviewNote} onChange={(event) => setInterviewNote(event.target.value)} placeholder="Bring a valid ID." />
               </label>
             </div>
+          ) : confirm === 'approved' ? (
+            <div className="admin-form-grid">
+              <p>
+                {isTeacherApplication(selected)
+                  ? 'Type the email and password to send. Approving adds the teacher to Teacher management and does not enroll a child.'
+                  : `Type the email and password to send. ${selected.parentFullname || 'The parent'} is added to Parent management, and ${selected.studentFullname} is added to Student management.`}
+              </p>
+              <p>
+                <strong>To:</strong> {isTeacherApplication(selected) ? selected.studentFullname : selected.parentFullname || selected.studentFullname}
+              </p>
+              <label>
+                Email
+                <input type="email" value={recipientEmail} autoComplete="off" onChange={(event) => setRecipientEmail(event.target.value)} />
+              </label>
+              <label>
+                Password
+                <input value={issuedPassword} autoComplete="off" onChange={(event) => setIssuedPassword(event.target.value)} />
+              </label>
+              {!isTeacherApplication(selected) ? (
+                <p>
+                  <strong>Child:</strong> {selected.studentFullname}
+                  {selected.preferredProgram ? ` · ${selected.preferredProgram}` : ''}
+                </p>
+              ) : selected.preferredProgram ? (
+                <p>
+                  <strong>Role:</strong> {selected.preferredProgram}
+                </p>
+              ) : null}
+              <label>
+                Phone app link
+                <input
+                  value={apkUrl}
+                  onChange={(event) => setApkUrl(event.target.value)}
+                  placeholder="https://example.com/Hiraya.apk"
+                  inputMode="url"
+                />
+              </label>
+              {mailProblem(recipientEmail) ? <Alert>{mailProblem(recipientEmail)}</Alert> : null}
+            </div>
           ) : (
             <p>
               {isTeacherApplication(selected)
-                ? 'The teacher is added to Teacher management. This does not enroll a child.'
+                ? 'This teacher application will be marked rejected.'
                 : 'The family record stays in Student enrollment with the updated status badge.'}
             </p>
           )}

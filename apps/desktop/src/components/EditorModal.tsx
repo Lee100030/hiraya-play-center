@@ -1,5 +1,5 @@
 import { Button } from '@hiraya/ui';
-import type { FormEvent, ReactNode } from 'react';
+import { type FormEvent, type ReactNode, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 export function FormSection({ title, children }: { title: string; children: ReactNode }) {
@@ -17,6 +17,7 @@ export function EditorModal({
   error,
   busy,
   submitLabel,
+  submitDisabled = false,
   onClose,
   onSubmit,
   legend = true,
@@ -26,10 +27,12 @@ export function EditorModal({
   error?: string | null;
   busy?: boolean;
   submitLabel: string;
+  submitDisabled?: boolean;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
   legend?: boolean;
 }) {
+  const saving = useRef(false);
   return createPortal(
     <div
       className="modal-backdrop"
@@ -60,7 +63,11 @@ export function EditorModal({
         }}
         onSubmit={(event) => {
           event.preventDefault();
-          void onSubmit(event);
+          if (saving.current || busy || submitDisabled) return;
+          saving.current = true;
+          Promise.resolve(onSubmit(event)).finally(() => {
+            saving.current = false;
+          });
         }}
       >
         <header>
@@ -78,7 +85,7 @@ export function EditorModal({
           <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy || submitDisabled}>
             {busy ? 'Saving…' : submitLabel}
           </Button>
         </footer>

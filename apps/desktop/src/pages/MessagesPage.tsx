@@ -15,6 +15,7 @@ import {
 } from '@hiraya/utils';
 import { Button, Field, Input, PersonAvatar, Textarea } from '@hiraya/ui';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChatHero } from '../components/ChatHero';
 import { PageHeader } from '../components/PageHeader';
 import { DeskModal } from '../components/DeskModal';
 import { Icons } from '../icons';
@@ -490,10 +491,8 @@ export function MessengerInbox({
             </>
           ) : (
             <div className="messenger-placeholder">
-              <p>Select a person or group to open the conversation.</p>
-              <p className="muted">
-                Teachers can message other teachers. Parents can message co-parents. Everyone can reach the center admin.
-              </p>
+              <ChatHero />
+              <p className="muted">Select a person or group to open the conversation.</p>
             </div>
           )}
         </section>

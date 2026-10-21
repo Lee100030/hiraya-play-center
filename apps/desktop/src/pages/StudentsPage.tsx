@@ -1,5 +1,5 @@
 import type { HirayaDatabase, HirayaUser, Student } from '@hiraya/types';
-import { addLearningProgram, compareStudentNames, confirmStudentPresentToday, displayName, downloadStudentRecord, isStudentHereToday, laneLabel, nextStudentNumber, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentNumber, studentNumberTaken, studentPaymentBalance, studentQrFromNumber, studentTuitionFee, upsertStudentBalance, upsertStudentSessions, type ManagementLaneId } from '@hiraya/utils';
+import { addLearningProgram, compareStudentNumbers, confirmStudentPresentToday, displayName, downloadStudentRecord, isStudentHereToday, laneLabel, nextStudentNumber, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentNumber, studentNumberTaken, studentPaymentBalance, studentQrFromNumber, studentTuitionFee, upsertStudentBalance, upsertStudentSessions, type ManagementLaneId } from '@hiraya/utils';
 import { Field, Input, ProgramSpecialtySelect, Select, Button } from '@hiraya/ui';
 import { FormEvent, useState } from 'react';
 import { DirectMessageModal } from '../components/DirectMessageModal';
@@ -49,7 +49,7 @@ export function StudentsPage({
   const [newProgramNote, setNewProgramNote] = useState('');
   const [programBusy, setProgramBusy] = useState(false);
   const current = editing && editing !== 'new' ? editing : null;
-  const rows = store.students.filter((row) => studentInLane(store, row, lane)).sort(compareStudentNames);
+  const rows = store.students.filter((row) => studentInLane(store, row, lane)).sort(compareStudentNumbers);
   const viewing = openId ? store.students.find((row) => row.studentId === openId) : undefined;
   const viewingParent = viewing ? store.users.find((item) => item.userId === viewing.parentId && item.role === 'parent') : undefined;
   const viewingPlace = viewing ? studentPlacement(store, viewing.studentId) : undefined;

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { ApiError, createHirayaApi } from '@hiraya/api';
+import { ApiError, createHirayaApi, isAdminLoginChallenge, type AdminLoginChallenge } from '@hiraya/api';
 import type { HirayaUser } from '@hiraya/types';
 import { resolveMobileApiUrl } from './apiUrl';
 import { canUseMobileApp, MOBILE_LOGIN_BLOCKED } from './rbac';
@@ -23,7 +23,9 @@ export function consumeSessionNotice() {
 type AuthValue = {
   user: HirayaUser | null;
   ready: boolean;
-  login: (login: string, password: string, remember?: boolean) => Promise<HirayaUser>;
+  login: (login: string, password: string, remember?: boolean) => Promise<HirayaUser | AdminLoginChallenge>;
+  completeAdminOtp: (challenge: string, code: string, remember?: boolean) => Promise<HirayaUser>;
+  resendAdminOtp: (challenge: string) => Promise<AdminLoginChallenge>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<HirayaUser | null>;
   setSessionUser: (next: HirayaUser) => Promise<void>;
@@ -133,7 +135,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persist.current = remember;
         persistSession = remember;
         const ids = mobileLoginIds(login, password);
-        const session = await api.login(ids.login, ids.password, 'mobile');
+        const result = await api.login(ids.login, ids.password, 'mobile');
+        if (isAdminLoginChallenge(result)) return result;
+        if (!canUseMobileApp(result.user.role)) {
+          await api.logout();
+          throw new Error(MOBILE_LOGIN_BLOCKED);
+        }
+        let next = result.user;
+        try {
+          next = await api.me();
+        } catch {
+          /* login payload is enough to enter the app */
+        }
+        await writeUser(next);
+        return next;
+      },
+      completeAdminOtp: async (challenge, code, remember = true) => {
+        persist.current = remember;
+        persistSession = remember;
+        const session = await api.confirmAdminLogin(challenge, code.trim(), 'mobile');
         if (!canUseMobileApp(session.user.role)) {
           await api.logout();
           throw new Error(MOBILE_LOGIN_BLOCKED);
@@ -147,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await writeUser(next);
         return next;
       },
+      resendAdminOtp: async (challenge) => api.resendAdminLogin(challenge),
       logout: async () => {
         try {
           await api.logout();

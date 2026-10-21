@@ -508,6 +508,8 @@ export interface CenterSettings {
   notifyProgress: boolean;
   moduleAllowedExtensions: string;
   moduleMaxFileMb: number;
+  /** Last phone-app install link included in approval emails. */
+  mobileApkUrl?: string;
   updatedAt: string;
   /** Permanently deleted account ids, plus mail: and name: marks. A later save must not restore them. */
   removedUserIds?: string;
@@ -769,6 +771,7 @@ export const emptyStore = (): HirayaDatabase => ({
     notifyProgress: true,
     moduleAllowedExtensions: '',
     moduleMaxFileMb: 0,
+    mobileApkUrl: '',
     updatedAt: '',
     removedUserIds: '',
   },

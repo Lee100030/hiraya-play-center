@@ -6,7 +6,7 @@ import { DayScheduleBoard } from '../components/DayScheduleBoard';
 import { DeskModal } from '../components/DeskModal';
 import { EditorModal, FormSection } from '../components/EditorModal';
 import { api } from '../lib/api';
-import { PageHeader } from '../components/PageHeader';
+import { BlueprintHero } from '../components/BlueprintHero';
 
 function dateKey(date: Date) {
   const y = date.getFullYear();
@@ -254,7 +254,7 @@ export function CenterCalendarPage({
 
   return (
     <>
-      <PageHeader
+      <BlueprintHero
         kicker="HIRAYA calendar"
         title="Center calendar"
         description="One calendar for the center. Double-click a day to edit that day’s teacher schedule. A single click still assigns one schedule or task."

@@ -82,5 +82,6 @@ export function resolveMobileApiUrl(): string {
   if (!onPhone && Platform.OS === 'android') return `http://10.0.2.2:${API_PORT}`;
   if (!onPhone) return `http://127.0.0.1:${API_PORT}`;
 
-  return `http://127.0.0.1:${API_PORT}`;
+  // Installed APK has no Metro server. Talk to the live API.
+  return 'https://hiraya-play-center.onrender.com';
 }
