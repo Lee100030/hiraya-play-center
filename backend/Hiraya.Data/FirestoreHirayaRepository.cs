@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Hiraya.Data;
 
-public class FirestoreHirayaRepository : IHirayaRepository
+public partial class FirestoreHirayaRepository : IHirayaRepository
 {
     public const string ProjectId = "hiraya-kids-learning";
 
@@ -26,13 +26,15 @@ public class FirestoreHirayaRepository : IHirayaRepository
     private readonly ILogger<FirestoreHirayaRepository> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HirayaDatabase? _cache;
-    private DateTime _cacheAt = DateTime.MinValue;
-    private static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(10);
+    private long _revision;
+
+    public long StoreRevision => Interlocked.Read(ref _revision);
 
     public FirestoreHirayaRepository(ILogger<FirestoreHirayaRepository> logger)
     {
         _logger = logger;
         _db = Build();
+        BindReplicas();
     }
 
     public bool UsingFirebase => true;
@@ -60,7 +62,6 @@ public class FirestoreHirayaRepository : IHirayaRepository
             await mutator(db);
             await SaveUnlockedAsync(db, before, ct);
             _cache = Clone(db);
-            _cacheAt = DateTime.UtcNow;
         }
         finally
         {
@@ -89,7 +90,6 @@ public class FirestoreHirayaRepository : IHirayaRepository
         {
             await SaveUnlockedAsync(database, _cache, ct);
             _cache = Clone(database);
-            _cacheAt = DateTime.UtcNow;
         }
         finally
         {
@@ -106,7 +106,7 @@ public class FirestoreHirayaRepository : IHirayaRepository
     public void InvalidateCache()
     {
         _cache = null;
-        _cacheAt = DateTime.MinValue;
+        BumpRevision();
     }
 
     public async Task<bool> PingAsync(CancellationToken ct = default)
@@ -117,9 +117,14 @@ public class FirestoreHirayaRepository : IHirayaRepository
 
     public async Task<HirayaUser?> FindUserAsync(string? userId, string? login, CancellationToken ct = default)
     {
+        var cached = _cache;
+        if (cached is not null)
+            return CopyUser(FindCachedUser(cached, userId, login));
+
+        var source = await ChooseReadDatabaseAsync(ct);
         if (!string.IsNullOrWhiteSpace(userId))
         {
-            var snap = await _db.Collection("users").Document(userId.Trim()).GetSnapshotAsync(ct);
+            var snap = await source.Collection("users").Document(userId.Trim()).GetSnapshotAsync(ct);
             if (snap.Exists)
             {
                 try
@@ -138,14 +143,44 @@ public class FirestoreHirayaRepository : IHirayaRepository
         var key = (login ?? "").Trim();
         if (key.Length == 0)
             return null;
-        var users = await LoadList<HirayaUser>("users", ct);
-        return LoginIdentity.Choose(users, key);
+        LoadSource.Value = source;
+        try
+        {
+            var users = await LoadList<HirayaUser>("users", ct);
+            return LoginIdentity.Choose(users, key);
+        }
+        finally
+        {
+            LoadSource.Value = null;
+        }
+    }
+
+    private static HirayaUser? FindCachedUser(HirayaDatabase db, string? userId, string? login)
+    {
+        if (!string.IsNullOrWhiteSpace(userId))
+            return db.Users.FirstOrDefault(user => string.Equals(user.UserId, userId.Trim(), StringComparison.OrdinalIgnoreCase));
+        var key = (login ?? "").Trim();
+        if (key.Length == 0)
+            return null;
+        return LoginIdentity.Choose(db.Users, key);
+    }
+
+    private static HirayaUser? CopyUser(HirayaUser? user)
+    {
+        if (user is null)
+            return null;
+        var json = JsonSerializer.Serialize(user, Json);
+        return JsonSerializer.Deserialize<HirayaUser>(json, Json);
     }
 
     private async Task<HirayaDatabase> LoadUnlockedAsync(CancellationToken ct)
     {
-        if (_cache is not null && DateTime.UtcNow - _cacheAt < CacheFor)
+        if (_cache is not null)
             return Clone(_cache);
+        var source = await ChooseReadDatabaseAsync(ct);
+        LoadSource.Value = source;
+        try
+        {
         var users = LoadList<HirayaUser>("users", ct);
         var teacherProfiles = LoadList<TeacherProfile>("teacherProfiles", ct);
         var students = LoadList<Student>("students", ct);
@@ -183,7 +218,7 @@ public class FirestoreHirayaRepository : IHirayaRepository
         var teacherNotes = LoadList<TeacherAdminNote>("teacherNotes", ct);
         var studentDocuments = LoadList<StudentDocument>("studentDocuments", ct);
         var chatGroups = LoadList<ChatGroup>("chatGroups", ct);
-        var settingsTask = _db.Collection("settings").Document("center").GetSnapshotAsync(ct);
+        var settingsTask = source.Collection("settings").Document("center").GetSnapshotAsync(ct);
         await Task.WhenAll(
             users, teacherProfiles, students, programs, classes, enrollments, enrollmentApplications,
             attendance, reports, schedules, teacherWorkShifts, teacherRoleOptions, news, leaveRequests,
@@ -235,69 +270,84 @@ public class FirestoreHirayaRepository : IHirayaRepository
         if (settings.Exists)
             db.Settings = FromDoc<CenterSettings>(settings) ?? db.Settings;
         _cache = Clone(db);
-        _cacheAt = DateTime.UtcNow;
         return db;
+        }
+        finally
+        {
+            LoadSource.Value = null;
+        }
     }
 
     private async Task SaveUnlockedAsync(HirayaDatabase database, HirayaDatabase? before, CancellationToken ct)
     {
         var writer = new BatchWriter(_db, ct);
+        var changes = new List<DocWrite>();
         try
         {
-            await WriteList(writer, "users", database.Users, before?.Users, u => u.UserId);
-            await WriteList(writer, "teacherProfiles", database.TeacherProfiles, before?.TeacherProfiles, x => x.ProfileId);
-            await WriteList(writer, "students", database.Students, before?.Students, x => x.StudentId);
-            await WriteList(writer, "programs", database.Programs, before?.Programs, x => x.ProgramId);
-            await WriteList(writer, "classes", database.Classes, before?.Classes, x => x.ClassId);
-            await WriteList(writer, "enrollments", database.Enrollments, before?.Enrollments, x => x.EnrollmentId);
-            await WriteList(writer, "enrollmentApplications", database.EnrollmentApplications, before?.EnrollmentApplications, x => x.ApplicationId);
-            await WriteList(writer, "attendance", database.Attendance, before?.Attendance, x => x.AttendanceId);
-            await WriteList(writer, "reports", database.Reports, before?.Reports, x => x.ReportId);
-            await WriteList(writer, "schedules", database.Schedules, before?.Schedules, x => x.ScheduleId);
-            await WriteList(writer, "teacherWorkShifts", database.TeacherWorkShifts, before?.TeacherWorkShifts, x => x.ShiftId);
-            await WriteList(writer, "teacherRoleOptions", database.TeacherRoleOptions, before?.TeacherRoleOptions, x => x.RoleId);
-            await WriteList(writer, "news", database.News, before?.News, x => x.NewsId);
-            await WriteList(writer, "leaveRequests", database.LeaveRequests, before?.LeaveRequests, x => x.LeaveId);
-            await WriteList(writer, "payments", database.Payments, before?.Payments, x => x.PaymentId);
-            await WriteList(writer, "centerExpenses", database.CenterExpenses, before?.CenterExpenses, x => x.ExpenseId);
-            await WriteList(writer, "openingBalances", database.OpeningBalances, before?.OpeningBalances, x => x.OpeningId);
-            await WriteList(writer, "alerts", database.Alerts, before?.Alerts, x => x.AlertId);
-            await WriteList(writer, "auditLogs", database.AuditLogs, before?.AuditLogs, x => x.AuditId);
-            await WriteList(writer, "rolePermissions", database.RolePermissions, before?.RolePermissions, x => x.PermissionId);
-            await WriteList(writer, "roles", database.Roles, before?.Roles, x => x.RoleId);
-            await WriteList(writer, "rooms", database.Rooms, before?.Rooms, x => x.RoomId);
-            await WriteList(writer, "learningModules", database.LearningModules, before?.LearningModules, x => x.ModuleId);
-            await WriteList(writer, "learningModuleVersions", database.LearningModuleVersions, before?.LearningModuleVersions, x => x.VersionId);
-            await WriteList(writer, "parentStudents", database.ParentStudents, before?.ParentStudents, x => x.ParentStudentId);
-            await WriteList(writer, "accountInvitations", database.AccountInvitations, before?.AccountInvitations, x => x.InvitationId);
-            await WriteList(writer, "studentOps", database.StudentOps, before?.StudentOps, x => x.StudentId);
-            await WriteList(writer, "centerHolidays", database.CenterHolidays, before?.CenterHolidays, x => x.HolidayId);
-            await WriteList(writer, "teacherDuties", database.TeacherDuties, before?.TeacherDuties, x => x.DutyId);
-            await WriteList(writer, "websiteGallery", database.WebsiteGallery, before?.WebsiteGallery, x => x.ItemId);
-            await WriteList(writer, "staffTasks", database.StaffTasks, before?.StaffTasks, x => x.TaskId);
-            await WriteList(writer, "sessionPackages", database.SessionPackages, before?.SessionPackages, x => x.PackageId);
-            await WriteList(writer, "sessionHistory", database.SessionHistory, before?.SessionHistory, x => x.HistoryId);
-            await WriteList(writer, "teacherComments", database.TeacherComments, before?.TeacherComments, x => x.CommentId);
-            await WriteList(writer, "teacherNotes", database.TeacherNotes, before?.TeacherNotes, x => x.NoteId);
-            await WriteList(writer, "studentDocuments", database.StudentDocuments, before?.StudentDocuments, x => x.DocumentId);
-            await WriteList(writer, "chatGroups", database.ChatGroups, before?.ChatGroups, x => x.GroupId);
+            await WriteList(writer, "users", database.Users, before?.Users, u => u.UserId, changes);
+            await WriteList(writer, "teacherProfiles", database.TeacherProfiles, before?.TeacherProfiles, x => x.ProfileId, changes);
+            await WriteList(writer, "students", database.Students, before?.Students, x => x.StudentId, changes);
+            await WriteList(writer, "programs", database.Programs, before?.Programs, x => x.ProgramId, changes);
+            await WriteList(writer, "classes", database.Classes, before?.Classes, x => x.ClassId, changes);
+            await WriteList(writer, "enrollments", database.Enrollments, before?.Enrollments, x => x.EnrollmentId, changes);
+            await WriteList(writer, "enrollmentApplications", database.EnrollmentApplications, before?.EnrollmentApplications, x => x.ApplicationId, changes);
+            await WriteList(writer, "attendance", database.Attendance, before?.Attendance, x => x.AttendanceId, changes);
+            await WriteList(writer, "reports", database.Reports, before?.Reports, x => x.ReportId, changes);
+            await WriteList(writer, "schedules", database.Schedules, before?.Schedules, x => x.ScheduleId, changes);
+            await WriteList(writer, "teacherWorkShifts", database.TeacherWorkShifts, before?.TeacherWorkShifts, x => x.ShiftId, changes);
+            await WriteList(writer, "teacherRoleOptions", database.TeacherRoleOptions, before?.TeacherRoleOptions, x => x.RoleId, changes);
+            await WriteList(writer, "news", database.News, before?.News, x => x.NewsId, changes);
+            await WriteList(writer, "leaveRequests", database.LeaveRequests, before?.LeaveRequests, x => x.LeaveId, changes);
+            await WriteList(writer, "payments", database.Payments, before?.Payments, x => x.PaymentId, changes);
+            await WriteList(writer, "centerExpenses", database.CenterExpenses, before?.CenterExpenses, x => x.ExpenseId, changes);
+            await WriteList(writer, "openingBalances", database.OpeningBalances, before?.OpeningBalances, x => x.OpeningId, changes);
+            await WriteList(writer, "alerts", database.Alerts, before?.Alerts, x => x.AlertId, changes);
+            await WriteList(writer, "auditLogs", database.AuditLogs, before?.AuditLogs, x => x.AuditId, changes);
+            await WriteList(writer, "rolePermissions", database.RolePermissions, before?.RolePermissions, x => x.PermissionId, changes);
+            await WriteList(writer, "roles", database.Roles, before?.Roles, x => x.RoleId, changes);
+            await WriteList(writer, "rooms", database.Rooms, before?.Rooms, x => x.RoomId, changes);
+            await WriteList(writer, "learningModules", database.LearningModules, before?.LearningModules, x => x.ModuleId, changes);
+            await WriteList(writer, "learningModuleVersions", database.LearningModuleVersions, before?.LearningModuleVersions, x => x.VersionId, changes);
+            await WriteList(writer, "parentStudents", database.ParentStudents, before?.ParentStudents, x => x.ParentStudentId, changes);
+            await WriteList(writer, "accountInvitations", database.AccountInvitations, before?.AccountInvitations, x => x.InvitationId, changes);
+            await WriteList(writer, "studentOps", database.StudentOps, before?.StudentOps, x => x.StudentId, changes);
+            await WriteList(writer, "centerHolidays", database.CenterHolidays, before?.CenterHolidays, x => x.HolidayId, changes);
+            await WriteList(writer, "teacherDuties", database.TeacherDuties, before?.TeacherDuties, x => x.DutyId, changes);
+            await WriteList(writer, "websiteGallery", database.WebsiteGallery, before?.WebsiteGallery, x => x.ItemId, changes);
+            await WriteList(writer, "staffTasks", database.StaffTasks, before?.StaffTasks, x => x.TaskId, changes);
+            await WriteList(writer, "sessionPackages", database.SessionPackages, before?.SessionPackages, x => x.PackageId, changes);
+            await WriteList(writer, "sessionHistory", database.SessionHistory, before?.SessionHistory, x => x.HistoryId, changes);
+            await WriteList(writer, "teacherComments", database.TeacherComments, before?.TeacherComments, x => x.CommentId, changes);
+            await WriteList(writer, "teacherNotes", database.TeacherNotes, before?.TeacherNotes, x => x.NoteId, changes);
+            await WriteList(writer, "studentDocuments", database.StudentDocuments, before?.StudentDocuments, x => x.DocumentId, changes);
+            await WriteList(writer, "chatGroups", database.ChatGroups, before?.ChatGroups, x => x.GroupId, changes);
             var settingsJson = JsonSerializer.Serialize(database.Settings, Json);
             if (before is null || settingsJson != JsonSerializer.Serialize(before.Settings, Json))
-                await writer.SetAsync(_db.Collection("settings").Document("center"), ToMapFromJson(settingsJson));
+            {
+                var settingsMap = ToMapFromJson(settingsJson);
+                await writer.SetAsync(_db.Collection("settings").Document("center"), settingsMap);
+                changes.Add(new DocWrite("settings", "center", settingsMap));
+            }
             await writer.FlushAsync();
         }
         catch
         {
             // A partial write leaves Firestore ahead of the cache; reload it on the next request.
             _cache = null;
+            BumpRevision();
             throw;
         }
+        await CopyChangesAsync(changes, ct);
+        BumpRevision();
         _logger.LogInformation("Saved {Count} changed Firestore documents.", writer.Total);
     }
 
+    private void BumpRevision() => Interlocked.Increment(ref _revision);
+
     private async Task<List<T>> LoadList<T>(string collection, CancellationToken ct)
     {
-        var snap = await _db.Collection(collection).GetSnapshotAsync(ct);
+        var db = LoadSource.Value ?? _db;
+        var snap = await db.Collection(collection).GetSnapshotAsync(ct);
         var list = new List<T>(snap.Count);
         foreach (var doc in snap.Documents)
         {
@@ -315,7 +365,7 @@ public class FirestoreHirayaRepository : IHirayaRepository
         return list;
     }
 
-    private async Task WriteList<T>(BatchWriter writer, string collection, IEnumerable<T> rows, IEnumerable<T>? previousRows, Func<T, string> idOf)
+    private async Task WriteList<T>(BatchWriter writer, string collection, IEnumerable<T> rows, IEnumerable<T>? previousRows, Func<T, string> idOf, List<DocWrite> changes)
     {
         Dictionary<string, string>? previous = null;
         if (previousRows is not null)
@@ -338,7 +388,9 @@ public class FirestoreHirayaRepository : IHirayaRepository
             var json = JsonSerializer.Serialize(row, Json);
             if (previous is not null && previous.TryGetValue(id, out var old) && old == json)
                 continue;
-            await writer.SetAsync(_db.Collection(collection).Document(id), ToMapFromJson(json));
+            var map = ToMapFromJson(json);
+            await writer.SetAsync(_db.Collection(collection).Document(id), map);
+            changes.Add(new DocWrite(collection, id, map));
         }
 
         if (previous is not null)
@@ -346,7 +398,10 @@ public class FirestoreHirayaRepository : IHirayaRepository
             foreach (var id in previous.Keys)
             {
                 if (!keep.Contains(id))
+                {
                     await writer.DeleteAsync(_db.Collection(collection).Document(id));
+                    changes.Add(new DocWrite(collection, id, null));
+                }
             }
             return;
         }
@@ -355,7 +410,10 @@ public class FirestoreHirayaRepository : IHirayaRepository
         foreach (var doc in existing.Documents)
         {
             if (!keep.Contains(doc.Id))
+            {
                 await writer.DeleteAsync(doc.Reference);
+                changes.Add(new DocWrite(collection, doc.Id, null));
+            }
         }
     }
 

@@ -78,8 +78,8 @@ export async function proxyToHirayaApi(request: Request, path: string) {
   if (contentType) headers.set('Content-Type', contentType);
   const session = request.headers.get(SESSION_HEADER);
   if (session) headers.set(SESSION_HEADER, session);
-  const phone = request.headers.get('x-hiraya-client');
-  if (phone) headers.set('X-Hiraya-Client', phone);
+  const client = request.headers.get('x-hiraya-client');
+  headers.set('X-Hiraya-Client', client && client.trim() ? client : 'website');
   const payload =
     request.method !== 'GET' && request.method !== 'HEAD' ? await request.arrayBuffer() : null;
   const attempts = 5;

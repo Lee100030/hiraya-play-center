@@ -308,6 +308,24 @@ public static class ParentPortalApi
         return user;
     }
 
+    /// <summary>
+    /// Confirms the session token in this process. It does not read Firestore.
+    /// </summary>
+    internal static async Task<bool> HasSessionAsync(HttpRequest request)
+    {
+        var tokens = request.HttpContext.RequestServices.GetService<SessionTokenOptions>();
+        var packed = request.Headers["X-Hiraya-Session"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(packed))
+            packed = request.Query["session"].FirstOrDefault();
+        var ticket = tokens is null ? null : SessionTokens.TryRead(packed, tokens.Secret);
+        if (ticket is null)
+            return false;
+        var gate = request.HttpContext.RequestServices.GetService<SessionGate>();
+        if (gate is not null && await gate.IsRevokedAsync(ticket.Jti, request.HttpContext.RequestAborted))
+            return false;
+        return true;
+    }
+
     private static IResult SessionExpired() =>
         Results.Json(new { error = "Your session expired. Sign out and sign in, then save again." }, statusCode: StatusCodes.Status401Unauthorized);
 

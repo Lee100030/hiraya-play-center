@@ -67,6 +67,7 @@ export const api = createHirayaApi(
     },
   },
   apiBaseUrl,
+  'mobile',
 );
 
 export function AuthProvider({ children }: { children: ReactNode }) {

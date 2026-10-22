@@ -124,6 +124,18 @@ var app = builder.Build();
 app.UseCors();
 app.Use(async (context, next) =>
 {
+    HirayaClientContext.Set(context.Request.Headers["X-Hiraya-Client"].FirstOrDefault());
+    try
+    {
+        await next();
+    }
+    finally
+    {
+        HirayaClientContext.Set(null);
+    }
+});
+app.Use(async (context, next) =>
+{
     context.Response.OnStarting(() =>
     {
         var headers = context.Response.Headers;
@@ -170,18 +182,26 @@ app.MapGet("/api/hub", (IHirayaRepository repo) =>
 
 app.MapGet("/api/health", (IHirayaRepository repo) =>
 {
-    var firestore = repo is FirestoreHirayaRepository;
+    var firestore = repo as FirestoreHirayaRepository;
     return Results.Ok(new
     {
         status = "ok",
         hub = "hiraya-central",
-        database = firestore ? "firestore" : "local-file",
-        store = firestore ? "firebase-firestore" : "file",
-        project = firestore ? FirestoreHirayaRepository.ProjectId : "local",
+        database = firestore is not null ? "firestore" : "local-file",
+        store = firestore is not null ? "firebase-firestore" : "file",
+        project = firestore is not null ? FirestoreHirayaRepository.ProjectId : "local",
+        replicas = firestore?.ReplicaProjects ?? Array.Empty<string>(),
         enroll = "2026-10-15-text",
         rev = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? "local",
         clients = CentralHub.Clients,
     });
+});
+
+app.MapGet("/api/store/revision", async (HttpRequest request, IHirayaRepository repo) =>
+{
+    if (!await ParentPortalApi.HasSessionAsync(request))
+        return Results.Unauthorized();
+    return Results.Ok(new { revision = repo.StoreRevision });
 });
 
 app.MapGet("/api/store", async (HttpRequest request, IHirayaRepository repo, ILoggerFactory logs, CancellationToken ct) =>
@@ -749,8 +769,11 @@ PaymentApi.Map(app);
 FeedbackApi.Map(app);
 
 var warmRepo = app.Services.GetRequiredService<IHirayaRepository>();
-if (warmRepo is FirestoreHirayaRepository)
-    app.Logger.LogInformation("Hiraya.Api is using Cloud Firestore project {ProjectId}.", FirestoreHirayaRepository.ProjectId);
+if (warmRepo is FirestoreHirayaRepository firestoreRepo)
+    app.Logger.LogInformation(
+        "Hiraya.Api is using Cloud Firestore project {ProjectId}. Replicas: {Replicas}.",
+        FirestoreHirayaRepository.ProjectId,
+        firestoreRepo.ReplicaProjects.Count == 0 ? "none" : string.Join(", ", firestoreRepo.ReplicaProjects));
 else
     app.Logger.LogWarning("Hiraya.Api is using the local file store. Set FIREBASE_SERVICE_ACCOUNT to use the live Cloud Firestore database.");
     app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
@@ -760,6 +783,17 @@ else
         {
             await warmRepo.LoadAsync();
             app.Logger.LogInformation("Warmed the Firestore store cache in {Seconds:F1}s.", (DateTime.UtcNow - started).TotalSeconds);
+            if (warmRepo is FirestoreHirayaRepository firestore)
+            {
+                try
+                {
+                    await firestore.SeedReplicasAsync();
+                }
+                catch (Exception ex)
+                {
+                    app.Logger.LogWarning(ex, "Could not seed the app Firestore projects.");
+                }
+            }
         }
         catch (Exception ex)
         {

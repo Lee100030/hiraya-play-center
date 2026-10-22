@@ -19,6 +19,12 @@ public interface IHirayaRepository
     Task<HirayaDatabase> ApplyClientPatchAsync(StorePatchRequest patch, HirayaUser actor, CancellationToken ct = default)
         => StorePatch.ApplyThroughAsync(this, patch, actor, ct);
     void InvalidateCache() { }
+
+    /// <summary>
+    /// Increases when this process saves or drops its in-memory center.
+    /// Reading it does not touch Firestore.
+    /// </summary>
+    long StoreRevision => 0;
     Task<HirayaUser?> FindUserAsync(string? userId, string? login, CancellationToken ct = default)
     {
         return FindUserFromStoreAsync(this, userId, login, ct);
@@ -44,7 +50,10 @@ public class HirayaRepository : IHirayaRepository
     private readonly ILogger<HirayaRepository> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HirayaDatabase? _localCache;
+    private long _revision;
     private readonly string _localPath;
+
+    public long StoreRevision => Interlocked.Read(ref _revision);
 
     public HirayaRepository(
         FirebaseCredentialProvider credentials,
@@ -164,7 +173,11 @@ public class HirayaRepository : IHirayaRepository
         _localCache = Clone(database);
         await WriteLocalFileAsync(_localCache, ct);
 
-        if (!UsingFirebase) return;
+        if (!UsingFirebase)
+        {
+            Interlocked.Increment(ref _revision);
+            return;
+        }
 
         var payload = new Dictionary<string, object?>
         {
@@ -196,6 +209,7 @@ public class HirayaRepository : IHirayaRepository
         };
 
         await PutJsonAsync(HirayaCollections.Root, payload, ct);
+        Interlocked.Increment(ref _revision);
     }
 
     private async Task WriteLocalFileAsync(HirayaDatabase database, CancellationToken ct)

@@ -29,7 +29,16 @@ export default function App() {
   const storeRef = useRef(store);
   const epoch = useRef(0);
   const taskScrub = useRef(false);
+  const revision = useRef<number | null>(null);
   storeRef.current = store;
+
+  async function noteRevision() {
+    try {
+      revision.current = await api.storeRevision();
+    } catch {
+      revision.current = null;
+    }
+  }
 
   function publish(next: HirayaDatabase) {
     storeRef.current = next;
@@ -45,6 +54,7 @@ export default function App() {
       if (seen !== epoch.current) return;
       storeRef.current = next;
       setStore(next);
+      await noteRevision();
     } catch (err) {
       console.error(err);
       setLoadError(err instanceof Error ? err.message : 'Could not load records');
@@ -73,13 +83,25 @@ export default function App() {
   }, [user, store]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      revision.current = null;
+      return;
+    }
     const timer = window.setInterval(() => {
       const seen = epoch.current;
       void api
-        .getStore()
+        .storeRevision()
         .then((next) => {
           if (seen !== epoch.current) return;
+          if (revision.current === null || revision.current === next) {
+            revision.current = next;
+            return;
+          }
+          revision.current = next;
+          return api.getStore();
+        })
+        .then((next) => {
+          if (!next || seen !== epoch.current) return;
           storeRef.current = next;
           setStore(next);
         })
@@ -93,6 +115,7 @@ export default function App() {
           if (seen !== epoch.current) return;
           storeRef.current = next;
           setStore(next);
+          return noteRevision();
         })
         .catch(() => undefined);
     }
@@ -149,6 +172,7 @@ export default function App() {
         setOtpSentTo(null);
         setOtpCode('');
         setStore(await api.getStore());
+        await noteRevision();
         setView('dashboard');
         return;
       }
@@ -162,6 +186,7 @@ export default function App() {
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(result.user));
       setUser(result.user);
       setStore(await api.getStore());
+      await noteRevision();
       setView('dashboard');
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'Sign-in failed';
@@ -214,6 +239,7 @@ export default function App() {
       const saved = await api.saveChanges(base, next);
       if (ticket !== epoch.current) return;
       publish(saved);
+      await noteRevision();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not save records';
       setLoadError(message);

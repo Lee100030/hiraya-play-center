@@ -37,6 +37,7 @@ export class HirayaApi {
   constructor(
     private readonly tokenStore: TokenStore,
     private readonly baseUrl = resolveApiBaseUrl(),
+    private readonly client = '',
   ) {}
 
   private async headers(json = true): Promise<HeadersInit> {
@@ -45,6 +46,7 @@ export class HirayaApi {
     const token = await this.tokenStore.getToken();
     if (typeof token === 'string' && token) this.cachedToken = token;
     if (token) headers[SESSION_HEADER] = token;
+    if (this.client) headers['X-Hiraya-Client'] = this.client;
     return headers;
   }
 
@@ -112,11 +114,12 @@ export class HirayaApi {
 
   async login(login: string, password: string, client?: string): Promise<LoginResult> {
     await this.tokenStore.setToken?.(null);
+    const name = client || this.client;
     const res = await fetch(this.url('/api/auth/login'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(client ? { 'X-Hiraya-Client': client } : {}),
+        ...(name ? { 'X-Hiraya-Client': name } : {}),
       },
       body: JSON.stringify({ login, password, ...(client ? { client } : {}) }),
       signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
@@ -129,11 +132,12 @@ export class HirayaApi {
   }
 
   async confirmAdminLogin(challenge: string, code: string, client?: string): Promise<AuthSession> {
+    const name = client || this.client;
     const res = await fetch(this.url('/api/auth/login/otp'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(client ? { 'X-Hiraya-Client': client } : {}),
+        ...(name ? { 'X-Hiraya-Client': name } : {}),
       },
       body: JSON.stringify({ challenge, code, ...(client ? { client } : {}) }),
       signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(60000) : undefined,
@@ -239,6 +243,12 @@ export class HirayaApi {
     const res = await fetch(this.url('/api/store'), { headers: await this.headers(false) });
     const data = await this.parse<Partial<HirayaDatabase> | null>(res);
     return { ...emptyStore(), ...(data || {}) };
+  }
+
+  async storeRevision(): Promise<number> {
+    const res = await fetch(this.url('/api/store/revision'), { headers: await this.headers(false) });
+    const data = await this.parse<{ revision?: number }>(res);
+    return typeof data?.revision === 'number' ? data.revision : 0;
   }
 
   async saveChanges(base: HirayaDatabase, next: HirayaDatabase): Promise<HirayaDatabase> {
@@ -1091,6 +1101,6 @@ export class HirayaApi {
   }
 }
 
-export function createHirayaApi(tokenStore: TokenStore, baseUrl?: string): HirayaApi {
-  return new HirayaApi(tokenStore, baseUrl !== undefined ? resolveApiBaseUrl(baseUrl) : resolveApiBaseUrl());
+export function createHirayaApi(tokenStore: TokenStore, baseUrl?: string, client?: string): HirayaApi {
+  return new HirayaApi(tokenStore, baseUrl !== undefined ? resolveApiBaseUrl(baseUrl) : resolveApiBaseUrl(), client || '');
 }

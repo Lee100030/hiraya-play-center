@@ -15,4 +15,5 @@ export const api = createHirayaApi(
     },
   },
   resolveApiBaseUrl(import.meta.env.VITE_API_URL) || 'http://127.0.0.1:5188',
+  'desktop',
 );

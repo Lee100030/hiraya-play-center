@@ -11,4 +11,5 @@ export const api = createHirayaApi(
     },
   },
   '',
+  'website',
 );
