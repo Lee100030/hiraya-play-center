@@ -27,7 +27,7 @@ public class FirestoreHirayaRepository : IHirayaRepository
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HirayaDatabase? _cache;
     private DateTime _cacheAt = DateTime.MinValue;
-    private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan CacheFor = TimeSpan.FromMinutes(10);
 
     public FirestoreHirayaRepository(ILogger<FirestoreHirayaRepository> logger)
     {
@@ -146,47 +146,92 @@ public class FirestoreHirayaRepository : IHirayaRepository
     {
         if (_cache is not null && DateTime.UtcNow - _cacheAt < CacheFor)
             return Clone(_cache);
+        var users = LoadList<HirayaUser>("users", ct);
+        var teacherProfiles = LoadList<TeacherProfile>("teacherProfiles", ct);
+        var students = LoadList<Student>("students", ct);
+        var programs = LoadList<LearningProgram>("programs", ct);
+        var classes = LoadList<LearningClass>("classes", ct);
+        var enrollments = LoadList<Enrollment>("enrollments", ct);
+        var enrollmentApplications = LoadList<EnrollmentApplication>("enrollmentApplications", ct);
+        var attendance = LoadList<AttendanceRecord>("attendance", ct);
+        var reports = LoadList<ProgressReport>("reports", ct);
+        var schedules = LoadList<Schedule>("schedules", ct);
+        var teacherWorkShifts = LoadList<TeacherWorkShift>("teacherWorkShifts", ct);
+        var teacherRoleOptions = LoadList<TeacherRoleOption>("teacherRoleOptions", ct);
+        var news = LoadList<NewsItem>("news", ct);
+        var leaveRequests = LoadList<LeaveRequest>("leaveRequests", ct);
+        var payments = LoadList<Payment>("payments", ct);
+        var centerExpenses = LoadList<CenterExpense>("centerExpenses", ct);
+        var openingBalances = LoadList<OpeningBalance>("openingBalances", ct);
+        var alerts = LoadList<SystemAlert>("alerts", ct);
+        var auditLogs = LoadList<AuditLogEntry>("auditLogs", ct);
+        var rolePermissions = LoadList<RolePermission>("rolePermissions", ct);
+        var roles = LoadList<AppRole>("roles", ct);
+        var rooms = LoadList<CenterRoom>("rooms", ct);
+        var learningModules = LoadList<LearningModule>("learningModules", ct);
+        var learningModuleVersions = LoadList<LearningModuleVersion>("learningModuleVersions", ct);
+        var parentStudents = LoadList<ParentStudent>("parentStudents", ct);
+        var accountInvitations = LoadList<AccountInvitation>("accountInvitations", ct);
+        var studentOps = LoadList<StudentOpsRecord>("studentOps", ct);
+        var centerHolidays = LoadList<CenterHoliday>("centerHolidays", ct);
+        var teacherDuties = LoadList<TeacherDuty>("teacherDuties", ct);
+        var websiteGallery = LoadList<WebsiteGalleryItem>("websiteGallery", ct);
+        var staffTasks = LoadList<StaffTask>("staffTasks", ct);
+        var sessionPackages = LoadList<SessionPackage>("sessionPackages", ct);
+        var sessionHistory = LoadList<SessionHistoryEntry>("sessionHistory", ct);
+        var teacherComments = LoadList<TeacherComment>("teacherComments", ct);
+        var teacherNotes = LoadList<TeacherAdminNote>("teacherNotes", ct);
+        var studentDocuments = LoadList<StudentDocument>("studentDocuments", ct);
+        var chatGroups = LoadList<ChatGroup>("chatGroups", ct);
+        var settingsTask = _db.Collection("settings").Document("center").GetSnapshotAsync(ct);
+        await Task.WhenAll(
+            users, teacherProfiles, students, programs, classes, enrollments, enrollmentApplications,
+            attendance, reports, schedules, teacherWorkShifts, teacherRoleOptions, news, leaveRequests,
+            payments, centerExpenses, openingBalances, alerts, auditLogs, rolePermissions, roles, rooms,
+            learningModules, learningModuleVersions, parentStudents, accountInvitations, studentOps,
+            centerHolidays, teacherDuties, websiteGallery, staffTasks, sessionPackages, sessionHistory,
+            teacherComments, teacherNotes, studentDocuments, chatGroups, settingsTask);
         var db = new HirayaDatabase
         {
-            Users = await LoadList<HirayaUser>("users", ct),
-            TeacherProfiles = await LoadList<TeacherProfile>("teacherProfiles", ct),
-            Students = await LoadList<Student>("students", ct),
-            Programs = await LoadList<LearningProgram>("programs", ct),
-            Classes = await LoadList<LearningClass>("classes", ct),
-            Enrollments = await LoadList<Enrollment>("enrollments", ct),
-            EnrollmentApplications = await LoadList<EnrollmentApplication>("enrollmentApplications", ct),
-            Attendance = await LoadList<AttendanceRecord>("attendance", ct),
-            Reports = await LoadList<ProgressReport>("reports", ct),
-            Schedules = await LoadList<Schedule>("schedules", ct),
-            TeacherWorkShifts = await LoadList<TeacherWorkShift>("teacherWorkShifts", ct),
-            TeacherRoleOptions = await LoadList<TeacherRoleOption>("teacherRoleOptions", ct),
-            News = await LoadList<NewsItem>("news", ct),
-            LeaveRequests = await LoadList<LeaveRequest>("leaveRequests", ct),
-            Payments = await LoadList<Payment>("payments", ct),
-            CenterExpenses = await LoadList<CenterExpense>("centerExpenses", ct),
-            OpeningBalances = await LoadList<OpeningBalance>("openingBalances", ct),
-            Alerts = await LoadList<SystemAlert>("alerts", ct),
-            AuditLogs = await LoadList<AuditLogEntry>("auditLogs", ct),
-            RolePermissions = await LoadList<RolePermission>("rolePermissions", ct),
-            Roles = await LoadList<AppRole>("roles", ct),
-            Rooms = await LoadList<CenterRoom>("rooms", ct),
-            LearningModules = await LoadList<LearningModule>("learningModules", ct),
-            LearningModuleVersions = await LoadList<LearningModuleVersion>("learningModuleVersions", ct),
-            ParentStudents = await LoadList<ParentStudent>("parentStudents", ct),
-            AccountInvitations = await LoadList<AccountInvitation>("accountInvitations", ct),
-            StudentOps = await LoadList<StudentOpsRecord>("studentOps", ct),
-            CenterHolidays = await LoadList<CenterHoliday>("centerHolidays", ct),
-            TeacherDuties = await LoadList<TeacherDuty>("teacherDuties", ct),
-            WebsiteGallery = await LoadList<WebsiteGalleryItem>("websiteGallery", ct),
-            StaffTasks = await LoadList<StaffTask>("staffTasks", ct),
-            SessionPackages = await LoadList<SessionPackage>("sessionPackages", ct),
-            SessionHistory = await LoadList<SessionHistoryEntry>("sessionHistory", ct),
-            TeacherComments = await LoadList<TeacherComment>("teacherComments", ct),
-            TeacherNotes = await LoadList<TeacherAdminNote>("teacherNotes", ct),
-            StudentDocuments = await LoadList<StudentDocument>("studentDocuments", ct),
-            ChatGroups = await LoadList<ChatGroup>("chatGroups", ct),
+            Users = users.Result,
+            TeacherProfiles = teacherProfiles.Result,
+            Students = students.Result,
+            Programs = programs.Result,
+            Classes = classes.Result,
+            Enrollments = enrollments.Result,
+            EnrollmentApplications = enrollmentApplications.Result,
+            Attendance = attendance.Result,
+            Reports = reports.Result,
+            Schedules = schedules.Result,
+            TeacherWorkShifts = teacherWorkShifts.Result,
+            TeacherRoleOptions = teacherRoleOptions.Result,
+            News = news.Result,
+            LeaveRequests = leaveRequests.Result,
+            Payments = payments.Result,
+            CenterExpenses = centerExpenses.Result,
+            OpeningBalances = openingBalances.Result,
+            Alerts = alerts.Result,
+            AuditLogs = auditLogs.Result,
+            RolePermissions = rolePermissions.Result,
+            Roles = roles.Result,
+            Rooms = rooms.Result,
+            LearningModules = learningModules.Result,
+            LearningModuleVersions = learningModuleVersions.Result,
+            ParentStudents = parentStudents.Result,
+            AccountInvitations = accountInvitations.Result,
+            StudentOps = studentOps.Result,
+            CenterHolidays = centerHolidays.Result,
+            TeacherDuties = teacherDuties.Result,
+            WebsiteGallery = websiteGallery.Result,
+            StaffTasks = staffTasks.Result,
+            SessionPackages = sessionPackages.Result,
+            SessionHistory = sessionHistory.Result,
+            TeacherComments = teacherComments.Result,
+            TeacherNotes = teacherNotes.Result,
+            StudentDocuments = studentDocuments.Result,
+            ChatGroups = chatGroups.Result,
         };
-        var settings = await _db.Collection("settings").Document("center").GetSnapshotAsync(ct);
+        var settings = settingsTask.Result;
         if (settings.Exists)
             db.Settings = FromDoc<CenterSettings>(settings) ?? db.Settings;
         _cache = Clone(db);

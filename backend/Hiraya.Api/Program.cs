@@ -168,36 +168,20 @@ app.MapGet("/api", (IHirayaRepository repo) =>
 app.MapGet("/api/hub", (IHirayaRepository repo) =>
     Results.Json(CentralHub.Info("firestore"), JsonDefaults.Options));
 
-app.MapGet("/api/health", async (IHirayaRepository repo) =>
+app.MapGet("/api/health", (IHirayaRepository repo) =>
 {
-    try
+    var firestore = repo is FirestoreHirayaRepository;
+    return Results.Ok(new
     {
-        var firestore = repo as FirestoreHirayaRepository;
-        var ok = firestore != null ? await firestore.PingAsync() : await repo.LoadAsync() != null;
-        var payload = new
-        {
-            status = ok ? "ok" : "down",
-            hub = "hiraya-central",
-            database = firestore != null ? "firestore" : "local-file",
-            store = firestore != null ? "firebase-firestore" : "file",
-            project = firestore != null ? FirestoreHirayaRepository.ProjectId : "local",
-            enroll = "2026-10-15-text",
-            rev = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? "local",
-            clients = CentralHub.Clients,
-        };
-        return ok ? Results.Ok(payload) : Results.Json(payload, statusCode: 503);
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogWarning(ex, "Health check could not reach Cloud Firestore.");
-        return Results.Json(new
-        {
-            status = "down",
-            hub = "hiraya-central",
-            database = "firestore",
-            clients = CentralHub.Clients,
-        }, statusCode: 503);
-    }
+        status = "ok",
+        hub = "hiraya-central",
+        database = firestore ? "firestore" : "local-file",
+        store = firestore ? "firebase-firestore" : "file",
+        project = firestore ? FirestoreHirayaRepository.ProjectId : "local",
+        enroll = "2026-10-15-text",
+        rev = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? "local",
+        clients = CentralHub.Clients,
+    });
 });
 
 app.MapGet("/api/store", async (HttpRequest request, IHirayaRepository repo, ILoggerFactory logs, CancellationToken ct) =>
