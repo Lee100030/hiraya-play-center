@@ -1,30 +1,9 @@
 import type { HirayaDatabase } from '@hiraya/types';
-import { cashFlowLines, currentMonthKey, financeMonth, formatPeso, hklcTaskBoards, isAdmin, isTeacherApplication, operationsStats, removeCashFlowLine, scrubLeftoverCenterRecords } from '@hiraya/utils';
+import { cashFlowLines, centerTuitionTotals, currentMonthKey, financeMonth, formatDate, formatPeso, isAdmin, isTeacherApplication, operationsStats, removeCashFlowLine, scrubLeftoverCenterRecords } from '@hiraya/utils';
 import { FinanceCategoryChart, FinanceColumnChart, FinanceLegend, FinanceLinesDelete, StatusBadge } from '@hiraya/ui';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { Icons } from '../icons';
-import { greeting, statusLabel, type ViewId } from '../lib/views';
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function formatStamp(value?: string) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
-
-const ROLE_ICONS: Record<string, keyof typeof Icons> = {
-  'Program Director': 'programs',
-  'Administrative Director': 'reports',
-  Supervisor: 'progress',
-  'Administrative Officer': 'enrollment',
-  'Teacher — program tasks': 'teachers',
-  'Teacher — admin tasks': 'attendance',
-  Family: 'parents',
-};
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DeskHero } from '../components/DeskHero';
+import { type ViewId } from '../lib/views';
 
 export function DashboardPage({
   store,
@@ -49,85 +28,117 @@ export function DashboardPage({
       scrubbedLeftovers.current = false;
     });
   }, [store, saveStore]);
-  const today = todayKey();
   const stats = operationsStats(store);
-  const pending = store.enrollmentApplications.filter(
-    (row) =>
-      !isTeacherApplication(row) && ['pending', 'pending_review'].includes((row.status || '').toLowerCase()),
-  );
-  const teacherPending = store.enrollmentApplications.filter(
-    (row) => isTeacherApplication(row) && ['pending', 'pending_review'].includes((row.status || '').toLowerCase()),
-  );
-  const todaySessions = store.schedules.filter(
-    (row) => row.kind !== 'teacherTask' && (row.startAt || '').slice(0, 10) === today && row.status !== 'cancelled',
-  );
-  const openTasks = (store.staffTasks || []).filter((row) => !['completed', 'cancelled'].includes(row.status));
-  const overdueTasks = openTasks.filter(
-    (row) => row.status === 'overdue' || (!!row.dueAt && row.dueAt.slice(0, 10) <= today && row.status !== 'completed'),
-  );
-  const publishedNews = store.news.filter((row) => row.isPublished || row.status === 'published');
-  const draftNews = store.news.filter((row) => !row.isPublished && row.status !== 'published');
-  const unreadAlerts = (store.alerts || []).filter((row) => !row.read && (row.kind || '').toLowerCase() !== 'direct');
-  const activity = [...store.auditLogs].slice(0, 6);
+  const learnerApplications = store.enrollmentApplications.filter((row) => !isTeacherApplication(row));
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const newEnrollments = learnerApplications.filter((row) => (row.submittedAt || '').startsWith(thisMonth));
+  const collected = centerTuitionTotals(store);
+  const [sort, setSort] = useState<'date' | 'name'>('date');
+  const [page, setPage] = useState(0);
+  const [query, setQuery] = useState('');
   const [financeMonthKey, setFinanceMonthKey] = useState(currentMonthKey);
   const [financeBusy, setFinanceBusy] = useState(false);
   const book = isAdmin(role) ? financeMonth(store, financeMonthKey) : null;
   const financeLines = book ? cashFlowLines(store, book.month) : [];
 
+  const months = useMemo(() => {
+    const keys: string[] = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      keys.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+    }
+    return keys.map((key) => ({
+      key,
+      count: learnerApplications.filter((row) => (row.submittedAt || '').slice(0, 7) === key).length,
+    }));
+  }, [learnerApplications]);
+  const maxMonth = Math.max(1, ...months.map((item) => item.count));
+  const points = months
+    .map((item, index) => {
+      const x = 8 + (index / Math.max(1, months.length - 1)) * 84;
+      const y = 78 - (item.count / maxMonth) * 58;
+      return `${x},${y}`;
+    })
+    .join(' ');
+  const programBars = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of learnerApplications) {
+      const program = row.preferredProgram || 'Unspecified';
+      counts.set(program, (counts.get(program) || 0) + 1);
+    }
+    if (counts.size === 0) {
+      for (const program of store.programs) counts.set(program.name, 0);
+    }
+    const max = Math.max(1, ...counts.values());
+    return [...counts.entries()].slice(0, 6).map(([program, count]) => ({ name: program, count, pct: (count / max) * 100 }));
+  }, [learnerApplications, store.programs]);
+  const rows = useMemo(() => {
+    const needle = query.toLowerCase();
+    return learnerApplications
+      .filter((row) => `${row.studentFullname} ${row.preferredProgram} ${row.parentFullname}`.toLowerCase().includes(needle))
+      .slice()
+      .sort((a, b) =>
+        sort === 'name'
+          ? a.studentFullname.localeCompare(b.studentFullname)
+          : String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')),
+      );
+  }, [learnerApplications, query, sort]);
+  const pageSize = 5;
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pageRows = rows.slice(page * pageSize, page * pageSize + pageSize);
+
   return (
     <>
-      <header className="welcome">
-        <div>
-          <p className="page-crumb">HIRAYA / Dashboard</p>
-          <h1>{greeting(name)}</h1>
-          <p className="muted">Live snapshot of the center. Open a card to jump to that desk.</p>
-        </div>
-      </header>
+      <DeskHero
+        kicker="Overview"
+        title="Dashboard"
+        description={name ? `Welcome back, ${name}.` : 'Welcome back.'}
+        students={stats.totalStudents}
+        pending={stats.pendingEnrollments}
+        paid={collected.paid}
+      />
 
-      <section className="stat-row dash-kpis" aria-label="Center snapshot">
-        <Stat
-          icon={<Icons.students />}
-          label="Active students"
-          value={stats.totalStudents}
-          hint={`${store.students.length} on file`}
-          onClick={() => onView('students')}
-        />
-        <Stat
-          icon={<Icons.enrollment />}
-          label="Pending applications"
-          value={stats.pendingEnrollments}
-          hint="Awaiting approval"
-          onClick={() => onView('enrollment')}
-        />
-        <Stat
-          icon={<Icons.calendar />}
-          label="Sessions today"
-          value={stats.todayClasses}
-          hint="Class times on the calendar"
-          onClick={() => onView('calendar')}
-        />
-        <Stat
-          icon={<Icons.tasks />}
-          label="Open tasks"
-          value={stats.pendingTasks}
-          hint={overdueTasks.length ? `${overdueTasks.length} due or overdue` : 'Assigned to teachers'}
-          onClick={() => onView('tasks')}
-        />
-        <Stat
-          icon={<Icons.sessions />}
-          label="Session packages"
-          value={stats.sessionPackages}
-          hint={`${stats.activeSessionPackages} active`}
-          onClick={() => onView('sessions')}
-        />
-        <Stat
-          icon={<Icons.announcements />}
-          label="Announcements"
-          value={publishedNews.length}
-          hint={draftNews.length ? `${draftNews.length} draft${draftNews.length === 1 ? '' : 's'} not published` : 'Published'}
-          onClick={() => onView('announcements')}
-        />
-      </section>
+      <div className="kpi-grid">
+        <button type="button" className="kpi-card" onClick={() => onView('students')}>
+          <div className="kpi-icon" aria-hidden="true">☺</div>
+          <p className="kpi-label">Total Students</p>
+          <strong className="kpi-value">{stats.totalStudents}</strong>
+        </button>
+        <button type="button" className="kpi-card" onClick={() => onView('enrollment')}>
+          <div className="kpi-icon" aria-hidden="true">✎</div>
+          <p className="kpi-label">New Enrollments</p>
+          <strong className="kpi-value">{newEnrollments.length || learnerApplications.length}</strong>
+        </button>
+        <button type="button" className="kpi-card" onClick={() => onView('enrollment')}>
+          <div className="kpi-icon" aria-hidden="true">◷</div>
+          <p className="kpi-label">Pending Applications</p>
+          <strong className="kpi-value">{stats.pendingEnrollments}</strong>
+          {stats.pendingTeacherApplications > 0 ? (
+            <p className="kpi-label">
+              {stats.pendingTeacherApplications} teacher application{stats.pendingTeacherApplications === 1 ? '' : 's'} in Enrollment
+            </p>
+          ) : null}
+        </button>
+        <button type="button" className="kpi-card" onClick={() => onView('payments')}>
+          <div className="kpi-icon" aria-hidden="true">₱</div>
+          <p className="kpi-label">Total paid</p>
+          <strong className="kpi-value">₱{collected.paid.toLocaleString()}</strong>
+          <p className="kpi-label">Outstanding balance ₱{collected.outstanding.toLocaleString()}</p>
+        </button>
+      </div>
+
+      <div className="quick-actions">
+        <button type="button" className="dash-action dash-action-primary" onClick={() => onView('students')}>
+          Add Student
+        </button>
+        <button type="button" className="dash-action" onClick={() => onView('programs')}>
+          Add Program
+        </button>
+        <button type="button" className="dash-action" onClick={() => onView('announcements')}>
+          Send Announcement
+        </button>
+      </div>
 
       {book ? (
         <section className="finance-board" aria-label="Center income and expenses">
@@ -192,162 +203,126 @@ export function DashboardPage({
               <FinanceCategoryChart rows={book.categories} />
             </article>
           </div>
-          <button type="button" className="linkish" onClick={() => onView('finance')}>
+          <button type="button" className="dash-action" onClick={() => onView('finance')}>
             Open Center Cash flow
           </button>
         </section>
       ) : null}
 
-      <div className="dash-section">
-        <h2>Needs attention</h2>
-        <p>Rows open the matching management page.</p>
-      </div>
-      <section className="split">
-        <article className="panel dash-panel">
-          <h2>Today’s sessions</h2>
-          {todaySessions.length === 0 ? (
-            <p className="panel-empty">No class sessions on the calendar for today.</p>
-          ) : (
-            <ul className="feed-list">
-              {todaySessions.slice(0, 6).map((row) => (
-                <li key={row.scheduleId}>
-                  <button type="button" className="dash-link" onClick={() => onView('calendar')}>
-                    <span>
-                      <strong>{row.title || 'Class session'}</strong>
-                      <small>{row.room || 'No room'} · {statusLabel(row.status)}</small>
-                    </span>
-                    <Icons.chevronRight />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </article>
-        <article className="panel dash-panel">
-          <h2>Pending applications</h2>
-          {teacherPending.length > 0 ? (
-            <p className="muted">
-              <button type="button" className="linkish" onClick={() => onView('teacherApplications')}>
-                {teacherPending.length} teacher application{teacherPending.length === 1 ? '' : 's'} waiting
-              </button>
-            </p>
-          ) : null}
-          {pending.length === 0 ? (
-            <p className="panel-empty">No student applications waiting for approval.</p>
-          ) : (
-            <ul className="feed-list">
-              {pending.slice(0, 6).map((row) => (
-                <li key={row.applicationId}>
-                  <button type="button" className="dash-link" onClick={() => onView('enrollment')}>
-                    <span>
-                      <strong>{row.studentFullname}</strong>
-                      <small className="row-meta">
-                        {row.preferredProgram || 'No program'}
-                        <StatusBadge status={statusLabel(row.status)} />
-                      </small>
-                    </span>
-                    <Icons.chevronRight />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </article>
-      </section>
-      <section className="split">
-        <article className="panel dash-panel">
-          <h2>Recent activity</h2>
-          {activity.length === 0 ? (
-            <p className="panel-empty">No recent center activity yet.</p>
-          ) : (
-            <ul className="feed-list">
-              {activity.map((row) => (
-                <li key={row.auditId}>
-                  <div>
-                    <strong>{row.summary || row.action}</strong>
-                    <span>{row.actorName || row.module}</span>
+      <div className="chart-grid">
+        <section className="panel chart-panel">
+          <h2>Enrollment trends</h2>
+          <div className="chart-body">
+            <svg
+              className="trend-chart"
+              viewBox="0 0 100 92"
+              preserveAspectRatio="none"
+              role="img"
+              aria-label="Enrollment applications over six months"
+            >
+              <polyline fill="none" stroke="#c9a227" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" points={points} />
+              {months.map((item, index) => {
+                const x = 8 + (index / Math.max(1, months.length - 1)) * 84;
+                const y = 78 - (item.count / maxMonth) * 58;
+                return <circle key={item.key} cx={x} cy={y} r="1.8" fill="#14301f" />;
+              })}
+            </svg>
+          </div>
+          <div className="chart-legend">
+            {months.map((item) => (
+              <span key={item.key}>
+                {item.key.slice(5)} · {item.count}
+              </span>
+            ))}
+          </div>
+        </section>
+        <section className="panel chart-panel">
+          <h2>Program distribution</h2>
+          <ul className="bar-chart">
+            {programBars.length === 0 ? (
+              <li>No program data yet.</li>
+            ) : (
+              programBars.map((item) => (
+                <li key={item.name}>
+                  <span className="bar-name">{item.name}</span>
+                  <div className="bar-track" aria-hidden="true">
+                    <i style={{ width: `${Math.max(item.pct, 4)}%` }} />
                   </div>
-                  <time dateTime={row.createdAt}>{formatStamp(row.createdAt)}</time>
+                  <em className="bar-count">{item.count}</em>
                 </li>
-              ))}
-            </ul>
-          )}
-        </article>
-        <article className="panel dash-panel">
-          <h2>Unread alerts</h2>
-          {unreadAlerts.length === 0 ? (
-            <p className="panel-empty">No unread alerts.</p>
-          ) : (
-            <ul className="feed-list">
-              {unreadAlerts.slice(0, 6).map((row) => (
-                <li key={row.alertId}>
-                  <button type="button" className="dash-link" onClick={() => onView('notifications')}>
-                    <span>
-                      <strong>{row.title || row.kind}</strong>
-                      <small>{formatStamp(row.createdAt)}</small>
-                    </span>
-                    <Icons.chevronRight />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </article>
-      </section>
-
-      <div className="dash-section">
-        <h2>Role reference</h2>
-        <p>Workbook duties by role. These notes are not links.</p>
+              ))
+            )}
+          </ul>
+        </section>
       </div>
-      <section className="role-grid">
-        {hklcTaskBoards(role).map((board) => {
-          const iconKey = ROLE_ICONS[board.owner] || 'dashboard';
-          const Icon = Icons[iconKey];
-          return (
-            <article className="panel role-card" key={board.owner}>
-              <header className="role-card-head">
-                <span className="stat-icon">
-                  <Icon />
-                </span>
-                <div>
-                  <h2>{board.owner}</h2>
-                  <p>{board.items.length} duties</p>
-                </div>
-              </header>
-              <ul className="role-list">
-                {board.items.map((item) => (
-                  <li key={item}>{item}</li>
+
+      <section className="panel activity-card">
+        <div className="toolbar">
+          <h2>Recent activity</h2>
+          <input
+            className="hlc-input"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setPage(0);
+            }}
+            placeholder="Filter enrollments and messages"
+          />
+        </div>
+        {pageRows.length === 0 ? (
+          <p>No enrollment applications yet.</p>
+        ) : (
+          <div className="admin-table-wrap">
+            <table className="hlc-table striped">
+              <thead>
+                <tr>
+                  <th>
+                    <button type="button" onClick={() => setSort('name')}>
+                      Student
+                    </button>
+                  </th>
+                  <th>Program</th>
+                  <th>
+                    <button type="button" onClick={() => setSort('date')}>
+                      Submitted
+                    </button>
+                  </th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((row) => (
+                  <tr key={row.applicationId}>
+                    <td>{row.studentFullname}</td>
+                    <td>{row.preferredProgram}</td>
+                    <td>{formatDate(row.submittedAt) || <StatusBadge status="" />}</td>
+                    <td>
+                      <StatusBadge status={row.status} />
+                    </td>
+                    <td>
+                      <button type="button" className="linkish" onClick={() => onView('enrollment')} aria-label={`View ${row.studentFullname}`}>
+                        View
+                      </button>
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            </article>
-          );
-        })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="pager">
+          <button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>
+            Previous
+          </button>
+          <span>
+            Page {page + 1} of {pageCount}
+          </span>
+          <button type="button" disabled={page + 1 >= pageCount} onClick={() => setPage((value) => value + 1)}>
+            Next
+          </button>
+        </div>
       </section>
     </>
-  );
-}
-
-function Stat({
-  icon,
-  label,
-  value,
-  hint,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: number;
-  hint: string;
-  onClick: () => void;
-}) {
-  return (
-    <button type="button" className="stat-card" onClick={onClick}>
-      <span className="stat-icon">{icon}</span>
-      <div className="stat-copy">
-        <p>{label}</p>
-        <strong>{value.toLocaleString('en-PH')}</strong>
-        <small>{hint}</small>
-      </div>
-    </button>
   );
 }

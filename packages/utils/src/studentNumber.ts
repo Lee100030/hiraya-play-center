@@ -1,9 +1,20 @@
 import type { HirayaDatabase, Student } from '@hiraya/types';
 
+function isRecordId(value: string, studentId?: string | null) {
+  const text = value.trim();
+  if (!text) return true;
+  const id = (studentId || '').trim();
+  if (id && text.toLowerCase() === id.toLowerCase()) return true;
+  return /^stu_[a-z0-9]+$/i.test(text);
+}
+
+/** Printable center number. The internal student id is not this number. */
 export function studentNumber(student?: Pick<Student, 'qrCode' | 'studentId'> | null) {
   const qr = (student?.qrCode || '').trim();
-  if (qr) return /^HIRAYA-/i.test(qr) ? qr.replace(/^HIRAYA-/i, '') : qr;
-  return (student?.studentId || '').trim();
+  if (!qr) return '';
+  const number = (/^HIRAYA-/i.test(qr) ? qr.replace(/^HIRAYA-/i, '') : qr).trim();
+  if (isRecordId(number, student?.studentId)) return '';
+  return number;
 }
 
 export function studentQrFromNumber(value?: string | null) {

@@ -156,8 +156,8 @@ export function Shell({
           <img src="./images/hiraya-crest.png" alt="" width={36} height={36} />
           {!collapsed ? (
             <div>
-              <strong>HIRAYA</strong>
-              <span>Learning Center</span>
+            <strong>HIRAYA</strong>
+            <span>Operations</span>
             </div>
           ) : null}
         </div>

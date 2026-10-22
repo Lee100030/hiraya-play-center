@@ -1,5 +1,5 @@
 import type { HirayaDatabase, HirayaUser, Student } from '@hiraya/types';
-import { addLearningProgram, compareStudentNumbers, confirmStudentPresentToday, displayName, downloadStudentRecord, isStudentHereToday, laneLabel, nextStudentNumber, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentNumber, studentNumberTaken, studentPaymentBalance, studentQrFromNumber, studentTuitionFee, upsertStudentBalance, upsertStudentSessions, type ManagementLaneId } from '@hiraya/utils';
+import { addLearningProgram, compareStudentNumbers, confirmStudentPresentToday, displayName, downloadStudentRecord, isAdmin, isStudentHereToday, laneLabel, nextStudentNumber, paymentBalanceLabel, removeStudentLinkedRecords, resolveStudentProgramValue, sessionLeftFor, sessionLeftLabel, studentDayAttendance, studentDisplay, studentInLane, studentNumber, studentNumberTaken, studentPaymentBalance, studentQrFromNumber, studentTuitionFee, upsertStudentBalance, upsertStudentSessions, type ManagementLaneId } from '@hiraya/utils';
 import { Field, Input, ProgramSpecialtySelect, Select, Button } from '@hiraya/ui';
 import { FormEvent, useState } from 'react';
 import { DirectMessageModal } from '../components/DirectMessageModal';
@@ -163,7 +163,12 @@ export function StudentsPage({
     const birthdate = String(form.get('birthdate') || '');
     const parentId = String(form.get('parentId') || '');
     const slot = String(form.get('slot') || '').trim();
-    const typedNumber = String(form.get('studentNumber') || '').trim();
+    const rawNumber = form.get('studentNumber');
+    const existingNumber = studentNumber(current);
+    const chosenNumber =
+      rawNumber == null
+        ? existingNumber || nextStudentNumber()
+        : String(rawNumber).trim() || nextStudentNumber();
     const next = studentRecord({
       ...(current || {}),
       firstName: String(form.get('firstName') || ''),
@@ -178,7 +183,7 @@ export function StudentsPage({
       parentId,
       status: String(form.get('status') || 'active'),
       notes: String(form.get('notes') || ''),
-      qrCode: studentQrFromNumber(typedNumber || studentNumber(current) || nextStudentNumber()),
+      qrCode: studentQrFromNumber(chosenNumber),
       gradeLevel: resolveStudentProgramValue(
         String(form.get('specialty') || form.get('program') || programChoice || current?.gradeLevel || ''),
         store,
@@ -615,6 +620,15 @@ export function StudentsPage({
             />
           </FormSection>
           <FormSection title="Student info">
+            {isAdmin(actor?.role) ? (
+              <Field label="Student number" optional hint="Type or change this number. Leave it blank and save to assign a new one.">
+                <Input name="studentNumber" defaultValue={studentNumber(current)} placeholder="Example: 2026-014" autoComplete="off" />
+              </Field>
+            ) : (
+              <Field label="Student number">
+                <Input value={studentNumber(current) || 'Not assigned'} readOnly />
+              </Field>
+            )}
             <Field label="Last name" required>
               <Input name="lastName" defaultValue={current?.lastName} required />
             </Field>
@@ -623,9 +637,6 @@ export function StudentsPage({
             </Field>
             <Field label="Middle name" optional>
               <Input name="middleName" defaultValue={current?.middleName} />
-            </Field>
-            <Field label="Student number" optional hint="You can type or change this. Leave blank to assign on save.">
-              <Input name="studentNumber" defaultValue={studentNumber(current)} placeholder="Assigned on save" />
             </Field>
             <Field label="Boy / Girl" optional>
               <Select name="gender" defaultValue={current?.gender || ''}>

@@ -98,7 +98,7 @@ export default function ParentsPage() {
   }
 
   async function remove(parent: HirayaUser) {
-    if (!window.confirm(`Permanently delete ${displayName(parent)}? Linked children stay on file.`)) return;
+    if (!window.confirm(`Remove ${displayName(parent)} from the center? Linked children stay on file. The same person can enroll again.`)) return;
     await api.deleteParent(parent.userId);
     await refresh();
   }

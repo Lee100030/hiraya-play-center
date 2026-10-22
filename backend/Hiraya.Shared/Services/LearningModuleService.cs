@@ -14,11 +14,13 @@ public class LearningModuleService
 {
     private readonly IHirayaRepository _repository;
     private readonly LearningModuleStorage _storage;
+    private readonly ILearningModuleBytes _bytes;
 
-    public LearningModuleService(IHirayaRepository repository, LearningModuleStorage storage)
+    public LearningModuleService(IHirayaRepository repository, LearningModuleStorage storage, ILearningModuleBytes? bytes = null)
     {
         _repository = repository;
         _storage = storage;
+        _bytes = bytes ?? new MissingModuleBytes();
     }
 
     public static IEnumerable<LearningModule> Visible(HirayaDatabase db, HirayaUser user, bool includeHidden = false)
@@ -57,6 +59,9 @@ public class LearningModuleService
             return false;
         if (module.Status != LearningModuleStatuses.Published)
             return false;
+        // The phone list shows a published module with no class assignment to every teacher.
+        if (module.ClassIds.Count == 0)
+            return true;
         var classIds = ViewerClassIds(db, user);
         var programIds = db.Classes.Where(c => classIds.Contains(c.ClassId)).Select(c => c.ProgramId).ToHashSet();
         return IsAssignedToTeacher(module, classIds, programIds);
@@ -149,6 +154,7 @@ public class LearningModuleService
             db.LearningModuleVersions.RemoveAll(v => v.ModuleId == moduleId);
             db.LearningModules.RemoveAll(m => m.ModuleId == moduleId);
             _storage.DeleteFolder(moduleId);
+            await _bytes.DeleteModuleAsync(moduleId);
             AuditService.Append(db, actor, AuditModules.LearningModules, "delete", "module", moduleId,
                 $"{actor.Fullname} deleted draft module “{module.Title}”.");
             await Task.CompletedTask;
@@ -168,7 +174,12 @@ public class LearningModuleService
             ?? db.LearningModuleVersions.FirstOrDefault(v => v.ModuleId == moduleId);
 
         var relative = version?.FilePath ?? module.FilePath;
-        var bytes = _storage.Read(relative) ?? throw new InvalidOperationException("The file is not available.");
+        var versionKey = version?.VersionId;
+        if (string.IsNullOrWhiteSpace(versionKey))
+            versionKey = module.CurrentVersionId;
+        var bytes = await _bytes.ReadAsync(module.ModuleId, versionKey ?? "") ?? _storage.Read(relative);
+        if (bytes is null || bytes.Length == 0)
+            throw new InvalidOperationException("The file is not available.");
         var name = version?.FileName ?? module.FileName;
         var ext = Path.GetExtension(name);
 
@@ -296,6 +307,7 @@ public class LearningModuleService
 
         var versionId = IdFactory.New("mver");
         var relative = await _storage.SaveAsync(module.ModuleId, versionId, fileName, bytes);
+        await _bytes.SaveAsync(module.ModuleId, versionId, bytes);
         foreach (var old in db.LearningModuleVersions.Where(v => v.ModuleId == module.ModuleId))
             old.IsCurrent = false;
 

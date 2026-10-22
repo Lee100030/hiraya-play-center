@@ -231,9 +231,6 @@ public class StaffService
         var profileId = string.IsNullOrWhiteSpace(input.ProfileId) ? IdFactory.New("tprof") : input.ProfileId.Trim();
         var existing = db.Users.FirstOrDefault(u => u.UserId == userId);
 
-        if (RemovedAccounts.BlocksIdentity(db, userId, email, input.PersonalEmail ?? existing?.PersonalEmail))
-            throw new InvalidOperationException("That account was permanently deleted.");
-
         if (db.Users.Any(u =>
                 u.UserId != userId &&
                 string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)))
@@ -357,8 +354,6 @@ public class StaffService
                     StringComparison.Ordinal));
         if (existing != null)
         {
-            if (RemovedAccounts.BlocksIdentity(db, existing.UserId, existing.Email, existing.PersonalEmail))
-                return null;
             if (string.IsNullOrWhiteSpace(existing.Phone))
                 existing.Phone = (app.ParentPhone ?? "").Trim();
             if (string.IsNullOrWhiteSpace(existing.PersonalEmail) && mail.Contains('@') && !mail.EndsWith("@hiraya.local", StringComparison.OrdinalIgnoreCase))
@@ -371,9 +366,6 @@ public class StaffService
                 existing.Position = roleWanted;
             return existing;
         }
-
-        if (RemovedAccounts.BlocksImport(db, linked, mail, name))
-            return null;
 
         var password = InvitationTokens.NewToken();
         if (password.Length < PasswordRules.MinimumLength)
@@ -457,7 +449,6 @@ public class StaffService
 
         var name = user.Fullname;
         RetireApprovedApplications(db, user);
-        RemovedAccounts.Remember(db, user);
         db.Users.RemoveAll(u => u.UserId == userId);
         db.TeacherProfiles.RemoveAll(p => p.UserId == userId);
         db.TeacherWorkShifts.RemoveAll(s => s.TeacherId == userId);

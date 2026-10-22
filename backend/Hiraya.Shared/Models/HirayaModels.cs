@@ -808,7 +808,7 @@ public class CenterSettings
     /// <summary>Last phone-app install link included in approval emails.</summary>
     public string MobileApkUrl { get; set; } = "";
     public string UpdatedAt { get; set; } = "";
-    /// <summary>User ids that were permanently deleted. A later save must not put these accounts back.</summary>
+    /// <summary>Older deleted-account ids. Kept so an old save does not erase the list. It does not block a new enrollment or teacher application.</summary>
     public string RemovedUserIds { get; set; } = "";
 }
 

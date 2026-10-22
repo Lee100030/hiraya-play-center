@@ -114,7 +114,7 @@ export default function NotificationsTab() {
         ) : null}
 
         {teacher ? (
-          news.length === 0 ? (
+          news.length === 0 && rows.length === 0 ? (
             <EmptyState
               icon="megaphone-outline"
               title="No announcements yet"
@@ -123,29 +123,54 @@ export default function NotificationsTab() {
               onAction={() => router.push('/(tabs)/profile')}
             />
           ) : (
-            <Enter index={1} style={styles.list}>
-              {news.map((item) => (
-                <Pressable
-                  key={item.newsId}
-                  onPress={() => setOpenNews(item)}
-                  style={styles.row}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Read announcement ${item.title}`}
-                >
-                  <View style={[styles.badge, { backgroundColor: colors.goldSoft }]}>
-                    <Ionicons name="megaphone-outline" size={18} color={colors.green} />
-                  </View>
-                  <View style={styles.rowBody}>
-                    <Body style={styles.rowTitle} numberOfLines={2}>
-                      {item.title}
-                    </Body>
-                    <Caption numberOfLines={2}>{item.body}</Caption>
-                    <Caption style={{ marginTop: 4, color: colors.green }}>Tap to read</Caption>
-                  </View>
-                  <Caption style={styles.time}>{formatWhen(item.publishedAt)}</Caption>
+            <>
+              {news.length > 0 ? (
+                <Enter index={1} style={styles.list}>
+                  {news.map((item) => (
+                    <Pressable
+                      key={item.newsId}
+                      onPress={() => setOpenNews(item)}
+                      style={styles.row}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Read announcement ${item.title}`}
+                    >
+                      <View style={[styles.badge, { backgroundColor: colors.goldSoft }]}>
+                        <Ionicons name="megaphone-outline" size={18} color={colors.green} />
+                      </View>
+                      <View style={styles.rowBody}>
+                        <Body style={styles.rowTitle} numberOfLines={2}>
+                          {item.title}
+                        </Body>
+                        <Caption numberOfLines={2}>{item.body}</Caption>
+                        <Caption style={{ marginTop: 4, color: colors.green }}>Tap to read</Caption>
+                      </View>
+                      <Caption style={styles.time}>{formatWhen(item.publishedAt)}</Caption>
+                    </Pressable>
+                  ))}
+                </Enter>
+              ) : null}
+              {unreadCount ? (
+                <Pressable onPress={() => void markRead(rows.map((item) => item.alertId))} style={styles.markAll}>
+                  <Caption style={styles.markAllText}>Mark all as read</Caption>
                 </Pressable>
-              ))}
-            </Enter>
+              ) : null}
+              {rows.length > 0 ? (
+                <Enter index={2} style={styles.list}>
+                  {rows.map((item) => (
+                    <AlertRow
+                      key={item.alertId}
+                      item={item}
+                      read={item.read || localRead.includes(item.alertId)}
+                      onRead={() => {
+                        setOpenAlert(item);
+                        void markRead([item.alertId]);
+                      }}
+                      onDismiss={() => setHidden((current) => [...current, item.alertId])}
+                    />
+                  ))}
+                </Enter>
+              ) : null}
+            </>
           )
         ) : (
           <>

@@ -126,7 +126,7 @@ export function ParentsPage({
     const names = picked.map(displayName).join(', ');
     if (
       !window.confirm(
-        `Permanently delete ${picked.length === 1 ? names : `${picked.length} parent accounts`}? Linked children stay on file but lose this parent link. This cannot be undone.`,
+        `Remove ${picked.length === 1 ? names : `${picked.length} parent accounts`} from the center? Linked children stay on file but lose this parent link. The same person can enroll again.`,
       )
     ) {
       return false;

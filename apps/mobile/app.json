@@ -2,7 +2,7 @@
   "expo": {
     "name": "HIRAYA",
     "slug": "hiraya-learning-center",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/hiraya-crest.png",
     "scheme": "hiraya",
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "com.hiraya.learningcenter",
-      "versionCode": 8,
+      "versionCode": 9,
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {

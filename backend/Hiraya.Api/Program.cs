@@ -7,20 +7,15 @@ using Hiraya.Shared.Services.Auth;
 using Hiraya.Shared.Security;
 using Hiraya.Shared.Services.Firebase;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 var useFirestore = FirestoreHirayaRepository.IsConfigured();
-var dbProvider = HirayaDb.ResolveProvider(builder.Configuration);
-var connection = useFirestore
-    ? ""
-    : HirayaDb.ApplyPassword(HirayaDb.ResolveConnection(builder.Configuration, dbProvider), builder.Configuration);
-if (builder.Environment.IsProduction() && !useFirestore)
+if (!useFirestore && !builder.Environment.IsDevelopment())
 {
     throw new InvalidOperationException(
-        "Set FIREBASE_SERVICE_ACCOUNT (Firebase service-account JSON) so Hiraya.Api can use Cloud Firestore.");
+        "Hiraya keeps one database, Cloud Firestore, for the website, desktop, and phone. Set FIREBASE_SERVICE_ACCOUNT to the Firebase service-account JSON for project hiraya-kids-learning.");
 }
 var listenPort = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrWhiteSpace(listenPort))
@@ -40,11 +35,6 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     options.SerializerOptions.PropertyNameCaseInsensitive = true;
 });
-if (!useFirestore)
-{
-    builder.Services.AddDbContextFactory<HirayaLearningCenterDbContext>(options =>
-        HirayaDb.Configure(options, dbProvider, connection));
-}
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = 100L * 1024 * 1024;
@@ -79,10 +69,7 @@ builder.Services.AddSingleton(new SessionTokenOptions
 {
     Secret = string.IsNullOrWhiteSpace(sessionSecret) ? SessionTokens.DevelopmentSecret : sessionSecret
 });
-if (useFirestore)
-    builder.Services.AddSingleton<IRevokedSessionStore, MemoryRevokedSessionStore>();
-else
-    builder.Services.AddSingleton<IRevokedSessionStore, RevokedSessionStore>();
+builder.Services.AddSingleton<IRevokedSessionStore, MemoryRevokedSessionStore>();
 builder.Services.AddSingleton(sp =>
 {
     try
@@ -98,9 +85,15 @@ builder.Services.AddSingleton<PublicRequestThrottle>();
 builder.Services.AddSingleton<SensitiveActionCodes>();
 builder.Services.AddSingleton<LoginOtpChallenges>();
 if (useFirestore)
+{
     builder.Services.AddSingleton<IHirayaRepository, FirestoreHirayaRepository>();
+}
 else
-    builder.Services.AddSingleton<IHirayaRepository, EfHirayaRepository>();
+{
+    builder.Services.Configure<FirebaseOptions>(options => options.UseFirebase = false);
+    builder.Services.AddSingleton<FirebaseCredentialProvider>();
+    builder.Services.AddSingleton<IHirayaRepository, HirayaRepository>();
+}
 builder.Services.AddSingleton<PortalAuthService>();
 builder.Services.AddSingleton<AccountService>();
 builder.Services.AddSingleton<ProfilePhotoService>();
@@ -112,6 +105,7 @@ builder.Services.Configure<HirayaSmtpOptions>(builder.Configuration.GetSection(H
 builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 builder.Services.AddSingleton<ParentAccountService>();
 builder.Services.AddSingleton<LearningModuleStorage>();
+builder.Services.AddSingleton<ILearningModuleBytes, FirestoreModuleFileStore>();
 builder.Services.AddSingleton<LearningModuleService>();
 builder.Services.AddSingleton<WebsiteMediaStorage>();
 builder.Services.AddSingleton<WebsiteContentService>();
@@ -155,7 +149,7 @@ app.UseExceptionHandler(err =>
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await context.Response.WriteAsJsonAsync(new
             {
-                error = DatabaseUnavailableMessage(dbProvider)
+                error = DatabaseUnavailableMessage()
             });
             return;
         }
@@ -170,52 +164,37 @@ app.UseExceptionHandler(err =>
 });
 
 app.MapGet("/api", (IHirayaRepository repo) =>
-    Results.Json(CentralHub.Info(repo.UsingFirebase ? "firestore" : "neondb"), JsonDefaults.Options));
+    Results.Json(CentralHub.Info("firestore"), JsonDefaults.Options));
 app.MapGet("/api/hub", (IHirayaRepository repo) =>
-    Results.Json(CentralHub.Info(repo.UsingFirebase ? "firestore" : "neondb"), JsonDefaults.Options));
+    Results.Json(CentralHub.Info("firestore"), JsonDefaults.Options));
 
-app.MapGet("/api/health", async (IHirayaRepository repo, IServiceProvider services) =>
+app.MapGet("/api/health", async (IHirayaRepository repo) =>
 {
     try
     {
-        if (repo.UsingFirebase)
+        var firestore = repo as FirestoreHirayaRepository;
+        var ok = firestore != null ? await firestore.PingAsync() : await repo.LoadAsync() != null;
+        var payload = new
         {
-            var ok = repo is FirestoreHirayaRepository fs && await fs.PingAsync();
-            var payload = new
-            {
-                status = ok ? "ok" : "down",
-                hub = "hiraya-central",
-                database = "firestore",
-                store = "firebase-firestore",
-                enroll = "2026-10-15-text",
-                rev = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? "local",
-                clients = CentralHub.Clients,
-            };
-            return ok ? Results.Ok(payload) : Results.Json(payload, statusCode: 503);
-        }
-
-        var factory = services.GetRequiredService<IDbContextFactory<HirayaLearningCenterDbContext>>();
-        await using var db = await factory.CreateDbContextAsync();
-        var connected = await db.Database.CanConnectAsync();
-        var neon = new
-        {
-            status = connected ? "ok" : "down",
+            status = ok ? "ok" : "down",
             hub = "hiraya-central",
-            database = DatabaseName(db.Database.GetConnectionString()),
-            store = "neon-postgres",
+            database = firestore != null ? "firestore" : "local-file",
+            store = firestore != null ? "firebase-firestore" : "file",
+            project = firestore != null ? FirestoreHirayaRepository.ProjectId : "local",
             enroll = "2026-10-15-text",
+            rev = Environment.GetEnvironmentVariable("RENDER_GIT_COMMIT") ?? "local",
             clients = CentralHub.Clients,
         };
-        return connected ? Results.Ok(neon) : Results.Json(neon, statusCode: 503);
+        return ok ? Results.Ok(payload) : Results.Json(payload, statusCode: 503);
     }
     catch (Exception ex)
     {
-        app.Logger.LogWarning(ex, "Health check could not reach the center database.");
+        app.Logger.LogWarning(ex, "Health check could not reach Cloud Firestore.");
         return Results.Json(new
         {
             status = "down",
             hub = "hiraya-central",
-            database = "",
+            database = "firestore",
             clients = CentralHub.Clients,
         }, statusCode: 503);
     }
@@ -234,7 +213,7 @@ app.MapGet("/api/store", async (HttpRequest request, IHirayaRepository repo, ILo
     catch (Exception ex)
     {
         logs.CreateLogger("Hiraya.Api").LogError(ex, "Failed loading HLCMS store.");
-        return Results.Json(new { error = RecordsUnavailableMessage(dbProvider, "loaded") }, statusCode: StatusCodes.Status500InternalServerError);
+        return Results.Json(new { error = RecordsUnavailableMessage("loaded") }, statusCode: StatusCodes.Status500InternalServerError);
     }
 });
 
@@ -730,7 +709,7 @@ app.MapPost("/api/store/patch", async (HttpRequest request, StorePatchRequest? b
     catch (Exception ex)
     {
         logs.CreateLogger("Hiraya.Api").LogError(ex, "Failed saving HLCMS store patch.");
-        return Results.Json(new { error = RecordsUnavailableMessage(dbProvider, "saved") }, statusCode: StatusCodes.Status500InternalServerError);
+        return Results.Json(new { error = RecordsUnavailableMessage("saved") }, statusCode: StatusCodes.Status500InternalServerError);
     }
 });
 
@@ -770,7 +749,7 @@ app.MapPut("/api/store", async (HttpRequest request, HirayaDatabase incoming, IH
     catch (Exception ex)
     {
         logs.CreateLogger("Hiraya.Api").LogError(ex, "Failed saving HLCMS store.");
-        return Results.Json(new { error = RecordsUnavailableMessage(dbProvider, "saved") }, statusCode: StatusCodes.Status500InternalServerError);
+        return Results.Json(new { error = RecordsUnavailableMessage("saved") }, statusCode: StatusCodes.Status500InternalServerError);
     }
 });
 
@@ -785,25 +764,11 @@ EnrollmentApi.Map(app);
 PaymentApi.Map(app);
 FeedbackApi.Map(app);
 
-if (!useFirestore)
-{
-    try
-    {
-        await using var scope = app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<IDbContextFactory<HirayaLearningCenterDbContext>>();
-        await using var context = await db.CreateDbContextAsync();
-        await DatabaseInitializer.InitializeAsync(context, app.Logger);
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogError(ex, "{Provider} initialization failed. Check the connection string and that the database server is running.",
-            dbProvider == HirayaDb.SqlServer ? "SQL Server" : "PostgreSQL");
-    }
-}
+var warmRepo = app.Services.GetRequiredService<IHirayaRepository>();
+if (warmRepo is FirestoreHirayaRepository)
+    app.Logger.LogInformation("Hiraya.Api is using Cloud Firestore project {ProjectId}.", FirestoreHirayaRepository.ProjectId);
 else
-{
-    app.Logger.LogInformation("Hiraya.Api is using Cloud Firestore project hiraya-kids-learning.");
-    var warmRepo = app.Services.GetRequiredService<IHirayaRepository>();
+    app.Logger.LogWarning("Hiraya.Api is using the local file store. Set FIREBASE_SERVICE_ACCOUNT to use the live Cloud Firestore database.");
     app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
     {
         var started = DateTime.UtcNow;
@@ -817,7 +782,6 @@ else
             app.Logger.LogWarning(ex, "Could not warm the Firestore store cache; the first request will load it.");
         }
     }));
-}
 
 var keepAwakeUrls = (Environment.GetEnvironmentVariable("KEEP_AWAKE_URLS")
         ?? (Environment.GetEnvironmentVariable("RENDER") is null ? "" : "https://hirayakidslearningcenter.com/api/health"))
@@ -855,49 +819,24 @@ if (keepAwakeUrls.Length > 0)
 
 app.Run();
 
-static string DatabaseUnavailableMessage(string provider)
+static string DatabaseUnavailableMessage()
 {
-    _ = provider;
-    return FirestoreHirayaRepository.IsConfigured()
-        ? "The learning center database is not available. Confirm Cloud Firestore is reachable and try again."
-        : "The learning center database is not available. Confirm Neon PostgreSQL is reachable and try again.";
+    return "The learning center database is not available. Confirm Cloud Firestore is reachable and try again.";
 }
 
-static string RecordsUnavailableMessage(string provider, string action)
+static string RecordsUnavailableMessage(string action)
 {
-    _ = provider;
-    var store = FirestoreHirayaRepository.IsConfigured() ? "Cloud Firestore" : "Neon PostgreSQL";
-    return $"Center records could not be {action}. Confirm {store} is reachable and try again.";
-}
-
-static string DatabaseName(string? connection)
-{
-    if (string.IsNullOrWhiteSpace(connection))
-        return "";
-    foreach (var part in connection.Split(';', StringSplitOptions.RemoveEmptyEntries))
-    {
-        var split = part.Split('=', 2);
-        if (split.Length != 2)
-            continue;
-        if (split[0].Equals("Database", StringComparison.OrdinalIgnoreCase) ||
-            split[0].Equals("Initial Catalog", StringComparison.OrdinalIgnoreCase))
-            return split[1].Trim();
-    }
-    return "";
+    return $"Center records could not be {action}. Confirm Cloud Firestore is reachable and try again.";
 }
 
 static bool IsDatabaseError(Exception? ex)
 {
     for (var cur = ex; cur != null; cur = cur.InnerException)
     {
-        if (cur is DbUpdateException)
-            return true;
         var name = cur.GetType().FullName ?? "";
-        if (name.Contains("MySql", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("Npgsql", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("Postgres", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("SqlClient", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("SqlException", StringComparison.OrdinalIgnoreCase))
+        if (name.Contains("Firestore", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Grpc", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Google.Apis", StringComparison.OrdinalIgnoreCase))
             return true;
     }
 

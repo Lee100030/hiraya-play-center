@@ -191,7 +191,7 @@ export function TeachersPage({
     if (!picked.length) return false;
     if (
       !window.confirm(
-        `Permanently delete ${picked.length === 1 ? displayName(picked[0]) : `${picked.length} teachers`}? This cannot be undone.`,
+        `Remove ${picked.length === 1 ? displayName(picked[0]) : `${picked.length} teachers`} from the center? The same person can apply to teach again.`,
       )
     ) {
       return false;

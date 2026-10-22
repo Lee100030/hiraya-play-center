@@ -258,7 +258,7 @@ public class EnrollmentService
             {
                 var before = db.Users.Select(u => u.UserId).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var teacher = StaffService.EnsureTeacherFromApplication(db, app, actor)
-                    ?? throw new InvalidOperationException("This teacher was permanently deleted. Create a new staff account if they should come back.");
+                    ?? throw new InvalidOperationException("Could not create the teacher account from this application.");
                 AssignPortalEmail(db, teacher, mailbox);
                 var issued = IssuePortalPassword(db, teacher, password, created: !before.Contains(teacher.UserId));
                 app.ParentEmail = mailbox;

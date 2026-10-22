@@ -3,7 +3,8 @@ using Hiraya.Shared.Models;
 namespace Hiraya.Shared.Services;
 
 /// <summary>
-/// Remembers permanently deleted accounts so an older desktop or website copy cannot restore them.
+/// Keeps the old removed-account list from being wiped by an older desktop save.
+/// The list does not block enrollment or a new teacher application.
 /// </summary>
 public static class RemovedAccounts
 {
@@ -63,32 +64,8 @@ public static class RemovedAccounts
 
     public static void Strip(HirayaDatabase db)
     {
+        // Deleting an account only removes that record. The same person may enroll or apply again.
         db.Settings ??= new CenterSettings();
-        var ids = Parse(db.Settings.RemovedUserIds);
-        if (ids.Count == 0)
-            return;
-        var gone = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var user in db.Users)
-        {
-            if (ids.Contains(user.UserId ?? "") ||
-                ids.Contains(MailToken(user.Email)) ||
-                ids.Contains(MailToken(user.PersonalEmail)))
-                gone.Add(user.UserId ?? "");
-        }
-        foreach (var id in ids)
-        {
-            if (!id.StartsWith("mail:", StringComparison.OrdinalIgnoreCase) &&
-                !id.StartsWith("name:", StringComparison.OrdinalIgnoreCase))
-                gone.Add(id);
-        }
-        gone.Remove("");
-        db.EnrollmentApplications.RemoveAll(app =>
-            string.Equals(app.ApplicationKind, "teacher", StringComparison.OrdinalIgnoreCase) &&
-            BlocksImport(db, app.StudentNumber, app.ParentEmail, app.StudentFullname));
-        if (gone.Count == 0)
-            return;
-        db.Users.RemoveAll(user => gone.Contains(user.UserId ?? ""));
-        db.TeacherProfiles.RemoveAll(profile => gone.Contains(profile.UserId ?? ""));
     }
 
     private static void RememberToken(HirayaDatabase db, string token)

@@ -1601,6 +1601,174 @@
   opacity: 0.6;
 }
 
+.enroll-modal.is-teacher-success {
+  width: min(520px, 100%);
+}
+
+.enroll-modal.is-teacher-success .enroll-modal-head {
+  padding: 32px 32px 20px;
+}
+
+.enroll-modal.is-teacher-success .enroll-modal-close:focus-visible {
+  outline: 2px solid #14291d;
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.teacher-success-mark {
+  width: 64px;
+  height: 64px;
+  margin: 16px auto 8px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #14291d;
+  color: #fffdf7;
+  animation: teacher-success-in 360ms ease;
+}
+
+.teacher-apply-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 32px 32px;
+}
+
+.teacher-success-lead,
+.teacher-success-note {
+  max-width: 420px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.teacher-success-lead {
+  color: #14291d;
+  font-weight: 600;
+}
+
+.teacher-success-note {
+  margin-top: 8px;
+  color: #3f4f47;
+  font-size: 0.92rem;
+}
+
+.teacher-ref {
+  width: min(100%, 420px);
+  margin-top: 20px;
+  padding: 14px 14px 12px;
+  border: 1px solid #c5d9cc;
+  border-radius: 12px;
+  background: #eef6f0;
+  text-align: left;
+}
+
+.teacher-ref-label {
+  margin: 0 0 8px;
+  color: #14291d;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.teacher-ref-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.teacher-ref-code {
+  flex: 1;
+  min-width: 0;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: #14291d;
+  word-break: break-all;
+}
+
+.teacher-ref-copy {
+  flex: none;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #14291d;
+  border-radius: 999px;
+  background: #fffdf7;
+  color: #14291d;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.teacher-ref-copy:hover {
+  background: #14291d;
+  color: #fffdf7;
+}
+
+.teacher-ref-copy:focus-visible {
+  outline: 2px solid #8a6d12;
+  outline-offset: 2px;
+}
+
+.teacher-success-done {
+  margin-top: 24px;
+  min-width: 140px;
+  background: #14291d;
+  color: #fffdf7;
+}
+
+.teacher-success-done:hover {
+  background: #0d1f16;
+}
+
+.teacher-success-done:focus-visible {
+  outline: 2px solid #c9a227;
+  outline-offset: 3px;
+}
+
+.teacher-success-done:active {
+  transform: translateY(1px);
+}
+
+@keyframes teacher-success-in {
+  from {
+    opacity: 0;
+    transform: scale(0.84);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (max-width: 560px) {
+  .enroll-modal.is-teacher-success .enroll-modal-head,
+  .teacher-apply-success {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .enroll-modal.is-teacher-success .enroll-modal-head {
+    padding-top: 28px;
+  }
+
+  .teacher-apply-success {
+    padding-bottom: 20px;
+  }
+
+  .teacher-success-done {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .teacher-success-mark {
+    animation: none;
+  }
+}
+
 @media (max-width: 560px) {
   .enroll-modal-grid {
     grid-template-columns: 1fr;

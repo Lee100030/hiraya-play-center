@@ -373,16 +373,19 @@ export function teacherModules(store: HirayaDatabase, teacherId?: string) {
   });
 }
 
+function announcementOpen(expiresAt?: string | null) {
+  const raw = (expiresAt || '').trim();
+  if (!raw) return true;
+  const stamp = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T23:59:59` : raw;
+  const expires = new Date(stamp).getTime();
+  return Number.isNaN(expires) || expires >= Date.now();
+}
+
 export function adminAnnouncements(store: HirayaDatabase) {
-  const now = Date.now();
   return store.news
     .filter((item) => item.isPublished || item.status === 'published' || !item.status)
-    .filter((item) => {
-      if (item.status === 'archived') return false;
-      if (!item.expiresAt) return true;
-      const expires = new Date(item.expiresAt).getTime();
-      return Number.isNaN(expires) || expires >= now;
-    })
+    .filter((item) => item.status !== 'archived' && item.status !== 'draft')
+    .filter((item) => announcementOpen(item.expiresAt))
     .sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
 }
 

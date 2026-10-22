@@ -436,11 +436,13 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
   const { site } = usePublicSite();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const doneRef = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [ok, setOk] = useState(false);
   const [applicationId, setApplicationId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
   const roles = site.programs.length ? [...site.programs.map((item) => item.name), 'Any program'] : fallbackTeacherRoles;
 
   useEffect(() => {
@@ -450,6 +452,7 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
       setOk(false);
       setApplicationId('');
       setSaving(false);
+      setCopied(false);
       return;
     }
     const prev = document.body.style.overflow;
@@ -459,7 +462,7 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
     };
     window.addEventListener('keydown', onKey);
     const t = window.setTimeout(() => {
-      panelRef.current?.querySelector<HTMLInputElement>('input')?.focus();
+      if (!ok) panelRef.current?.querySelector<HTMLInputElement>('input')?.focus();
     }, 40);
     return () => {
       document.body.style.overflow = prev;
@@ -467,6 +470,23 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
       window.removeEventListener('keydown', onKey);
     };
   }, [open, onClose, saving]);
+
+  useEffect(() => {
+    if (!open || !ok) return;
+    const t = window.setTimeout(() => doneRef.current?.focus(), 40);
+    return () => window.clearTimeout(t);
+  }, [open, ok]);
+
+  async function copyReference() {
+    if (!applicationId) return;
+    try {
+      await navigator.clipboard.writeText(applicationId);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -534,7 +554,7 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
       }}
     >
       <div
-        className="enroll-modal"
+        className={ok ? 'enroll-modal is-teacher-success' : 'enroll-modal'}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -548,17 +568,34 @@ function TeacherApplyModal({ open, onClose }: { open: boolean; onClose: () => vo
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/images/hiraya-crest.png" alt="" width={44} height={44} />
           <p className="enroll-modal-kicker">Careers · Teaching</p>
-          <h2 id={titleId}>Apply for a teacher</h2>
+          {ok ? (
+            <div className="teacher-success-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="32" height="32">
+                <path d="M6.2 12.4 10 16.2 17.8 7.8" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+          ) : null}
+          <h2 id={titleId}>{ok ? 'Application submitted' : 'Apply for a teacher'}</h2>
           <p className="enroll-modal-school">{site.centerName || 'HIRAYA Kids Learning Center'}</p>
         </header>
         {ok ? (
-          <div className="enroll-modal-success">
-            <Alert kind="success">
-              Your application has been submitted successfully. Please wait for admin approval. We will contact you
-              through your email once your application has been reviewed.
-              {applicationId ? ` Reference number: ${applicationId}` : ''}
-            </Alert>
-            <button type="button" className="enroll-modal-submit" onClick={onClose}>
+          <div className="enroll-modal-success teacher-apply-success" role="status" aria-live="polite">
+            <p className="teacher-success-lead">Your application has been submitted successfully.</p>
+            <p className="teacher-success-note">
+              Please wait for admin approval. We will contact you through your email once your application has been reviewed.
+            </p>
+            {applicationId ? (
+              <div className="teacher-ref">
+                <p className="teacher-ref-label">Reference number</p>
+                <div className="teacher-ref-row">
+                  <code className="teacher-ref-code">{applicationId}</code>
+                  <button type="button" className="teacher-ref-copy" onClick={() => void copyReference()}>
+                    {copied ? 'Copied ✓' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <button ref={doneRef} type="button" className="enroll-modal-submit teacher-success-done" onClick={onClose}>
               Done
             </button>
           </div>

@@ -123,14 +123,24 @@ public static class WorkflowOps
 
     public static bool NewsVisibleTo(HirayaDatabase db, NewsItem news, HirayaUser user)
     {
-        if (!news.IsPublished || string.Equals(news.Status, "archived", StringComparison.OrdinalIgnoreCase))
+        var status = (news.Status ?? "").Trim();
+        var published = news.IsPublished || status.Equals("published", StringComparison.OrdinalIgnoreCase);
+        if (!published ||
+            status.Equals("archived", StringComparison.OrdinalIgnoreCase) ||
+            status.Equals("draft", StringComparison.OrdinalIgnoreCase) ||
+            status.Equals("unpublished", StringComparison.OrdinalIgnoreCase))
             return false;
         if (!string.IsNullOrWhiteSpace(news.ExpiresAt) &&
-            DateTime.TryParse(news.ExpiresAt, out var expires) &&
-            expires < DateTime.UtcNow)
-            return false;
+            DateTime.TryParse(news.ExpiresAt, out var expires))
+        {
+            var end = news.ExpiresAt.Trim().Length <= 10 ? expires.Date.AddDays(1).AddTicks(-1) : expires;
+            if (end < DateTime.UtcNow)
+                return false;
+        }
 
-        var audience = string.IsNullOrWhiteSpace(news.Audience) ? NotificationAudiences.Everyone : news.Audience;
+        var audience = string.IsNullOrWhiteSpace(news.Audience)
+            ? NotificationAudiences.Everyone
+            : news.Audience.Trim().ToLowerInvariant();
         if (audience is NotificationAudiences.Everyone or "all")
             return true;
         if (audience is NotificationAudiences.Teachers)

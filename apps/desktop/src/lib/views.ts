@@ -11,7 +11,15 @@ export const NAV_GROUPS = [
 export function desktopNav(role?: string | null) {
   return hklcNavForRole(role).map((group) => ({
     label: group.label,
-    items: group.items.map((item) => ({ id: item.id as ViewId, label: item.label })),
+    items: group.items.map((item) => ({
+      id: item.id as ViewId,
+      label:
+        item.id === 'dashboard'
+          ? 'Operations Dashboard'
+          : item.id === 'calendar'
+            ? 'Schedule management'
+            : item.label,
+    })),
   }));
 }
 

@@ -26,6 +26,8 @@ public class FirestoreHirayaRepository : IHirayaRepository
     private readonly ILogger<FirestoreHirayaRepository> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HirayaDatabase? _cache;
+    private DateTime _cacheAt = DateTime.MinValue;
+    private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(2);
 
     public FirestoreHirayaRepository(ILogger<FirestoreHirayaRepository> logger)
     {
@@ -58,6 +60,7 @@ public class FirestoreHirayaRepository : IHirayaRepository
             await mutator(db);
             await SaveUnlockedAsync(db, before, ct);
             _cache = Clone(db);
+            _cacheAt = DateTime.UtcNow;
         }
         finally
         {
@@ -86,6 +89,7 @@ public class FirestoreHirayaRepository : IHirayaRepository
         {
             await SaveUnlockedAsync(database, _cache, ct);
             _cache = Clone(database);
+            _cacheAt = DateTime.UtcNow;
         }
         finally
         {
@@ -99,7 +103,11 @@ public class FirestoreHirayaRepository : IHirayaRepository
     public Task DeleteItemAsync(string collection, string id, CancellationToken ct = default) =>
         MutateAsync(_ => Task.CompletedTask, ct);
 
-    public void InvalidateCache() => _cache = null;
+    public void InvalidateCache()
+    {
+        _cache = null;
+        _cacheAt = DateTime.MinValue;
+    }
 
     public async Task<bool> PingAsync(CancellationToken ct = default)
     {
@@ -136,7 +144,7 @@ public class FirestoreHirayaRepository : IHirayaRepository
 
     private async Task<HirayaDatabase> LoadUnlockedAsync(CancellationToken ct)
     {
-        if (_cache is not null)
+        if (_cache is not null && DateTime.UtcNow - _cacheAt < CacheFor)
             return Clone(_cache);
         var db = new HirayaDatabase
         {
@@ -182,6 +190,7 @@ public class FirestoreHirayaRepository : IHirayaRepository
         if (settings.Exists)
             db.Settings = FromDoc<CenterSettings>(settings) ?? db.Settings;
         _cache = Clone(db);
+        _cacheAt = DateTime.UtcNow;
         return db;
     }
 
