@@ -35,18 +35,23 @@ public static class LoginIdentity
     /// <summary>
     /// Prefer the account that can sign in. An inactive loose match must not hide the real username.
     /// </summary>
-    public static HirayaUser? Choose(IEnumerable<HirayaUser> users, string? login)
+    public static HirayaUser? Choose(IEnumerable<HirayaUser> users, string? login) =>
+        Candidates(users, login).FirstOrDefault();
+
+    /// <summary>
+    /// Every account the key could mean, best first. One email can belong to a teacher
+    /// and a parent account, so sign-in checks the password against each one.
+    /// </summary>
+    public static List<HirayaUser> Candidates(IEnumerable<HirayaUser> users, string? login)
     {
         var key = (login ?? "").Trim();
         if (key.Length == 0)
-            return null;
-        var matches = users.Where(user => Matches(user, key)).ToList();
-        if (matches.Count == 0)
-            return null;
-        return matches
+            return new List<HirayaUser>();
+        return users
+            .Where(user => Matches(user, key))
             .OrderBy(user => Rank(user, key))
             .ThenBy(user => user.UserId, StringComparer.Ordinal)
-            .First();
+            .ToList();
     }
 
     static int Rank(HirayaUser user, string key)

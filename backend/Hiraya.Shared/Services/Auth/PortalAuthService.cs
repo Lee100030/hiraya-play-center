@@ -114,7 +114,9 @@ public class PortalAuthService
 
     private async Task<HirayaUser?> AuthenticateAgainstAsync(IHirayaRepository repository, string key, string password)
     {
-        var user = await repository.FindUserAsync(null, key);
+        var candidates = LoginIdentity.Candidates((await repository.LoadAsync()).Users, key);
+        var user = candidates.FirstOrDefault(candidate => PasswordHasher.Verify(password, candidate.Password))
+                   ?? candidates.FirstOrDefault();
         if (user is not null && !AccountStatuses.AllowsPortalLogin(user.Status))
         {
             if (!PasswordHasher.Verify(password, user.Password))
